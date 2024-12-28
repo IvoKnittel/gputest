@@ -58,9 +58,11 @@ target_link_libraries(ShuffleCopy ${CUDA_RT_STATIC_LIB_PATH} ${CUDA_LIB_PATH})
 # Add pybind11 for Python bindings
 add_subdirectory(third_party/pybind11)
 include_directories(third_party/pybind11/include)
-pybind11_add_module(gputest_shuffle_copy python_bindings.cpp)
-target_link_libraries(gputest_shuffle_copy PRIVATE ShuffleCopy ${CUDA_RT_STATIC_LIB_PATH} ${CUDA_LIB_PATH} ${Python3_LIBRARIES})
-
+pybind11_add_module(shuffle_copy python_bindings.cpp)
+target_link_libraries(shuffle_copy PRIVATE ShuffleCopy ${CUDA_RT_STATIC_LIB_PATH} ${CUDA_LIB_PATH} ${Python3_LIBRARIES})
+set_target_properties(shuffle_copy PROPERTIES
+    LIBRARY_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/mygputest
+)
 # Set properties specific to Windows DLLs
 if (WIN32)
     set_target_properties(ShuffleCopy PROPERTIES
@@ -70,3 +72,13 @@ if (WIN32)
         LIBRARY_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/lib
     )
 endif()
+
+# Install the module and DLL to the virtual environment's site-packages directory
+set(VENV_SITE_PACKAGES "${CMAKE_BINARY_DIR}/../.venv/Lib/site-packages/mygputest")
+
+install(TARGETS shuffle_copy
+        LIBRARY DESTINATION ${VENV_SITE_PACKAGES}
+        RUNTIME DESTINATION ${VENV_SITE_PACKAGES})
+
+install(FILES ${CMAKE_BINARY_DIR}/mygputest/shuffle_copy.cp313-win_amd64.pyd
+        DESTINATION ${VENV_SITE_PACKAGES})
