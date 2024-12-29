@@ -14,19 +14,14 @@ void checkCudaError(cudaError_t err, const char* msg) {
     }
 }
 
-/*int test_compare() {
-    const int blockSize = 1024;
-    const int numElements = 25000 * blockSize;
-	test_just_copy(blockSize, numElements);
-	test_random_index_copy(blockSize, numElements);
-    return 0;
-}*/
+EXTERN_C float test_copy_allkinds(const int blockSize, const int numElements, const bool use_shared, const bool is_consecutive) {
+	/*  Data in consecutive order on the GPU device is copied without shared memory
+	blocksize = number of threads
+    number of elements to be copied */ 
 
-EXTERN_C int test_just_copy(const int blockSize, const int numElements) {
     // Allocate host memory
     int* h_src = new int[numElements];
     int* h_dst = new int[numElements];
-    int* h_dst_ref = new int[numElements];
 
     // Initialize source array
     for (int i = 0; i < numElements; ++i) {
@@ -63,7 +58,18 @@ EXTERN_C int test_just_copy(const int blockSize, const int numElements) {
 
     // Measure time for the copy with shared memory
     checkCudaError(cudaEventRecord(start), "cudaEventRecord start failed");
-    copy_ << <numBlocks, blockSize, blockSize * sizeof(int) >> > (d_src, d_dst, d_rind, numElements);
+	if (use_shared && is_consecutive) {
+		copyShared << <numBlocks, blockSize, blockSize * sizeof(int) >> > (d_src, d_dst, d_rind, numElements);
+	}
+	else if (use_shared && !is_consecutive) {
+		copyWithRandomIndicesShared << <numBlocks, blockSize, blockSize * sizeof(int) >> > (d_src, d_dst, d_rind, numElements, 1);
+	}
+	else if (!use_shared && is_consecutive) {
+		copy_ << <numBlocks, blockSize, blockSize * sizeof(int) >> > (d_src, d_dst, d_rind, numElements);
+	}
+	else {
+		copyWithRandomIndices << <numBlocks, blockSize, blockSize * sizeof(int) >> > (d_src, d_dst, d_rind, numElements, 1);
+	}
     checkCudaError(cudaEventRecord(stop), "cudaEventRecord stop failed");
     checkCudaError(cudaEventSynchronize(stop), "cudaEventSynchronize stop failed");
 
@@ -76,13 +82,15 @@ EXTERN_C int test_just_copy(const int blockSize, const int numElements) {
     // Verify the result
     bool success = true;
     for (int i = 0; i < numElements; ++i) {
-        if (h_dst_ref[i] != h_src[i]) {
+        if (h_dst[i] != h_src[i]) {
             std::cerr << "Ref: Mismatch at index " << i << " : " << h_dst[i] << " != " << h_src[i] << std::endl;
             success = false;
         }
     }
     if (success) {
         std::cout << "Copy successful!" << std::endl;
+    } else {
+		milliseconds = -1.0;
     }
 
     // Print the timing result
@@ -96,10 +104,10 @@ EXTERN_C int test_just_copy(const int blockSize, const int numElements) {
     cudaFree(d_rind);
     cudaEventDestroy(start);
     cudaEventDestroy(stop);
-    return 0;
+    return milliseconds;
 }
 
-EXTERN_C int test_random_index_copy(const int blockSize, const int numElements)
+EXTERN_C float test_random_index_copy(const int blockSize, const int numElements)
 {
 	const int items_per_thread = 1;
     // Allocate host memory
@@ -163,6 +171,10 @@ EXTERN_C int test_random_index_copy(const int blockSize, const int numElements)
     if (success) {
         std::cout << "Random index copy successful!" << std::endl;
     }
+    else 
+    {
+		milliseconds = -1.0;
+    }
 
     // Print the timing result
     std::cout << "Time for random index copy: " << milliseconds << " ms" << std::endl;
@@ -176,5 +188,5 @@ EXTERN_C int test_random_index_copy(const int blockSize, const int numElements)
     cudaEventDestroy(start);
     cudaEventDestroy(stop);
 
-    return 0;
+	return milliseconds;
 }

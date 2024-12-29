@@ -74,7 +74,7 @@ if (WIN32)
 endif()
 
 # Install the module and DLL to the virtual environment's site-packages directory
-set(VENV_SITE_PACKAGES "${CMAKE_BINARY_DIR}/../.venv/Lib/site-packages/mygputest")
+set(VENV_SITE_PACKAGES "${CMAKE_BINARY_DIR}/../../../.venv/Lib/site-packages/mygputest")
 
 install(TARGETS shuffle_copy
         LIBRARY DESTINATION ${VENV_SITE_PACKAGES}
@@ -82,3 +82,23 @@ install(TARGETS shuffle_copy
 
 install(FILES ${CMAKE_BINARY_DIR}/mygputest/shuffle_copy.cp313-win_amd64.pyd
         DESTINATION ${VENV_SITE_PACKAGES})
+
+# Ensure the ShuffleCopy DLL is also installed
+install(TARGETS ShuffleCopy
+        LIBRARY DESTINATION ${VENV_SITE_PACKAGES}
+        RUNTIME DESTINATION ${VENV_SITE_PACKAGES})
+
+# Add a custom command to run the install step after the build
+add_custom_command(TARGET shuffle_copy
+                   POST_BUILD
+                   COMMAND ${CMAKE_COMMAND} --install ${CMAKE_BINARY_DIR})
+
+add_executable(TestExecutable test.cpp)
+# Link the ShuffleCopy library to the test executable
+target_link_libraries(TestExecutable PRIVATE ShuffleCopy ${CUDA_RT_STATIC_LIB_PATH} ${CUDA_LIB_PATH})
+
+# Include directories for the test executable
+target_include_directories(TestExecutable PRIVATE ${CMAKE_CUDA_TOOLKIT_INCLUDE_DIRECTORIES} ${PYTHON_INCLUDE_DIR})
+
+target_link_libraries(TestExecutable PRIVATE ShuffleCopy ${CUDA_RT_STATIC_LIB_PATH} ${CUDA_LIB_PATH})
+install(TARGETS TestExecutable RUNTIME DESTINATION ${CMAKE_BINARY_DIR}/bin) 

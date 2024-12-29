@@ -16,8 +16,7 @@
 extern "C" {
 #endif
 
-	SHUFFLECOPY_API int test_just_copy(const int blockSize, const int numElements);
-	SHUFFLECOPY_API int test_random_index_copy(const int blockSize, const int numElements);
+	SHUFFLECOPY_API float test_copy_allkinds(const int blockSize, const int numElements, const bool use_shared, const bool is_consecutive);
 
 #ifdef __cplusplus
 }
