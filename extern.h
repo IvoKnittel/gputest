@@ -16,7 +16,14 @@
 extern "C" {
 #endif
 
-	SHUFFLECOPY_API float test_copy_allkinds(const int blockSize, const int numElements, const bool use_shared, const bool is_consecutive);
+	SHUFFLECOPY_API void inititalize(bool random_data, int numElements);
+	SHUFFLECOPY_API void clear_all();
+
+	SHUFFLECOPY_API float test_copy_gpu(const int blockSize, const int numElements, const bool use_shared);
+	SHUFFLECOPY_API float test_random_index_copy(const int blockSize, const int numElements);
+
+	SHUFFLECOPY_API float test_random_copy_cpu(const int numElements);
+	SHUFFLECOPY_API float test_copy_cpu(const int numElements);
 
 #ifdef __cplusplus
 }
