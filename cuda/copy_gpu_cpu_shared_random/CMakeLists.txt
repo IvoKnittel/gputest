@@ -56,7 +56,10 @@ include_directories(${CUDA_INCLUDE_DIRS})
 target_link_libraries(ShuffleCopy ${CUDA_RT_STATIC_LIB_PATH} ${CUDA_LIB_PATH})
 
 # Add pybind11 for Python bindings
-add_subdirectory(../third_party/pybind11)
+add_subdirectory(
+    "${CMAKE_SOURCE_DIR}/../third_party/pybind11"  # Source directory
+    "${CMAKE_BINARY_DIR}/third_party/pybind11"     # Binary directory
+)
 include_directories(../third_party/pybind11/include)
 pybind11_add_module(shuffle_copy python_bindings.cpp)
 target_link_libraries(shuffle_copy PRIVATE ShuffleCopy ${CUDA_RT_STATIC_LIB_PATH} ${CUDA_LIB_PATH} ${Python3_LIBRARIES})

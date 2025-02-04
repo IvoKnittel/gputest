@@ -1,11 +1,11 @@
-#include "gpu2d.h"
+#include "kernel.h"
 
-__global__ void imageCopy(const BigPixel* image, BigPixel* result, const int width) {
+__global__ void imageCopy(const Pixel* image, Pixel* result, const int width) {
 
-	int cBegin = width * blocksize * blockIdx.y + blocksize * blockIdx.x;
+	int cBegin = width * _blocksize * blockIdx.y + _blocksize * blockIdx.x;
 
 	// Declaration of the shared copyTo of C block
-	__shared__ BigPixel Cs[blocksize][blocksize];
+	__shared__ Pixel Cs[_blocksize][_blocksize];
 	int tx = threadIdx.x;
 	int ty = threadIdx.y;
 
