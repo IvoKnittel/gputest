@@ -1,7 +1,7 @@
 import pytest
 import pytest_check as check
 import numpy as np
-from item import Item, random_items
+# from item import Item, random_items
 from rowmergeinputs import I0
 from rowmergebasics import A0
 from quadprocessing import A1
@@ -32,17 +32,17 @@ def is_in(sequence, letter, host_sequence, host_letter, host_length, sz, truth_v
                 assert (letter in sequence[j:j + host_length])==truth_value
 
 
-@pytest.fixture(scope="module")
-def items():
-    return random_items(20)
-
-@pytest.fixture(scope="module")
-def sz(items):
-    return len(items)
-
-@pytest.fixture(scope="module")
-def inputs(items):
-    return I0(items)
+# @pytest.fixture(scope="module")
+# def items():
+#     return random_items(20)
+#
+# @pytest.fixture(scope="module")
+# def sz(items):
+#     return len(items)
+#
+# @pytest.fixture(scope="module")
+# def inputs(items):
+#     return I0(items)
 
 ### Check B:
 def test_votes(inputs, sz):
@@ -67,12 +67,7 @@ def maybe_in_votes(inputs):
 
     return found_pair
 
-@pytest.fixture(scope="module")
-def basics(inputs, sz):
-    b = np.full((2, sz), 0)
-    b[0,:]=inputs.prefer_vector
-    b[1,:]=inputs.vote_vector
-    return A0(inputs)
+
 
 
 # def maybe_in_basics(rawbasics, sz):
@@ -170,14 +165,7 @@ def maybe_test_basicsCheckF(prefer_vector, sz):
     for j in range(sz - 1):
         found_prefer_m1_1 = found_prefer_m1_1 or prefer_vector[j] == -1 and prefer_vector[j+1]==1
 
-@pytest.fixture(scope="module")
-def sequences_no_quad(basics, sz):
-    a = A1(basics, sz)
-    a.show(basics.quads,sz)
-    qp = a.quadproducts(basics.quads,sz)
-    qp2 = a.quadproducts2(qp,sz)
-    a.apply_quadproducts(qp, qp2,sz)
-    return a
+
 
 def test_sequences_noquad(sequences_no_quad, sz):
     a=sequences_no_quad
@@ -375,49 +363,6 @@ def test_sequences_resolved_chains(sequences_resolved_chains, sz):
     #check.equal(is_even, True)
     # All combinations of Single, Couple, Triples are valid.
 
-
-@pytest.fixture(scope="module")
-def merge_sequence(sequences_resolved_chains,sz):
-    a = sequences_resolved_chains
-    sequence = np.array(["x"] * sz, dtype=np.dtype('U1'))
-    for j in range(sz):
-        if a.singles[j] == 's':
-            sequence[j]='s'
-        if a.couples[j] == 'c':
-            sequence[j]='c'
-        if a.triples[j] == 't':
-            sequence[j]='t'
-    return sequence
-
-
-@pytest.fixture(scope="module")
-def merges_flat(merge_sequence,sz):
-    sequence = merge_sequence.copy()
-    flatten_(sequence,sz)
-    return sequence
-
-
-len_ = {
-    's': 1,
-    'c': 2,
-    't': 3
-}
-
-@pytest.fixture(scope="module")
-def merges(merges_flat,sz):
-    a = merges_flat
-    merges = []
-    j = 0
-    while j < sz:
-        merges.append(a[j])
-        j=j+len_[a[j]]
-
-    return np.array(merges)
-
-
-@pytest.fixture(scope="module")
-def num_merges(merges,sz):
-    return len(merges)
 
 # Check J;
 # The number of Merges is the number of items / 2.
