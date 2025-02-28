@@ -1,6 +1,7 @@
 import pytest
 import math
 import numpy as np
+from scipy.signal import chirp
 
 def items():
     return odd_step(10)
@@ -54,21 +55,7 @@ class Item:
         """
         return f"Item(sum={self.sum}, sum_of_squares={self.sum_of_squares}, num={self.num})"
 
-class StructuredItems():
-    def __init__(self):
 
-        # Define the number of days in each month (non-leap year)
-        days_in_month = [31, 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31]
-
-        # Create a vector of Items representing the calendar year
-        self.calendar_items = []
-
-        for month in range(12):  # Months are 0-indexed (0 = January, 11 = December)
-            month_number = month + 1  # Convert to 1-indexed month number
-            for day in range(1, days_in_month[month] + 1):  # Days are 1-indexed
-                value = day + (month_number * 1000)  # Value = day + (month * 1000)
-                item = Item.from_value(value)
-                self.calendar_items.append(item)
 
 def random_items(N:int):
     values = np.random.rand(N)
@@ -79,7 +66,7 @@ def odd_step(N:int):
     step_at_pos5[5:]=1
     return np.array([Item(val) for val in step_at_pos5])
 
-def calendar_items(n:int):
+def calendar_items():
     # Define the number of days in each month (non-leap year)
     days_in_month = [31, 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31]
 
@@ -90,7 +77,33 @@ def calendar_items(n:int):
         month_number = month + 1  # Convert to 1-indexed month number
         for day in range(1, days_in_month[month] + 1):  # Days are 1-indexed
             value = day + (month_number * 1000)  # Value = day + (month * 1000)
-            item = Item.from_value(value)
+            item = Item(value)
             calendar_items.append(item)
 
     return np.array(calendar_items)
+
+
+def sine_items():
+    xvec = np.linspace(0, 10, 200)
+    items=[]
+    for x in xvec:
+        y = np.sin(x)
+        items.append(Item(y))
+
+    return np.array(items, dtype=Item)
+
+
+
+def chirp_items():
+    # Parameters for the chirp signal
+    tvec = np.linspace(0, 10, 1000)  # Time array from 0 to 10 seconds with 1000 points
+    f0 = 1  # Start frequency of the chirp
+    f1 = 10  # End frequency of the chirp at time t1
+    t1 = 10  # Time at which f1 is reached
+
+    # Generate the chirp signal
+    yvec = chirp(tvec, f0=f0, f1=f1, t1=t1, method='linear')
+
+    items = [Item(y) for y in yvec]
+    return items
+

@@ -2,38 +2,18 @@ import pytest
 import matplotlib.pyplot as plt
 import pytest_check as check
 import numpy as np
-from item import Item, random_items
+from item import Item, random_items, odd_step, calendar_items, sine_items, chirp_items
 from rowmergeinputs import I0
 from rowmergebasics import A0
 from quadprocessing import A1
 from closechain import A2
 from resolvechain import A3
 from flatten import flatten_
-from item import Item
 
 # @pytest.fixture(autouse=True)
 # def set_do_display(pytestconfig):
 #     global do_display
 #     do_display = pytestconfig.getoption("do_display")
-
-
-def display_plot(title, x, y):
-    plt.figure()
-    plt.plot(x, y, 'o-')
-    plt.title(title)
-    plt.xlabel('Index')
-    plt.ylabel('Value')
-    plt.show()
-
-import numpy as np
-import  pytest
-from item import Item, random_items
-from rowmergeinputs import I0
-from rowmergebasics import A0
-from quadprocessing import A1
-from closechain import A2
-from resolvechain import A3
-from flatten import flatten_
 
 
 def pytest_addoption(parser):
@@ -118,30 +98,82 @@ len_ = {
     't': 3
 }
 
-
-def merges(merges_flat,sz):
+def merges(merges_flat,items, sz):
     a = merges_flat
-    merges = []
+    merge_instruction = []
+    merge_items=[]
     j = 0
     while j < sz:
-        merges.append(a[j])
-        j=j+len_[a[j]]
+        if a[j]=='s':
+            merge_items.append(items[j])
+            j = j + len_[a[j]]
+            continue
 
-    return np.array(merges)
+        tmp_item =Item(items[j],items[j+1])
+        if a[j]=='c':
+            merge_items.append(tmp_item)
+            j = j + len_[a[j]]
+            continue
 
+        merge_items.append(Item(tmp_item,items[j+2]))
+        j = j+len_[a[j]]
+
+    return np.array(merge_items,dtype=Item)
 
 
 def num_merges(merges,sz):
     return len(merges)
 
 def test_merges_visual():
-    sz_=20
-    items_ = random_items(sz_)
+    # sz_=20
+    items_ = chirp_items()
+    sz_=len(items_)
     in_ = I0(items_)
     b = basics(in_, sz_)
     snq = sequences_no_quad(b, sz_)
-    sc = sequences_close(sequences_no_quad, sz_)
+    sc = sequences_close(snq, sz_)
     src = sequences_resolved_chains(sc, sz_)
     ms = merge_sequence(src, sz_)
     mf = merges_flat(ms, sz_)
-    m  = merges(mf, sz_)
+    m  = merges(mf, items_, sz_)
+    a = [i.value() for i in items_]
+    a2 = [i.value() for i in m]
+    n2 = [i.num for i in m]
+    pos2 = np.cumsum(n2)
+    k=0
+    a3= np.zeros(sz_)
+    x3= np.zeros(sz_)
+    for j in range(sz_):
+        if j< pos2[k]:
+            a3[j]=a2[k]
+            x3[j]=j
+        else:
+            k=k+1
+            a3[j]=a2[k]
+            x3[j]=j
+
+
+
+    # s2 = [i.std_var() for i in m]
+    x = [j for j in range(0, sz_)]
+
+
+    # Converting lists to numpy arrays for element-wise operations
+    # a2 = np.array(a2)
+    # s2 = np.array(s2)
+
+    # Plotting
+
+    plt.figure(1)
+    plt.plot(x, a, 'o', label='a')
+    plt.plot(x3, a3, 'o', label='a3')
+    # plt.plot(x2, a2 + s2/10, label='a2 + s2', linestyle='--')
+    # plt.plot(x2, a2 - s2/10, label='a2 - s2', linestyle='--')
+    plt.xlabel('x')
+    plt.ylabel('Values')
+    plt.title('Plot of a, a2, and a2 ± s2 versus x')
+    plt.legend()
+    plt.show()
+    plt.legend()
+    plt.show()
+    waithere=1

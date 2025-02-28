@@ -119,22 +119,31 @@ len_ = {
 }
 
 
-def merges(merges_flat,sz):
+def merges(merges_flat,items, sz):
     a = merges_flat
-    merges = []
+    merge_instruction = []
+    merge_items=[]
     j = 0
     while j < sz:
-        merges.append(a[j])
-        j=j+len_[a[j]]
+        if a[j]=='s':
+            merge_items.append(items[j])
+            continue
 
-    return np.array(merges)
+        tmp_item = merge_items.append(Item(items[j],items[j+1]))
+        if a[j]=='c':
+            merge_items.append(tmp_item)
+            continue
 
+        merge_items.append(Item(tmp_item,items[j+2]))
+        j = j+len_[a[j]]
+
+    return np.array(merge_items,dtype=Item)
 
 
 def num_merges(merges,sz):
     return len(merges)
 
-def test_merges_visual():
+def test_merges_quality():
     sz_=20
     items_ = random_items(sz_)
     in_ = I0(items_)
@@ -144,4 +153,4 @@ def test_merges_visual():
     src = sequences_resolved_chains(sc, sz_)
     ms = merge_sequence(src, sz_)
     mf = merges_flat(ms, sz_)
-    m  = merges(mf, sz_)
+    m  = merges(mf, items_, sz_)
