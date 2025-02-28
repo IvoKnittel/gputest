@@ -1,0 +1,171 @@
+
+# The row merge
+
+Step A:merged_items
+ 
+	for each item a index j, generate 
+		- a merged_lo item out of items j-1 and j
+		- a merged_hi item out of items j   and j+1
+
+	if possible.
+
+	For each index j, get a quasi-boolean 
+	   prefer(j) = sign( merged_hi.quality - merged_lo.quality ) exclude 0 by tie-break
+
+
+### Step B: vote_vector
+     Each index has a vote counter.
+     If index prefer(j+1)= -1,  then the index j gets 1 vote.
+     If index prefer(j-1)= 1, then the index j gets 1 vote.	 
+     if index j has 2 votes, j-1,j,j+1 form a Triple
+     if index j has 0 votes, it forms a Single 
+
+	A site with 0 votes is a Single, a site with 2 votes is the center of a Two.	
+
+### Check B:
+    Singles are alone or in pairs.
+	Twos are alone or in pairs. A Two cannot be on a terminal site.
+
+### Step C: tmp0.couples	 
+	Neighboring indices j,j+1 are a Couple
+    if
+	 prefer(j)   =  1
+	 prefer(j+1) = -1
+
+### Check C:
+   Singles never overlap with a Couple.
+	 
+Step D:tmp0.sequence2a tmp0.sequence2b
+   A pair of Twos and the sites right and left of it form a Quad.
+   The remaining Twos are isolated. An isolated Two and the sites right and left of it form a Triple.
+
+Check D:
+   The center pair of a Quad are always a Couple, but its ends never overlap with a Couple.
+   Triples do not overlap with other Triples
+   Quads do not overlao with other Quads.
+   Triples do not overlap with other Quads.
+   
+   A Quads may overlap with a Single. 
+   A Triple may overlap with a Single. 
+
+Step:tmp0.sequence3  Single vector
+ 
+Step E: tmp1.sequence4
+    A Quad overwrites a Single.
+    A Quad overwrites a Couple.	
+    A Triple overwrites a Single. 
+	A Triple overwrites a Couple. 
+Check E:	
+    Singles, Couples, Triples and Quads are now disjunct.
+
+Step F. tmp1.sequence5a, tmp1.sequence5b
+   Neighboring indices j,j+1 which are not Single, Triple or Couple or Quad,
+     if	 
+
+	 prefer(j)   = 1
+	 prefer(j+1) = 1
+	 
+	 j belongs to an upChain
+	 
+	 prefer(j)   = -1
+	 prefer(j+1) = -1
+
+	 j+1 belongs to a downChain
+
+Check F:	 
+	Neighboring indices j,j+1
+	 prefer(j)   = -1
+	 prefer(j+1) =  1
+
+	already belong to one of Single, Couple, Chain.
+    All items are part of Single, Couple, Triples, Quads, upChain, and downChain and are disjunct.
+
+Step G:
+tmp1.sequence6a tmp1.sequence6a2 CouplesFromQuads  CouplesFromQuadsUpdate
+tmp1.sequence6b (TriplesUpdate)
+tmp1.sequence5a2 (UpChainsUpdate)
+tmp1.sequence5b2 (UpChainsUpdate)
+	A Quad is forced into two Couples. The new Couple may form a Triple with a neighboring
+    Chain item.	
+Check G:
+    All items are part of Single, Couple, Triples, upChain, and downChain and are disjunct.
+	
+	An upChain 
+		starts with a Single and ends with a Triple.	
+
+    Single upChain Triple
+	A downChain 
+		starts with a Triple and ends with a Single.
+	
+    Triple downChain Single
+
+Point H: 
+tmp2.sequence5a2 
+tmp2.sequence5b2 
+tmp2.sequence7a 
+tmp2.sequence7b
+tmp2.sequence7aa 
+tmp2.sequence7ab 
+tmp2.sequence7ba 
+tmp2.sequence7bb
+ 
+    Single upChain Triple is a ClosedUpChain
+    Triple downChain Single is a ClosedDownChain
+	ClosedChain is either a ClosedUpChain or a ClosedDownChain 
+	sequence10 (ClosedChains)
+	
+Check H:
+    All items are part of Single, Couple, Triples, ClosedChain and are disjunct.
+	
+	all combinations of Single, Couple, Triples, ClosedChain are valid, i.e.
+	translate into a possible prefer_vector.
+	
+Point I:tmp3.sequence8a tmp3.sequence8b tmp3.sequence9
+    tmp3.sequence8a (CouplesFromUpChains)
+	tmp3.sequence8b (CouplesFromDownChains)
+	tmp3.sequence9
+    ClosedChain are converted into Couples and Singles:  
+	
+	For the ClosedUpChain,
+	
+    if the upChain length is even, it is converted into 
+    Single Couples Triple
+	
+    if the upChain length is odd, Single+upChain is converted into 
+    Couples Triple	
+	
+	For the ClosedDownChain,
+	
+    if the downChain length is even, it is converted into 
+    Triple Couples Single 
+	
+    if the upChain length is odd, downChain+Single is converted into 
+    Triple Couples
+
+Check I:
+    All items are part of Single, Couple, Triples, and are disjunct 
+	
+	All combinations of Single, Couple, Triples are valid, i.e.
+	translate into a possible prefer_vector.
+
+	The number of NonCouples (Singles and Triples) is even.
+Point J:
+    ## No! Convert a pair Singles into a couple
+    Extract all Singles and Triples into sequence11 (Noncouples), all Couples into sequence12  (CouplesFinal)
+	
+    Pair up following Noncouples into 
+	. (Couples may be intercalated everywhere)
+
+	sequence14 (NonCouplesDisplacementOk)
+	If the pair is Single-Single, and at least one of the Singles has a Couple as neighbor,
+	create a Triple-Single or Single-Triple. If that is not the case, the Singles are neighbors and are 
+	merged into a Couple.
+	If the pair is Triple-Triple, split one Triple into a  Single and a Couple to create
+    a Triple-Single or Single-Triple.
+
+Check J;
+    All NonCouplePairs are Couple-Triple.
+	A Merge is a Single, Couple, or Triple.
+    The number of Merge merges is the number of items/2.
+    [Define displacement]
+	all displacements are in {-1,0,1}.

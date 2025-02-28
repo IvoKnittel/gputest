@@ -1,5 +1,0 @@
-lo_is_better:       [False True  True  False False True  False True  True  False False False True  False False True  True  False False False True  False True  True  True  False True  True  True  True]
-belongs_up_chain:   [False False False True  False False False False False True  True  False False True  False False False True  True  False False False False False False False False False False False]
-belongs_down_chain: [False False True  False False False False False True  False False False False False False False True  False False False False False False True  True  False False True  True  True]
-belongs_couple:     [True  True  False False True  True  True  True  False False False True  True  False True  True  False False False True  True  True  True  False False True  True  False False False]
-is_couple_begin:    [True  False False False True  False True  False False False False True  False False True  False False False False True  False True  False False False True  False False False False]

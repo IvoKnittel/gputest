@@ -1,4 +1,6 @@
+pip-tools
 pytest
+pytest-check
 pybind11
 matplotlib
 notebook

@@ -1,0 +1,64 @@
+
+# The row merge tests
+
+### Check B:
+    Singles are alone or in pairs.
+	Twos are alone or in pairs. A Two cannot be on a terminal site.
+
+ 
+### Check C:
+   Singles never overlap with a Couple.
+	 
+Check D:
+   The center pair of a Quad are always a Couple, but its ends never overlap with a Couple.
+   Triples do not overlap with other Triples
+   Quads do not overlao with other Quads.
+   Triples do not overlap with other Quads.
+ 
+   A Quads may overlap with a Single. 
+   A Triple may overlap with a Single. 
+
+ 
+Check E:
+    after overwriting	
+    Singles, Couples, Triples and Quads are disjunct.
+
+
+Check F:	 
+	Neighboring indices j,j+1
+	 prefer(j)   = -1
+	 prefer(j+1) =  1
+	already belong to one of Single, Couple, Chain.
+    All items are part of Single, Couple, Triples, Quads, upChain, and downChain and are disjunct.
+
+
+Check G:
+    All items are part of Single, Couple, Triples, upChain, and downChain and are disjunct.
+	An upChain 
+		starts with a Single and ends with a Triple.	
+
+    Single upChain Triple
+	
+	A downChain 
+		starts with a Triple and ends with a Single.
+	
+    Triple downChain Single
+	
+Check H:
+    All items are part of Single, Couple, Triples, ClosedChain and are disjunct.
+	all combinations of Single, Couple, Triples, ClosedChain are valid, i.e.
+	translate into a possible prefer_vector.
+	
+
+Check I:
+    All items are part of Single, Couple, Triples, and are disjunct 
+	All combinations of Single, Couple, Triples are valid, i.e.
+	translate into a possible prefer_vector.
+	The number of NonCouples (Singles and Triples) is even.
+
+Check J;
+    All NonCouplePairs are Couple-Triple.
+	A Merge is a Single, Couple, or Triple.
+    The number of Merges is the number of items/2.
+    [Define displacement]
+	all displacements are in {-1,0,1}.
