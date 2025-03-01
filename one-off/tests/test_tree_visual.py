@@ -1,5 +1,6 @@
 import pytest
 import matplotlib.pyplot as plt
+import cmath
 import pytest_check as check
 import numpy as np
 from item import Item, random_items, odd_step, calendar_items, sine_items, chirp_items
@@ -23,15 +24,6 @@ def pytest_addoption(parser):
 
 def pytest_configure(config):
     config.addinivalue_line("markers", "do_display: mark test to enable display of plots")
-
-
-
-def items():
-    return random_items(20)
-
-
-def sz(items):
-    return len(items)
 
 
 def inputs(items):
@@ -124,9 +116,8 @@ def merges(merges_flat,items, sz):
 def num_merges(merges,sz):
     return len(merges)
 
-def test_merges_visual():
+def next_row_items(items_):
     # sz_=20
-    items_ = odd_step(20)
     sz_=len(items_)
     in_ = I0(items_)
     b = basics(in_, sz_)
@@ -135,45 +126,59 @@ def test_merges_visual():
     src = sequences_resolved_chains(sc, sz_)
     ms = merge_sequence(src, sz_)
     mf = merges_flat(ms, sz_)
-    m  = merges(mf, items_, sz_)
+    next_row_items_  = merges(mf, items_, sz_)
+
+    return next_row_items_
+
+def items_for_display(items_,to_size):
     a = [i.value() for i in items_]
-    a2 = [i.value() for i in m]
-    n2 = [i.num for i in m]
-    pos2 = np.cumsum(n2)
-    k=0
-    a3= np.zeros(sz_)
-    x3= np.zeros(sz_)
-    for j in range(sz_):
-        if j< pos2[k]:
-            a3[j]=a2[k]
-            x3[j]=j
-        else:
-            k=k+1
-            a3[j]=a2[k]
-            x3[j]=j
+    n = [i.num for i in items_]
+    # s = [i.std_var() for i in m]
+    pos2 = np.cumsum(n)
+    k = 0
+    a_to_size = np.zeros(to_size)
+    x_to_size = np.zeros(to_size)
+    # s_to_size= np.zeros(to_size)
+    for j in range(to_size):
+        if j >= pos2[k]:
+            k = k + 1
 
+        a_to_size[j] = a[k]
+        x_to_size[j] = j
+        # s_to_size[j] = s[k]
 
+    return x_to_size,a_to_size # s_to_size[j]
 
-    # s2 = [i.std_var() for i in m]
-    x = [j for j in range(0, sz_)]
+def test_tree_visual():
 
+    base_items = calendar_items()  # random_items(20)
+    base_sz=len(base_items)
+    a = [i.value() for i in base_items]
+    x = [j for j in range(0, base_sz)]
+    items_ = base_items
+    plot_data = []
+    num_gens = 0
 
-    # Converting lists to numpy arrays for element-wise operations
-    # a2 = np.array(a2)
-    # s2 = np.array(s2)
+    while num_gens <= 5: # len(items_) > 3 or
+        num_gens = num_gens + 1
+        items2 = next_row_items(items_)
+        x2, a2 = items_for_display(items2, base_sz)
+        plot_data.append([x2, a2])
+        items_ = items2
 
-    # Plotting
 
     plt.figure(1)
-    plt.plot(x, a, 'o', label='a')
-    plt.plot(x3, a3, 'o', label='a3')
-    # plt.plot(x2, a2 + s2/10, label='a2 + s2', linestyle='--')
-    # plt.plot(x2, a2 - s2/10, label='a2 - s2', linestyle='--')
+    plt.plot(x, a, 'o', color='red')
+    colors = ['blue', 'green', 'black', 'cyan', 'gray', 'magenta']
+    for g in range(num_gens):
+        if g > 2:
+            crt_data = plot_data[g]
+            plt.plot(crt_data[0], crt_data[1]+(g-3)*0.02, 'o', color=colors[g-3])
+        # plt.plot(x2, a2 + s2/10, label='a2 + s2', linestyle='--')
+        # plt.plot(x2, a2 - s2/10, label='a2 - s2', linestyle='--')
+
     plt.xlabel('x')
     plt.ylabel('Values')
     plt.title('Plot of a, a2, and a2 ± s2 versus x')
-    plt.legend()
     plt.show()
-    plt.legend()
-    plt.show()
-    waithere=1
+    waithere = 1
