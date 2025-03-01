@@ -1,6 +1,7 @@
 import pytest
 import matplotlib.pyplot as plt
 import cmath
+import math
 import pytest_check as check
 import numpy as np
 from item import Item, random_items, odd_step, calendar_items, sine_items, chirp_items
@@ -17,13 +18,13 @@ from flatten import flatten_
 #     do_display = pytestconfig.getoption("do_display")
 
 
-def pytest_addoption(parser):
-    parser.addoption(
-        "--do_display", action="store_true", default=False, help="Enable display of plots"
-    )
-
-def pytest_configure(config):
-    config.addinivalue_line("markers", "do_display: mark test to enable display of plots")
+# def pytest_addoption(parser):
+#     parser.addoption(
+#         "--do_display", action="store_true", default=False, help="Enable display of plots"
+#     )
+#
+# def pytest_configure(config):
+#     config.addinivalue_line("markers", "do_display: mark test to enable display of plots")
 
 
 def inputs(items):
@@ -149,9 +150,8 @@ def items_for_display(items_,to_size):
 
     return x_to_size,a_to_size # s_to_size[j]
 
-def test_tree_visual():
 
-    base_items = calendar_items()  # random_items(20)
+def tree(base_items, max_gens):
     base_sz=len(base_items)
     a = [i.value() for i in base_items]
     x = [j for j in range(0, base_sz)]
@@ -159,21 +159,24 @@ def test_tree_visual():
     plot_data = []
     num_gens = 0
 
-    while num_gens <= 5: # len(items_) > 3 or
+    while num_gens <= max_gens and len(items_) < 3:
         num_gens = num_gens + 1
         items2 = next_row_items(items_)
         x2, a2 = items_for_display(items2, base_sz)
         plot_data.append([x2, a2])
         items_ = items2
 
+    return plot_data
 
+def tree_visual(base_items, tree_data, num_gens, start_plot_gen):
+    x, a = items_for_display(base_items, len(base_items))
     plt.figure(1)
     plt.plot(x, a, 'o', color='red')
     colors = ['blue', 'green', 'black', 'cyan', 'gray', 'magenta']
     for g in range(num_gens):
-        if g > 2:
-            crt_data = plot_data[g]
-            plt.plot(crt_data[0], crt_data[1]+(g-3)*0.02, 'o', color=colors[g-3])
+        if g >= start_plot_gen:
+            crt_data = tree_data[g]
+            plt.plot(crt_data[0], crt_data[1]+(g-start_plot_gen)*0.02, 'o', color=colors[g-start_plot_gen])
         # plt.plot(x2, a2 + s2/10, label='a2 + s2', linestyle='--')
         # plt.plot(x2, a2 - s2/10, label='a2 - s2', linestyle='--')
 
@@ -181,4 +184,42 @@ def test_tree_visual():
     plt.ylabel('Values')
     plt.title('Plot of a, a2, and a2 ± s2 versus x')
     plt.show()
-    waithere = 1
+
+
+def test_tree_visual():
+    base_items = sine_items()
+    num_gens = 5
+    start_plot_gen = 3
+    assert num_gens < math.floor(math.log(len(base_items)))
+    assert num_gens > start_plot_gen
+    tree_data = tree(base_items, num_gens)
+    tree_visual(base_items, tree_data, num_gens, start_plot_gen)
+
+
+def test_tree_visual():
+    base_items = calendar_items()
+    num_gens = 5
+    start_plot_gen = 3
+    assert num_gens < math.floor(math.log(len(base_items)))
+    assert num_gens > start_plot_gen
+    tree_data = tree(base_items, num_gens)
+    tree_visual(base_items, tree_data, num_gens, start_plot_gen)
+
+
+def test_tree_visual():
+    base_items = odd_step(20)
+    num_gens = 3
+    start_plot_gen = 0
+    assert num_gens < math.floor(math.log(len(base_items)))
+    assert num_gens > start_plot_gen
+    tree_data = tree(base_items, num_gens)
+    tree_visual(base_items, tree_data, num_gens, start_plot_gen)
+
+def test_tree_visual():
+    base_items = random_items(20)
+    num_gens = 3
+    start_plot_gen = 0
+    assert num_gens < math.floor(math.log(len(base_items)))
+    assert num_gens > start_plot_gen
+    tree_data = tree(base_items, num_gens)
+    tree_visual(base_items, tree_data, num_gens, start_plot_gen)

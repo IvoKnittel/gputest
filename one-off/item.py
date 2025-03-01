@@ -97,8 +97,8 @@ def sine_items():
 def chirp_items():
     # Parameters for the chirp signal
     tvec = np.linspace(0, 10, 1000)  # Time array from 0 to 10 seconds with 1000 points
-    f0 = 1  # Start frequency of the chirp
-    f1 = 10  # End frequency of the chirp at time t1
+    f0 = 0.1  # Start frequency of the chirp
+    f1 = 3  # End frequency of the chirp at time t1
     t1 = 10  # Time at which f1 is reached
 
     # Generate the chirp signal
