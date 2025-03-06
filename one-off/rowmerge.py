@@ -1,117 +1,159 @@
+import pytest
+import matplotlib.pyplot as plt
+import cmath
+import math
+import pytest_check as check
 import numpy as np
+from item import Item, random_items, odd_step, calendar_items, sine_items, chirp_items
+from rowmergeinputs import I0
 from rowmergebasics import A0
 from quadprocessing import A1
 from closechain import A2
 from resolvechain import A3
 from flatten import flatten_
-from item import Item
+
+# @pytest.fixture(autouse=True)
+# def set_do_display(pytestconfig):
+#     global do_display
+#     do_display = pytestconfig.getoption("do_display")
 
 
-def rawbasics(prefer_vector, vote_vector, sz):
-    a = A0()
-    a.couples_(prefer_vector, sz)
-    a.quads_(vote_vector,sz)
-    a.triples_(vote_vector, sz)
-    a.singles_(vote_vector, sz)
-    a.upchain_(prefer_vector, sz)
-    a.downchain_(prefer_vector, sz)
-    return a
-
-def basics(rawbasics,sz):
-    a = A0(rawbasics)
-    a.couples=a.overwrite_couples(sz)
-    a.triples=a.overwrite_triples(sz)
-    a.singles = a.overwrite_singles(sz)
-    return a
+# def pytest_addoption(parser):
+#     parser.addoption(
+#         "--do_display", action="store_true", default=False, help="Enable display of plots"
+#     )
+#
+# def pytest_configure(config):
+#     config.addinivalue_line("markers", "do_display: mark test to enable display of plots")
 
 
-def allmerges(basics, sz):
-    a=basics
-    sequence = np.array(["x"] * sz, dtype=np.dtype('U1'))
-    for j in range(0, sz):
-        if a.couples[j] == "c":
-            sequence[j] = "c"
-        if a.singles[j] == "s":
-            sequence[j] = "s"
-
-    for j in range(0, sz):
-        if a.quads[j] == "q":
-            sequence[j] = "q"
-        if a.triples[j] == "t":
-            sequence[j] = "t"
-    return sequence
 
 
 def sequences_no_quad(basics, sz):
-    a = A1b(basics)
-    quadproducts = a.quadproducts(sz)
-    quadproducts2= a.quadproducts2(quadproducts, sz)
-    a.couples_(quadproducts2, sz)
-    a.triples_(quadproducts2, sz)
-    a.upchain_(quadproducts2,sz)
-    a.downchain_(quadproducts2,sz)
+    a = A1(basics, sz)
+    a.show(basics.quads,sz)
+    qp = a.quadproducts(basics.quads,sz)
+    qp2 = a.quadproducts2(qp,sz)
+    a.apply_quadproducts(qp, qp2,sz)
     return a
 
 
-def sequences_closed_chains(sequences_no_quad, sz):
-    a = A2(sequences_no_quad, sz)
-    a.closed_upchain_(sequences_no_quad.upchain, sz)
-    a.singles_u(sz)
-    a.triples_u(sz)
-    a.closed_downchain_(sequences_no_quad.downchain, sz)
-    a.singles_d(sz)
-    a.triples_d(sz)
+def sequences_close(sequences_no_quad, sz):
+    in_=sequences_no_quad
+    a = A2(in_, sz)
+    a.closed_upchain_(in_.upchain, in_.singles, in_.triples, sz)
+    a.closed_downchain_(in_.downchain, in_.singles, in_.triples, sz)
     return a
 
 
-def sequences_resolved_chains(sequences_closed_chains,sz):
-    a = A3(sequences_closed_chains,sz)
-    forced_upchain = a.forced_upchain(sequences_closed_chains.closed_upchain, sz)
-    forced_downchain = a.forced_downchain(sequences_closed_chains.closed_downchain, sz)
+def sequences_resolved_chains(sequences_close,sz):
+    a = A3(sequences_close,sz)
+    forced_upchain = a.forced_upchain(sequences_close.closed_upchain, sz)
+    forced_downchain = a.forced_downchain(sequences_close.closed_downchain, sz)
     a.update_singles(forced_upchain, forced_downchain, sz )
     a.update_couples(forced_upchain, forced_downchain, sz )
     a.update_triples(forced_upchain, forced_downchain, sz )
     return a
 
 
-def merges(sequences_closed_chains, sz):
-    a = sequences_closed_chains
-    sequence = a.couples
+def merge_sequence(sequences_resolved_chains,sz):
+    a = sequences_resolved_chains
+    sequence = np.array(["x"] * sz, dtype=np.dtype('U1'))
     for j in range(sz):
-        if a.singles[j] =='s':
-            sequence[j] = 's'
-        if a.triples[j] =='t':
-            sequence[j] = 't'
+        if a.singles[j] == 's':
+            sequence[j]='s'
+        if a.couples[j] == 'c':
+            sequence[j]='c'
+        if a.triples[j] == 't':
+            sequence[j]='t'
+    return sequence
 
 
-def merges_flat(merges, sz):
-    flatten_(merges,sz)
+def merges_flat(merge_sequence,sz):
+    sequence = merge_sequence.copy()
+    flatten_(sequence,sz)
+    return sequence
 
 
-def num_merges(merges_flat:np.array, sz):
+len_ = {
+    's': 1,
+    'c': 2,
+    't': 3
+}
+
+def merges(merges_flat,items, sz):
+    a = merges_flat
+    merge_instruction = []
+    merge_items=[]
+    j = 0
+    while j < sz:
+        if a[j]=='s':
+            merge_items.append(items[j])
+            j = j + len_[a[j]]
+            continue
+
+        tmp_item =Item(items[j],items[j+1])
+        if a[j]=='c':
+            merge_items.append(tmp_item)
+            j = j + len_[a[j]]
+            continue
+
+        merge_items.append(Item(tmp_item,items[j+2]))
+        j = j+len_[a[j]]
+
+    return np.array(merge_items,dtype=Item)
+
+
+def num_merges(merges,sz):
+    return len(merges)
+
+def next_row_items(items_):
+    # sz_=20
+    sz_=len(items_)
+    in_ = I0(items_)
+    b = basics(in_, sz_)
+    snq = sequences_no_quad(b, sz_)
+    sc = sequences_close(snq, sz_)
+    src = sequences_resolved_chains(sc, sz_)
+    ms = merge_sequence(src, sz_)
+    mf = merges_flat(ms, sz_)
+    next_row_items_  = merges(mf, items_, sz_)
+
+    return next_row_items_
+
+def items_for_display(items_,to_size):
+    a = [i.value() for i in items_]
+    n = [i.num for i in items_]
+    # s = [i.std_var() for i in m]
+    pos2 = np.cumsum(n)
     k = 0
-    for j in range(sz):
-        if is_begin(merges_flat, j):
+    a_to_size = np.zeros(to_size)
+    x_to_size = np.zeros(to_size)
+    # s_to_size= np.zeros(to_size)
+    for j in range(to_size):
+        if j >= pos2[k]:
             k = k + 1
 
-    return k
+        a_to_size[j] = a[k]
+        x_to_size[j] = j
+        # s_to_size[j] = s[k]
+
+    return x_to_size,a_to_size # s_to_size[j]
 
 
-def is_begin(sequence, idx):
-    return idx==0 or sequence[idx] != sequence[idx-1]
+def tree(base_items, max_gens):
+    base_sz=len(base_items)
+    a = [i.value() for i in base_items]
+    x = [j for j in range(0, base_sz)]
+    items_ = base_items
+    plot_data = []
+    num_gens = 0
 
+    while num_gens <= max_gens and len(items_) < 3:
+        num_gens = num_gens + 1
+        items2 = next_row_items(items_)
+        x2, a2 = items_for_display(items2, base_sz)
+        plot_data.append([x2, a2])
+        items_ = items2
 
-def merged_items(items, merges_flat, num_merges, sz):
-    items = np.array(num_merges, dtype=Item)
-    k = 0
-    for j in range(sz):
-        if is_begin(merges_flat, j):
-            if merges_flat[j]=='s':
-                items[k] = items[j]
-            elif merges_flat[j]=='c':
-                items[k] = items[j:j+2]
-            elif merges_flat[j]=='t':
-                items[k] = items[j:j+3]
-            k = k + 1
-
-    return items
+    return plot_data

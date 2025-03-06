@@ -1,0 +1,103 @@
+
+
+sites    .   .   .   .   .   .   .   .   .   .   .
+
+margin     |                       |
+tile           |               |
+  
+m2a      x   x | x   x | x   x | x   x |
+
+m2b        | x   x | x   x | x   x | 
+
+
+
+At least one couple must be defined in a tile
+
+Now we can 
+
+- again base on the prefer vector
+
+     - defined inside tile or inside margin?
+	 
+- base on quality
+
+- base on quality minus opportunity cost
+
+
+Test cases: displacement phase 0
+
+couples
+
+sites    .   .   .   .   .   .   .   .   .   .   .	 
+	 
+prefer   1  -1   1  -1   1  -1   1  -1   1   -1   1
+ votes   1   1   1   1   1   1   1   1   1    1   1
+margin     |                       |
+tile           |               |
+margin     |                       |
+tile           |               |
+
+           a       a      a       a        a
+
+Test cases: displacement phase 1
+
+couples
+
+sites    .   .   .   .   .   .   .   .   .   .   .	 
+	 
+prefer  -1   1  -1   1  -1   1  -1   1  -1    1  -1
+ votes   1   1   1   1   1   1   1   1   1    1   1
+margin     |                       |
+tile           |               |
+
+           a       a      a       a        a
+
+
+couples with defect - displacement phase 0 to displacement phase 1
+
+sites    .   .   .   .   .   .   .   .   .   .   .	 
+margin     |                       |
+tile           |               |
+	 
+prefer   1  -1   1   1  -1   1  -1   1  -1   1  -1
+ votes   1   1   0   2   1   1   1   1   1   1   1
+ 
+           a           b       b       b       b
+ 
+
+couples to upchain    phase to frustrated   
+
+sites    .   .   .   .   .   .   .   .   .   .   .	 
+margin     |                       |
+tile           |               |
+	 
+prefer   1  -1   1   1   1   1   1   1   1   1   1
+ votes   1   1   0   1   1   1   1   1   1   1   1
+ 
+           a       a        (upchain)
+		   
+		   
+
+downchain to upchain    frustrated to frustrated
+
+sites    .   .   .   .   .   .   .   .   .   .   .	 
+margin     |                       |
+tile           |               |
+	 
+prefer  -1  -1  -1  -1   1   1   1   1   1   1   1
+ votes   1   1   1   0   0   1   1   1   1   1   1
+ 
+           (downchain)        (upchain)
+		   
+	   
+upchain to downchain    frustrated to frustrated
+
+sites    .   .   .   .   .   .   .   .   .   .   .	 
+margin     |                       |
+tile           |               |
+	 
+prefer   1   1   1   1  -1  -1  -1  -1  -1  -1  -1
+ votes   1   1   1   2   2   1   1   1   1   1   1
+ 
+           (upchain)        (downchain)
+		   

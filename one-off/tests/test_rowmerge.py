@@ -31,19 +31,6 @@ def is_in(sequence, letter, host_sequence, host_letter, host_length, sz, truth_v
             if j + host_length  <= sz:
                 assert (letter in sequence[j:j + host_length])==truth_value
 
-
-# @pytest.fixture(scope="module")
-# def items():
-#     return random_items(20)
-#
-# @pytest.fixture(scope="module")
-# def sz(items):
-#     return len(items)
-#
-# @pytest.fixture(scope="module")
-# def inputs(items):
-#     return I0(items)
-
 ### Check B:
 def test_votes(inputs, sz):
     vote_vector = inputs.vote_vector
@@ -56,37 +43,6 @@ def test_votes(inputs, sz):
         if vote_vector[j] == 2:
             check.is_false(np.all(vote_vector[j + 1:j + 3] == 2))
 
-
-def maybe_in_votes(inputs):
-    sz=inputs.sz
-    vote_vector = inputs.vote_vector
-    # There is a pair.
-    found_pair = False
-    for j in range(sz - 1):
-        found_pair = found_pair or np.all(vote_vector[j + 1:j + 2] == 2)
-
-    return found_pair
-
-
-
-
-# def maybe_in_basics(rawbasics, sz):
-#     a=rawbasics
-#     # A Quad may overlap with a Single.
-#     found_single_in_quad = False
-#     for j in range(sz - 3):
-#         if is_begin_(a.quads, j, 'q'):
-#             found_single_in_quad = found_single_in_quad or np.any(a.singles[j:j + 4] == 's')
-#
-#     return found_single_in_quad
-#
-#     # A Triple may overlap with a Single.
-#     found_single_in_triple = False
-#     for j in range(sz - 2):
-#         if is_begin_(a.triples, j, 't'):
-#             found_single_in_triple = found_single_in_triple or np.any(a.singles[j:j + 3] == 's')
-#
-#     return found_single_in_triple
 
 def test_basics(basics:A0, sz):
     a=basics
