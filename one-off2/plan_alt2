@@ -101,3 +101,101 @@ prefer   1   1   1   1  -1  -1  -1  -1  -1  -1  -1
  
            (upchain)        (downchain)
 		   
+prefer   1   1   1   1  -1  -1  -1  -1  -1  -1  -1
+ votes   1   1   1   2   2   1   1   1   1   1   1
+ 
+ 
+couple  c :  p[j]=  1, p[j+1] = -1 
+        e :  p[j]= -1, p[j-1] =  1
+		
+single  s :  v[j] = 0
+
+
+chains
+
+upchain    u  not c and v[j] == 1 and p[j] == 1 
+downchain  d  not e and v[j] == 1 and p[j] == -1 
+
+
+Lemma:  right to an upchain can only be a couple 
+        left  to an upchain can only be a single
+		right to a downchain can only be a single
+		left  to a downchain can only be a couple
+		
+Chain resolution
+
+Margin single chain item  u . . . , . . . d : do nothing (lacking info)
+Inner single chain item   . u . . , . d . . , . . u . , . . d . : convert to s
+ u . . d  apply rule for margin single chain item, i.e. do nothing
+ d . . u  apply rule for margin single chain item, i.e. do nothing
+
+ 
+Two separate chain items, which are not both marginal
+
+one margin, one inner 
+ u . u .  cannot exist
+ u . d .  cannot exist
+ . d . d  cannot exist
+ . u . d  cannot exist
+ u . . u  cannot exist
+ d . . d  cannot exist
+ u . . d  apply rule for margin single chain item
+ d . . u  apply rule for margin single chain item
+ 
+
+Two neighboring chain items
+
+ u u . .  convert to couple 
+ u d . .  cannot exist
+ . u u .  convert to couple
+ . . u u  do nothing
+ . . d d  convert to couple 
+ . . u d  cannot exist
+ . d d .  convert to couple
+ d d . .  do nothing
+
+Three chain items
+
+ u u u .  convert the right items to couple 
+ u u . u  cannot exist
+ u u . d  cannot exist
+ 
+ . d d d  convert the left items to couple 
+ d . d d  cannot exist
+ u . d d  cannot exist
+ 
+ u . u u  cannot exist 
+ d . u u  convert into d s c e , or into d c e s
+ d d . d  cannot exist 
+ d d . u  convert into c e s u , or into s c e u
+ 
+ d d d .
+ . u u u  convert into s c e u , or into c e c e
+ 
+ u u u u  convert into u c e s , or into c e c e
+ d d d d  convert into s c e d , or into c e c e 
+
+ 
+Listing only the possible cases, and using symmetry  (u <--> d and reverse)
+ 
+ u u . .  convert to couple 
+ . . u u  do nothing
+ . u u .  convert inner to couple 
+ . u u u  convert into s c e u , or into c e c e
+ u u u u  convert into u c e s , or into c e c e
+ 
+ 
+ If majority is d, reverse and exchange d<->u , then reverse-exchange back.
+ 
+ . . d d  convert to couple 
+ . d d .  convert to couple
+ d d . .  do nothing 
+ . d d d  convert the left items to couple 
+ d d . u  convert into c e s u , or into s c e u
+ d d d .  convert into d c e s , or into c e c e
+ d d d d  convert into s c e d , or into c e c e 
+
+
+ 
+ 
+ 
