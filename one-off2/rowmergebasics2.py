@@ -1,47 +1,57 @@
 import numpy as np
+import numpy.typing as npt
+from item import Item
 import math
 
-from cuda.opencv.opencv.modules.dnn.misc.quantize_face_detector import dtype
 
-
-def pad4_(prefer_vector_sz, vote_vector_sz, sz):
-    sz4 = math.ceil((sz+2) / 4)*4
-    prefer_vector = -np.ones(sz4, dtype = int)
-    vote_vector = np.ones( sz4, dtype = int)
+def pad4_(items_sz, prefer_vector_sz, vote_vector_sz, sz):
+    sz4 = math.ceil((sz + 2) / 4) * 4
+    prefer_vector = -np.ones(sz4, dtype=int)
+    vote_vector = np.ones(sz4, dtype=int)
     vote_vector[-1] = 0
     prefer_vector[0:sz] = prefer_vector_sz
-    vote_vector[0:sz]   = vote_vector_sz
+    vote_vector[0:sz] = vote_vector_sz
     if sz4 > sz:
         prefer_vector[sz] = 1
         vote_vector[sz] = 0
 
-    return prefer_vector, vote_vector
+    items = np.array(sz4, dtype=Item)
+    items[0:sz] = items_sz
+
+    return items, prefer_vector, vote_vector, sz4
+
+
+def unpad4_(sequence, sz):
+    sequence[:] = sequence[0:sz]
+
 
 def merges_wo_chains(prefer_vector, vote_vector, sz4, sz):
     sequence = np.array(["x"] * sz4, dtype=np.dtype('U1'))
-    for k in range(0, int(sz4/4)-1):
+    for k in range(0, int(sz4 / 4) - 1):
 
-        for j in range(4*k, 4*(k+1)-1):
+        for j in range(4 * k, 4 * (k + 1) - 1):
 
             if prefer_vector[j] == 1 and prefer_vector[j + 1] == -1:
-                    sequence[j] = "c"
-                    sequence[j + 1] = "c"
+                sequence[j] = "c"
+                sequence[j + 1] = "c"
 
-        for j in range(4*k, 4*(k+1)):
+        for j in range(4 * k, 4 * (k + 1)):
             if vote_vector[j] == 0:
-                sequence[j]='s'
+                sequence[j] = 's'
 
+    for k in range(0, int(sz4 / 4) - 1):
 
-    for k in range(0, int(sz4/4)-1):
-
-        for j in range(4*k + 2, 4*(k+1)+2 - 1):
+        for j in range(4 * k + 2, 4 * (k + 1) + 2 - 1):
             if prefer_vector[j] == 1 and prefer_vector[j + 1] == -1:
-                    sequence[j] = "c"
-                    sequence[j + 1] = "c"
+                sequence[j] = "c"
+                sequence[j + 1] = "c"
 
-        for j in range(4*k +2, 4*(k+1)+2):
+        for j in range(4 * k + 2, 4 * (k + 1) + 2):
             if vote_vector[j] == 0:
-                sequence[j]='s'
+                sequence[j] = 's'
+
+    return sequence
+
 
 def merges_insert_chains(sequence, prefer_vector, vote_vector, sz4, sz):
     for k in range(0, int(sz4 / 4) - 1):
@@ -66,15 +76,20 @@ def merges_insert_chains(sequence, prefer_vector, vote_vector, sz4, sz):
 
     return sequence[0:sz]
 
-def get_quad_sequence(seq4):
 
+def set_quad_sequence(seq4: np.array, letter: str) -> None:
+    if letter == 'd':
+        seq4[:] = seq4[::-1]
+
+
+def get_quad_sequence(seq4):
     count_u = 0
     count_d = 0
     for item in seq4:
         if item == 'u':
-            count_u = count_u + 1
+            count_u += 1
         if item == 'd':
-            count_d = count_d + 1
+            count_d += 1
 
     if count_d > count_u:
         letter = 'd'
@@ -86,66 +101,73 @@ def get_quad_sequence(seq4):
     return seq4_, letter
 
 
-def set_quad_sequence(seq4: np.array, letter):
-    if letter=='d':
-        seq4[:] = seq4[::-1]
+def merges_resolve_quad(seq4: npt.NDArray[np.dtype('U1')],
+                        items: npt.NDArray[Item],
+                        x: np.dtype('U1')) -> None:
 
-def merges_resolve_quad(s:np.array, x):
+    b0 = [True, True, False, False]
+    b1 = [False, True, True, False]
+    b2 = [False, True, True, True]
+    if np.all(seq4[b0] == x) and np.all(seq4[~np.array(b0)] != x):
+        #  u u . .  convert to couple
+        seq4[0] = 'c'
+        seq4[1] = 'e'
+    elif np.all(seq4[b1] == x) and seq4[3] != x:
+        #  x u u .  convert to couple
+        seq4[1] = 'c'
+        seq4[2] = 'e'
+    elif np.all(seq4[b2] == x) and np.all(seq4[~np.array(b2)] != x):
+        #  . u u u  convert into s c e u , or into c e c e
+        if Item(items[1], items[2]).quality > Item(items[0], items[1]).quality:
+            seq4[1] = 's'
+            seq4[2] = 'e'
+            seq4[3] = 'c'
+            seq4[4] = 'u'
+        else:
+            seq4[1] = 'c'
+            seq4[2] = 'e'
+            seq4[3] = 'c'
+            seq4[4] = 'e'
+    elif np.all(seq4[:] == x):
+        if Item(items[1], items[2]).quality > Item(items[0], items[1]).quality:
+            seq4[1] = 's'
+            seq4[2] = 'e'
+            seq4[3] = 'c'
+            seq4[4] = 'u'
+        else:
+            seq4[1] = 'c'
+            seq4[2] = 'e'
+            seq4[3] = 'c'
+            seq4[4] = 'e'
 
- # . . x x  do nothing
- # . x x .  convert inner to couple
- # . x x x  convert into s c e x , or into c e c e
- # x x x x  convert into x c e s , or into c e c e
-
- def fu(items, s)
-     b0 = [True,True, False,False]
-     b1 = [False, True, True, False]
-     b2 = [False,True, True,True]
-     b3 = [True, True, True,True]
-     if np.all(s[b0] == x) and np.all(s[~np.array(b0)] != x):
-         s[0] = 'c'
-         s[1] = 'e'
-     elif np.all(s[b1] == x) and np.all(s[~np.array(b1)] != x):
-         s[1] = 'c'
-         s[2] = 'e'
-     elif np.all(s[b2] == x) and np.all(s[~np.array(b2)] != x):
-         s[1] = 'c'
-         s[2] = 'e'
-         s[3] = 'c'
-         s[4] = 'e'
-     elif np.all(s[:] == x):
-         s[1] = 'c'
-         s[2] = 'e'
-         s[3] = 'c'
-         s[4] = 'e'
-
- def test_fu():
-     x='x'
-     s = ['x','x','x','d'] # want fu(s,x) to be false
-     s = ['x','x','d','d'] # want fu(s,x) to be true
-     s = ['x','d','d','d'] # want fu(s,x) to be false
-     s = ['x','d','x','d'] # want fu(s,x) to be false
-
-
-    seq4=seq4
 
 def merges_resolve_isolated_chain_elements(seq4):
     seq4 = np.char.replace(seq4, 'd', 's')
     seq4 = np.char.replace(seq4, 'u', 's')
     return seq4
 
-def merges_resolve_chains(sequence, sz4):
+
+def merges_resolve_chains(sequence, items, sz4):
     for k in range(0, int(sz4 / 4) - 1):
         seq4 = sequence[4 * k: 4 * (k + 1)]
-        seq4_, letter =  get_quad_sequence(seq4)
-        merges_resolve_quad(seq4_)
+        seq4_, letter = get_quad_sequence(seq4)
+        merges_resolve_quad(seq4_, items, letter)
         set_quad_sequence(seq4_, letter)
-        sequence[4 * k: 4 * (k + 1)]= seq4_
+        sequence[4 * k: 4 * (k + 1)] = seq4_
 
     for k in range(0, int(sz4 / 4) - 1):
         seq4 = sequence[4 * k + 2: 4 * (k + 1) + 2 - 1]
-        seq4_, letter =  get_quad_sequence(seq4)
-        merges_resolve_quad(seq4_)
-        seq4_=merges_resolve_isolated_chain_elements(seq4_)
+        seq4_, letter = get_quad_sequence(seq4)
+        merges_resolve_quad(seq4_, items, letter)
+        seq4_ = merges_resolve_isolated_chain_elements(seq4_)
         set_quad_sequence(seq4_, letter)
-        sequence[4 * k: 4 * (k + 1)]= seq4_
+        sequence[4 * k: 4 * (k + 1)] = seq4_
+
+
+def raw_rowmerge(items_sz, prefer_vector_sz, vote_vector_sz, sz):
+    items, prefer_vector, vote_vector, sz4 = pad4_(items_sz, prefer_vector_sz, vote_vector_sz, sz)
+    sequence = merges_wo_chains(prefer_vector, vote_vector, sz4, sz)
+
+    merges_insert_chains(sequence, prefer_vector, vote_vector, sz4, sz)
+    merges_resolve_chains(sequence, items, sz4)
+    unpad4_(sequence, sz)
