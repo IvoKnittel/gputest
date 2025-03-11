@@ -5,7 +5,7 @@ import math
 
 
 def pad4_(items_sz, prefer_vector_sz, vote_vector_sz, sz):
-    sz4 = math.ceil((sz + 2) / 4) * 4
+    sz4 = math.ceil(sz / 4) * 4
     prefer_vector = -np.ones(sz4, dtype=int)
     vote_vector = np.ones(sz4, dtype=int)
     vote_vector[-1] = 0
@@ -15,25 +15,25 @@ def pad4_(items_sz, prefer_vector_sz, vote_vector_sz, sz):
         prefer_vector[sz] = 1
         vote_vector[sz] = 0
 
-    items = np.array(sz4, dtype=Item)
+    items = np.empty(sz4, dtype=Item)
     items[0:sz] = items_sz
 
     return items, prefer_vector, vote_vector, sz4
 
 
 def unpad4_(sequence, sz):
-    sequence[:] = sequence[0:sz]
+    return sequence[0:sz]
 
 
 def merges_wo_chains(prefer_vector, vote_vector, sz4, sz):
     sequence = np.array(["x"] * sz4, dtype=np.dtype('U1'))
-    for k in range(0, int(sz4 / 4) - 1):
+    for k in range(0, int(sz4 / 4)):
 
         for j in range(4 * k, 4 * (k + 1) - 1):
 
             if prefer_vector[j] == 1 and prefer_vector[j + 1] == -1:
                 sequence[j] = "c"
-                sequence[j + 1] = "c"
+                sequence[j + 1] = "e"
 
         for j in range(4 * k, 4 * (k + 1)):
             if vote_vector[j] == 0:
@@ -44,7 +44,7 @@ def merges_wo_chains(prefer_vector, vote_vector, sz4, sz):
         for j in range(4 * k + 2, 4 * (k + 1) + 2 - 1):
             if prefer_vector[j] == 1 and prefer_vector[j + 1] == -1:
                 sequence[j] = "c"
-                sequence[j + 1] = "c"
+                sequence[j + 1] = "e"
 
         for j in range(4 * k + 2, 4 * (k + 1) + 2):
             if vote_vector[j] == 0:
@@ -156,18 +156,18 @@ def merges_resolve_chains(sequence, items, sz4):
         sequence[4 * k: 4 * (k + 1)] = seq4_
 
     for k in range(0, int(sz4 / 4) - 1):
-        seq4 = sequence[4 * k + 2: 4 * (k + 1) + 2 - 1]
+        seq4 = sequence[4 * k + 2: 4 * (k + 1) + 2]
         seq4_, letter = get_quad_sequence(seq4)
         merges_resolve_quad(seq4_, items, letter)
         seq4_ = merges_resolve_isolated_chain_elements(seq4_)
         set_quad_sequence(seq4_, letter)
-        sequence[4 * k: 4 * (k + 1)] = seq4_
+        sequence[4 * k +2 : 4 * (k + 1) + 2] = seq4_
 
 
-def raw_rowmerge(items_sz, prefer_vector_sz, vote_vector_sz, sz):
+def rowmerge_no_flat(items_sz, prefer_vector_sz, vote_vector_sz, sz):
     items, prefer_vector, vote_vector, sz4 = pad4_(items_sz, prefer_vector_sz, vote_vector_sz, sz)
     sequence = merges_wo_chains(prefer_vector, vote_vector, sz4, sz)
 
     merges_insert_chains(sequence, prefer_vector, vote_vector, sz4, sz)
     merges_resolve_chains(sequence, items, sz4)
-    unpad4_(sequence, sz)
+    return unpad4_(sequence, sz)

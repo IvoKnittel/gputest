@@ -1,9 +1,10 @@
-import math
-from rowmergebasics2 import  pad4_, merges_
 
-
+from rowmergebasics2 import  rowmerge_no_flat
+import pytest_check as check
+from item import random_items
 def test_basics(inputs, sz):
     sz = inputs.sz
-    sz4 = math.ceil((sz + 2) / 4) * 4
-    prefer_vector_, vote_vector_ = pad4_(inputs.prefer_vector, inputs.vote_vector, sz)
-    raw_merges = merges_(prefer_vector_, vote_vector_, sz4, sz)
+    items_=random_items(20)
+    sequence = rowmerge_no_flat(items_, inputs.prefer_vector, inputs.vote_vector, sz)
+    for letter in sequence:
+        check.not_equal(letter , 'x')
