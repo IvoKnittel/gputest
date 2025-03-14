@@ -4,7 +4,7 @@ from item import Item
 import math
 
 
-def pad4_(items_sz, prefer_vector_sz, vote_vector_sz, quality_vector_sz, sz):
+def pad4_(items_sz, merged_items_sz, prefer_vector_sz, vote_vector_sz, quality_vector_sz, sz):
     sz4 = math.ceil(sz / 4) * 4
     prefer_vector = -np.ones(sz4, dtype=int)
     vote_vector = np.ones(sz4, dtype=int)
@@ -21,7 +21,10 @@ def pad4_(items_sz, prefer_vector_sz, vote_vector_sz, quality_vector_sz, sz):
     items = np.empty(sz4, dtype=Item)
     items[0:sz] = items_sz
 
-    return items, prefer_vector, vote_vector, quality_vector, sz4
+    merged_items = np.empty((2,sz4), dtype=Item)
+    merged_items[:,0:sz] = merged_items_sz
+
+    return items, merged_items, prefer_vector, vote_vector, quality_vector, sz4
 
 
 def unpad4_(sequence, sz):
@@ -115,14 +118,26 @@ def merge_quad_ss(seq4: npt.NDArray[np.dtype('U1')]) -> None:
             seq4[j + 1] = 'e'
 
 
-# def get_triple_quality_vector4(seq4: npt.NDArray[np.dtype('U1')], merged_items4: npt.NDArray[Item], items4: npt.NDArray[Item]):
-#     triple_quality_vector = np.zeros(4, dtype=float)
-#     for j in range(0,3):
-#         if seq4[j] == 's':
-#             if j > 1:
-#                 Item (merged_items4[j-2]
-#             else:
-#     return triple_quality_vector
+def get_triple_quality_vector4(seq4: npt.NDArray[np.dtype('U1')], merged_items4: npt.NDArray[Item], items4: npt.NDArray[Item]):
+    triple_quality_vector = np.zeros((2,4), dtype=float)
+    for j in range(0,3):
+        if seq4[j] == 's':
+            if j > 1:
+                triple_quality_vector[0,j] = Item(merged_items4[j-2],items4[j]).quality
+            else:
+                triple_quality_vector[1, j] = Item(merged_items4[j+1], items4[j]).quality
+    return triple_quality_vector
+
+
+def select_triple_quality_vector4(triple_quality_vector4):
+    triple_quality_vector_sel = np.zeros(4, dtype=float)
+    for j in range(0,4):
+        if triple_quality_vector4[0,j] > triple_quality_vector4[1,j]:
+            triple_quality_vector_sel[j] = -triple_quality_vector4[0,j]
+        else:
+            triple_quality_vector_sel[j] =  triple_quality_vector4[1,j]
+    return triple_quality_vector_sel
+
 
 def merges_resolve_quad(seq4: npt.NDArray[np.dtype('U1')],
                         items: npt.NDArray[Item],
@@ -222,25 +237,33 @@ def merge_ss(sequence, sz4):
         merge_quad_ss(seq4)
         sequence[4 * k +2 : 4 * (k + 1) + 2] = seq4
 
-def merges_flatten(sequence, items, merged_items, sz4):
-    triple_quality_vector = np.zeros(sz4, dtype=float)
+def triple_quality(sequence, items, merged_items, sz4):
+    triple_quality_vector = np.zeros((2,sz4), dtype=float)
+    triple_quality_vector_sel = np.zeros(sz4, dtype=float)
     for k in range(0, int(sz4 / 4)):
         seq4 = sequence[4 * k: 4 * (k + 1)]
         merged_items4 = merged_items[1,4 * k: 4 * (k + 1)-1]
         items4 = items[4 * k: 4 * (k + 1)]
-        triple_quality_vector[4 * k: 4 * (k + 1)] = get_triple_quality_vector4(seq4, merged_items4, items4)
+        triple_quality_vector[:,4 * k: 4 * (k + 1)] = get_triple_quality_vector4(seq4, merged_items4, items4)
 
     for k in range(0, int(sz4 / 4) - 1):
         seq4 = sequence[4 * k + 2: 4 * (k + 1) + 2]
         merged_items4 = merged_items[1,4 * k + 2: 4 * (k + 1) + 2-1]
         items4 = items[4 * k + 2: 4 * (k + 1) + 2]
-        triple_quality_vector[4 * k + 2: 4 * (k + 1) + 2]= get_triple_quality_vector4(seq4, merged_items4, items4)
+        triple_quality_vector[:, 4 * k + 2: 4 * (k + 1) + 2]= get_triple_quality_vector4(seq4, merged_items4, items4)
 
-def rowmerge_no_flat(items_sz, prefer_vector_sz, vote_vector_sz, quality_vector_sz, sz):
-    items, prefer_vector, vote_vector, quality_vector, sz4 = pad4_(items_sz, prefer_vector_sz, vote_vector_sz, quality_vector_sz, sz)
+    for k in range(0, int(sz4 / 4)):
+        triple_quality_vector_sel[4 * k: 4 * (k + 1)] = select_triple_quality_vector4(triple_quality_vector[:, 4 * k: 4 * (k + 1)])
+
+    return triple_quality_vector_sel
+
+
+def rowmerge_no_flat(items_sz, merged_items_sz, prefer_vector_sz, vote_vector_sz, quality_vector_sz, sz):
+    items, merged_items, prefer_vector, vote_vector, quality_vector, sz4 = pad4_(items_sz, merged_items_sz, prefer_vector_sz, vote_vector_sz, quality_vector_sz, sz)
     sequence = merges_wo_chains(prefer_vector, vote_vector, sz4, sz)
 
     merges_insert_chains(sequence, prefer_vector, vote_vector, sz4, sz)
     merges_resolve_chains(sequence, items, sz4)
     merge_ss(sequence, sz4)
+    triple_quality_vector = triple_quality(sequence, items, merged_items, sz4)
     return unpad4_(sequence, sz)

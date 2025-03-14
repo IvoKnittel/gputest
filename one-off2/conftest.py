@@ -21,6 +21,24 @@ def items():
 def sz(items):
     return len(items)
 
+@pytest.fixture(scope="module")
+def merged_items(items, sz):
+    if sz < 2:
+        raise ValueError("The input list must contain at least two items.")
+
+    m = np.empty((2, sz), dtype=Item)
+
+    m[0, 0] = Item()
+    m[1, 0] = Item(items[0], items[1])
+
+    for idx in range(1, sz - 1):
+        m[0, idx] = Item(items[idx - 1], items[idx])
+        m[1, idx] = Item(items[idx], items[idx + 1])
+
+    m[0, -1] = Item(items[-2], items[-1])
+    m[1, -1] = Item()
+
+    return m
 
 @pytest.fixture(scope="module")
 def inputs(items):
