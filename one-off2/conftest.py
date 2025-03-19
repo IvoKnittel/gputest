@@ -17,9 +17,11 @@ def pytest_configure(config):
 def items():
     return random_items(20)
 
+
 @pytest.fixture(scope="module")
 def sz(items):
     return len(items)
+
 
 @pytest.fixture(scope="module")
 def merged_items(items, sz):

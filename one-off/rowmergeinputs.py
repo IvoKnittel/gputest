@@ -44,6 +44,11 @@ def vote_vector(prefer_vector, sz):
             vvec[idx] = vvec[idx] + 1
     return vvec
 
+
+def quality_vector(merged_items):
+    quality_vector_list =[item.quality for item in merged_items[1,:]]
+    return np.array(quality_vector_list)
+
 class I0:
     def __init__(self, items):
         sz = len(items)
@@ -51,3 +56,4 @@ class I0:
         self.merged_items = merged_items(items, sz)
         self.prefer_vector = prefer_vector(self.merged_items, sz)
         self.vote_vector = vote_vector(self.prefer_vector, sz)
+        self.quality_vector=quality_vector(self.merged_items)

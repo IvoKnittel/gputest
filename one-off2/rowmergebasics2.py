@@ -118,8 +118,8 @@ def merge_quad_ss(seq4: npt.NDArray[np.dtype('U1')]) -> None:
             seq4[j + 1] = 'e'
 
 
-def get_triple_quality_vector4(seq4: npt.NDArray[np.dtype('U1')], merged_items4: npt.NDArray[Item], items4: npt.NDArray[Item]):
-    triple_quality_vector = np.zeros((2,4), dtype=float)
+def get_triple_quality_vector4(seq4: npt.NDArray[np.dtype('U1')], k, merged_items4: npt.NDArray[Item], items4: npt.NDArray[Item]):
+    triple_quality_vector = -np.ones((2,4), dtype=float)
     for j in range(0,3):
         if seq4[j] == 's':
             if j > 1:
@@ -128,10 +128,11 @@ def get_triple_quality_vector4(seq4: npt.NDArray[np.dtype('U1')], merged_items4:
                 triple_quality_vector[1, j] = Item(merged_items4[j+1], items4[j]).quality
     return triple_quality_vector
 
+is_single = lambda x: x > 0
 
 def select_triple_quality_vector4(triple_quality_vector4):
-    triple_quality_vector_sel = np.zeros(4, dtype=float)
-    for j in range(0,4):
+    triple_quality_vector_sel = -np.ones(4, dtype=float)
+    for j in np.argwhere(is_single(triple_quality_vector4[0,:])).flatten():
         if triple_quality_vector4[0,j] > triple_quality_vector4[1,j]:
             triple_quality_vector_sel[j] = -triple_quality_vector4[0,j]
         else:
@@ -238,8 +239,8 @@ def merge_ss(sequence, sz4):
         sequence[4 * k +2 : 4 * (k + 1) + 2] = seq4
 
 def triple_quality(sequence, items, merged_items, sz4):
-    triple_quality_vector = np.zeros((2,sz4), dtype=float)
-    triple_quality_vector_sel = np.zeros(sz4, dtype=float)
+    triple_quality_vector = -np.ones((2,sz4), dtype=float)
+    triple_quality_vector_sel = -np.ones(sz4, dtype=float)
     for k in range(0, int(sz4 / 4)):
         seq4 = sequence[4 * k: 4 * (k + 1)]
         merged_items4 = merged_items[1,4 * k: 4 * (k + 1)-1]
@@ -256,6 +257,108 @@ def triple_quality(sequence, items, merged_items, sz4):
         triple_quality_vector_sel[4 * k: 4 * (k + 1)] = select_triple_quality_vector4(triple_quality_vector[:, 4 * k: 4 * (k + 1)])
 
     return triple_quality_vector_sel
+
+# flatten how it works:
+
+#   ..... s ..... s    singles
+#         q       q    signed triple qualities
+#       |     |     |  quads  containing 0 to 2 singles
+def flatten_row(triple_quality_vector, sz4):
+    sz_next_row = np.ceil(sz4 / 2)*2
+    triple_quality_vector_next = -np.ones(sz_next_row, dtype=float)
+    for k in range(0,int(sz4 / 4)):
+        seq4 = triple_quality_vector[4 * k: 4 * (k + 1)]
+        single_indices = np.argwhere(is_single(seq4)).flatten()
+        num_singles = len(single_indices)
+        j=0
+        n=0
+        while j < 4:
+            if single_indices[j]%2==0:
+                if j+1 < num_singles:
+                    if triple_quality_vector[single_indices[j]] > triple_quality_vector[single_indices[j+1]]:
+                        triple_quality_vector[single_indices[j + 1]] = np.nan
+                    else:
+                        triple_quality_vector[single_indices[j]] = np.nan
+                    j=j+2
+            else:
+                triple_quality_vector_next[2*k+n]=triple_quality_vector[j]
+                j=j+1
+                n=n+1
+
+    triple_quality_vector = triple_quality_vector_next
+    sz = sz_next_row
+    sz_next_row = np.ceil(sz / 2)*2
+    triple_quality_vector_next = -np.ones(sz_next_row, dtype=float)
+    for k in range(0,sz,4):
+        if triple_quality_vector[k] > 0 and triple_quality_vector[k+1] > 0:
+
+
+
+
+
+
+#  for each s store sign(j),q
+#   | | |              bins , two items, or three, if it is the last
+#  1st gen
+#    []
+#    j0,q_j0
+#    j0,q_j0 j1,q_j1
+#    j0,q_j0 j1,q_j1,j2,q_j2
+#    j0,q_j0 j1,q_j1,j2,q_j2 j3,q_j3
+#
+# in each quad or bin
+# from left to right, take the first even index single and pair it with
+# the subsequent single.
+#
+# Pairing: set the lower-quality item to some dummy
+# value, keep the items in the row, transfer
+# the unpaired items to the next row (there can be at most two)
+# once the row size==2 or 3, all singles are paired.
+# now write back into the previous row, with each iten into it respective bin.
+#
+def flatten_row_gen(datavec):
+    sz=int(len(datavec)/2)
+
+    for k in range(0,sz):
+        s = len(datavec[k])
+        for j in range(0, s):
+            d=[np.nan,q[j],np.nan]
+
+
+    if len(datavec)%2==1:
+
+    data = data0
+    return triple_quality_vector_gen, data
+
+
+def flatten_row(sequence, triple_quality_vector, sz4):
+    num=int(sz4 / 4)
+    data0 = []
+    for k in range(0,int(sz4 / 4)):
+        seq4 = triple_quality_vector[4 * k: 4 * (k + 1)]
+        indices_singles = np.nonzero(seq4)[0]
+        q=triple_quality_vector[indices_singles]
+        s = len(q)
+        for j in range(0, s):
+            d=[4*k + j,q[j],np.nan]
+            if j>0:
+                d[0]=q[j-1]
+            if j<s-1:
+                d[2] = q[j + 1]
+            data0.append(d)
+        # 0,1 or 2 elements
+
+    data_tree = []
+    data_tree.append(data0)
+    while num==1:
+        triple_quality_vector_gen, data = flatten_row_gen(data0)
+        data_tree.append(data)
+        num0=num/2
+        num1=num-num0
+        num=max(num0,num1)
+        triple_quality_vector_gen = triple_quality_vector_gen0
+        data0=data
+
 
 
 def rowmerge_no_flat(items_sz, merged_items_sz, prefer_vector_sz, vote_vector_sz, quality_vector_sz, sz):
