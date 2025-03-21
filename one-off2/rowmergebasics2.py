@@ -258,44 +258,48 @@ def triple_quality(sequence, items, merged_items, sz4):
 
     return triple_quality_vector_sel
 
+def pos_quality_vector(sequence, sz4):
+    d_pos_quality = [('pos', int), ('quality', float)]
+    sequence_with_pos = np.zeros(sz4, dtype=d_pos_quality)
+    j=0
+    for s in sequence:
+       sequence_with_pos[j]=(j,s)
+       j=j+1
+    return sequence_with_pos
+
 # flatten how it works:
 
 #   ..... s ..... s    singles
 #         q       q    signed triple qualities
 #       |     |     |  quads  containing 0 to 2 singles
-def flatten_row(triple_quality_vector, sz4):
-    sz_next_row = np.ceil(sz4 / 2)*2
-    triple_quality_vector_next = -np.ones(sz_next_row, dtype=float)
-    for k in range(0,int(sz4 / 4)):
+def flatten_row(triple_quality_vector, sz):
+    num_quads = np.ceil(sz / 4)
+    sz_next_row = num_quads*2
+    d_pos_quality = [('pos', int), ('quality', float)]
+    triple_quality_vector_next = -np.ones(sz_next_row, dtype=d_pos_quality)
+    for k in range(0,num_quads):
         seq4 = triple_quality_vector[4 * k: 4 * (k + 1)]
-        single_indices = np.argwhere(is_single(seq4)).flatten()
-        num_singles = len(single_indices)
         j=0
         n=0
-        while j < 4:
-            if single_indices[j]%2==0:
-                if j+1 < num_singles:
-                    if triple_quality_vector[single_indices[j]] > triple_quality_vector[single_indices[j+1]]:
-                        triple_quality_vector[single_indices[j + 1]] = np.nan
-                    else:
-                        triple_quality_vector[single_indices[j]] = np.nan
-                    j=j+2
+        ja= np.nan
+        for j in range(0,4):
+            if seq4[j][1] < 0:
+                continue
+            if j%2==0:
+                ja = j
+            elif ~np.isnan(ja):
+                if seq4[ja][1] > seq4[j][1]:
+                    seq4[j] = (seq4[j][0], np.nan)
+                else:
+                    seq4[ja] = (seq4[ja][0], np.nan)
+                ja = np.nan
             else:
-                triple_quality_vector_next[2*k+n]=triple_quality_vector[j]
-                j=j+1
+                triple_quality_vector_next[2*k+n] = seq4[j]
                 n=n+1
 
-    triple_quality_vector = triple_quality_vector_next
-    sz = sz_next_row
-    sz_next_row = np.ceil(sz / 2)*2
-    triple_quality_vector_next = -np.ones(sz_next_row, dtype=float)
-    for k in range(0,sz,4):
-        if triple_quality_vector[k] > 0 and triple_quality_vector[k+1] > 0:
+        triple_quality_vector[4 * k: 4 * (k + 1)] = seq4
 
-
-
-
-
+    return triple_quality_vector, triple_quality_vector_next
 
 #  for each s store sign(j),q
 #   | | |              bins , two items, or three, if it is the last
@@ -315,50 +319,11 @@ def flatten_row(triple_quality_vector, sz4):
 # the unpaired items to the next row (there can be at most two)
 # once the row size==2 or 3, all singles are paired.
 # now write back into the previous row, with each iten into it respective bin.
-#
-def flatten_row_gen(datavec):
-    sz=int(len(datavec)/2)
 
-    for k in range(0,sz):
-        s = len(datavec[k])
-        for j in range(0, s):
-            d=[np.nan,q[j],np.nan]
+def flatten_insert(row, row_hi):
+    for s in row_hi:
 
-
-    if len(datavec)%2==1:
-
-    data = data0
-    return triple_quality_vector_gen, data
-
-
-def flatten_row(sequence, triple_quality_vector, sz4):
-    num=int(sz4 / 4)
-    data0 = []
-    for k in range(0,int(sz4 / 4)):
-        seq4 = triple_quality_vector[4 * k: 4 * (k + 1)]
-        indices_singles = np.nonzero(seq4)[0]
-        q=triple_quality_vector[indices_singles]
-        s = len(q)
-        for j in range(0, s):
-            d=[4*k + j,q[j],np.nan]
-            if j>0:
-                d[0]=q[j-1]
-            if j<s-1:
-                d[2] = q[j + 1]
-            data0.append(d)
-        # 0,1 or 2 elements
-
-    data_tree = []
-    data_tree.append(data0)
-    while num==1:
-        triple_quality_vector_gen, data = flatten_row_gen(data0)
-        data_tree.append(data)
-        num0=num/2
-        num1=num-num0
-        num=max(num0,num1)
-        triple_quality_vector_gen = triple_quality_vector_gen0
-        data0=data
-
+    return row
 
 
 def rowmerge_no_flat(items_sz, merged_items_sz, prefer_vector_sz, vote_vector_sz, quality_vector_sz, sz):
@@ -369,4 +334,19 @@ def rowmerge_no_flat(items_sz, merged_items_sz, prefer_vector_sz, vote_vector_sz
     merges_resolve_chains(sequence, items, sz4)
     merge_ss(sequence, sz4)
     triple_quality_vector = triple_quality(sequence, items, merged_items, sz4)
+    triple_quality_pos_vector = pos_quality_vector(triple_quality_vector, sz4)
+    tree_data=[]
+    triple_quality_pos_vector_next = triple_quality_pos_vector
+    sz = len(triple_quality_pos_vector)
+    while sz > 1:
+        triple_quality_pos_vector_this, triple_quality_vector_next = flatten_row(triple_quality_pos_vector, sz)
+        tree_data.append(triple_quality_pos_vector_this)
+        sz = len(triple_quality_vector_next)
+
+    tree_data.append(triple_quality_pos_vector_next)
+    row_hi = tree_data.pop()
+    for row in tree_data.reverse():
+        row = flatten_insert(row,row_hi)
+        row_hi = row
+
     return unpad4_(sequence, sz)
