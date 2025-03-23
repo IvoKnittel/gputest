@@ -222,4 +222,4 @@ def rowmerge_no_flat(items_sz, merged_items_sz, prefer_vector_sz, vote_vector_sz
     merges_insert_chains(sequence, prefer_vector, vote_vector, sz4, sz)
     merges_resolve_chains(sequence, items, sz4)
     merge_ss(sequence, sz4)
-    return sequence
+    return sequence, items, merged_items, sz4
