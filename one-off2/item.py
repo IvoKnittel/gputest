@@ -1,4 +1,4 @@
-import pytest
+import pickle
 import math
 import numpy as np
 from scipy.signal import chirp
@@ -57,8 +57,16 @@ class Item:
 
 
 
-def random_items(N:int):
+def random_items_(N:int):
     values = np.random.rand(N)
+    with open('random_items.pkl', 'wb') as f:
+        pickle.dump(values, f)
+
+    return np.array([Item(val) for val in values])
+
+def random_items(N:int):
+    with open('random_items.pkl', 'rb') as f:
+        values = pickle.load(f)
     return np.array([Item(val) for val in values])
 
 def odd_step(N:int):

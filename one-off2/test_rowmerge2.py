@@ -14,4 +14,5 @@ def test_basics(inputs, items, merged_items, sz):
 def test_flatten(inputs, items, merged_items, sz):
     sz = inputs.sz
     sequence_sz4, items_sz4, merged_items_sz4, sz4 = rowmerge_no_flat(items, merged_items, inputs.prefer_vector, inputs.vote_vector, inputs.quality_vector, sz)
-    row_flatten(sequence_sz4, items_sz4, merged_items_sz4, sz4)
+    row_as_tuples = row_flatten(sequence_sz4, items_sz4, merged_items_sz4, sz4)
+    waithere=1
