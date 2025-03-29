@@ -60,7 +60,7 @@ def init_pos_quality_array(sz):
     arr = np.zeros(sz, dtype=d_pos_quality)
     arr['pos'] = j_undefined
     arr['quality'] = undefined
-    arr['kind'] = undefined
+    arr['kind'] = no_terminal
     return arr
 
 def pos_quality_vector(sequence, sz):
@@ -147,7 +147,6 @@ def row_flatten(sequence, items, merged_items, sz4):
     triple_quality_pos_vector_this = triple_quality_pos_vector
     sz = len(triple_quality_pos_vector)
     exit =False
-    triple_quality_vector_next = flatten_row(triple_quality_pos_vector_this, sz)
     while not exit:
         triple_quality_vector_next = flatten_row(triple_quality_pos_vector_this, sz)
         tree_data.append(triple_quality_pos_vector_this)

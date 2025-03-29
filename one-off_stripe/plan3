@@ -1,0 +1,231 @@
+ .      .      .      .      .      .
+    ab      ab    ab     ab     ab
+    cd      cd    cd     cd     cd
+ .      .      .      .      .      .
+    ab      ab    ab     ab     ab
+    cd      cd    cd     cd     cd
+ .      .      .      .      .      .
+    ab      ab    ab     ab     ab
+    cd      cd    cd     cd     cd
+ .      .      .      .      .      .
+    ab      ab    ab     ab     ab
+    cd      cd    cd     cd     cd
+ .      .      .      .      .      .
+    ab      ab    ab     ab     ab
+    cd      cd    cd     cd     cd
+ .      .      .      .      .      .
+ 
+ 
+  .      .      .      .      .      .
+    ef      ef    ef     ef     ef
+    gh      gh    gh     gh     gh
+ .      .      .      .      .      .
+    ef      ef    ef     ef     ef
+    gh      gh    gh     gh     gh
+ .      .      .      .      .      .
+    ef      ef    ef     ef     ef
+    gh      gh    gh     gh     gh
+ .      .      .      .      .      .
+    ef      ef    ef     ef     ef
+    gh      gh    gh     gh     gh
+ .      .      .      .      .      .
+    ef      ef    ef     ef     ef
+    gh      gh    gh     gh     gh
+ .      .      .      .      .      .
+
+
+
+ 
+ 
+ 
+  u			   1      2
+u			---------------  
+	 .      .      .      .      .      .
+	   e       e      e      e     e
+
+
+	 .      .      .      .      .      .
+	|  e       z      z      e     e
+	|
+1	|
+	|.      .      .      .      .      .
+	|  e       z      x      e     e
+	|
+2	|
+	 .      .      .      .      .      .
+	   e       e      e      e     e
+
+
+	 .      .      .      .      .      .
+	   e       e      e      e     e
+
+
+	 .      .      .      .      .      .
+ 
+
+ 
+ 
+ g						2      3
+u					---------------  
+	 .      .      .      .      .      .
+	  
+	 	f       f      f      f     f
+     
+	 .      .      .      .      .      .
+	|
+1	|	f       f      z      z     f
+	|
+	|.      .      .      .      .      .
+	|
+2	|	f       f      x      z     f
+    |
+	 .      .      .      .      .      .
+	 
+		f       f      f      f     f
+
+	 .      .      .      .      .      .
+	 
+		f       f      f      f     f
+
+	 .      .      .      .      .      .
+ 
+	 
+ 
+
+ u              1      2
+g			---------------
+	 .      .      .      .      .      .
+
+		g       g     g      g      g 
+	 .      .      .      .      .      .
+	
+	    g       g     g      g      g     
+	 .      .      .      .      .      .
+	|
+2	|   g       z     x      g      g 
+	|.      .      .      .      .      .
+    |
+3	|	g       z     z      g      g 
+	 .      .      .      .      .      .
+
+		g       g     g      g      g 
+	 .      .      .      .      .      .
+	 
+	 
+ 
+
+   g				   2      3
+g				    --------------- 
+	 .      .      .      .      .      .
+
+		 h       h     h      h      h
+	 .      .      .      .      .      .
+    
+		 h       h     h      h      h
+	 .      .      .      .      .      .
+    |
+2	|	 h       h     x      z      h
+	|.      .      .      .      .      .
+3	|
+	|	 h       h     z      z      h
+	 .      .      .      .      .      .
+
+		 h       h     h      h      h
+	 .      .      .      .      .      .
+
+
+ 
+ranks	 
+	 
+	 .      .      .      .      .      .
+		pq      pq    pq     pq     pq
+		rs      rs    rs     rs     rs
+	 .      .      .      .      .      .
+		pq      pq    pq     pq     pq
+		rs      rs    rs     rs     rs
+	 .      .      .      .      .      .
+		pq      pq    pq     pq     pq
+		rs      rs    rs     rs     rs
+	 .      .      .      .      .      .
+		pq      pq    pq     pq     pq
+		rs      rs    rs     rs     rs
+	 .      .      .      .      .      .
+		pq      pq    pq     pq     pq
+		rs      rs    rs     rs     rs
+	 .      .      .      .      .      .
+	 
+
+
+
+average rank										write value into upper left position
+	 
+  u			   1      2  						u			   1      2
+u			---------------  				  u				---------------  
+	 .      .      .      .      .      .			 .      .      .      .      .      .
+		pq      pq    pq     pq     pq
+		rs      rs    rs     rs     rs
+	 .      .      .      .      .      .			 .      .      .      .      .      .
+	|	pq      xq    xq     pq     pq				|			t
+	|	rs      rs    rs     rs     rs				|
+1	|.      .      .      .      .      .		1	|.      .      .      .      .      .
+	|	pq      xq    xq     pq     pq				|
+	|	rs      rs    rs     rs     rs				|
+2	|.      .      .      .      .      .		2	|.      .      .      .      .      .
+		pq      pq    pq     pq     pq
+		rs      rs    rs     rs     rs
+	 .      .      .      .      .      .	 		 .      .      .      .      .      .
+		pq      pq    pq     pq     pq
+		rs      rs    rs     rs     rs
+	 .      .      .      .      .      .			 .      .      .      .      .      .
+ 
+
+
+
+average rank										write value into upper left  position
+	 
+  g		        	   2      3  						g			   2      3
+u			        ---------------  				  u				---------------  
+	 .      .      .      .      .      .			 .      .      .      .      .      .
+		pq      pq    pq     pq     pq					 	    	                 
+		rs      rs    rs     rs     rs
+	 .      .      .      .      .      .			 .      .      .      .      .      .
+	|	pq      pq    xq     xq     pq				|	 	   t	   u      t        
+	|	rs      rs    rs     rs     rs				|
+1	|.      .      .      .      .      .		1	|.      .      .      .      .      .
+	|	pq      pq    xq     xq     pq				|	 	    	                 
+	|	rs      rs    rs     rs     rs				|
+2	|.      .      .      .      .      .		2	|.      .      .      .      .      .
+		pq      pq    pq     pq     pq					 	   t	          t      
+		rs      rs    rs     rs     rs
+	 .      .      .      .      .      .	 		 .      .      .      .      .      .
+		pq      pq    pq     pq     pq					 	    	                 
+		rs      rs    rs     rs     rs
+	 .      .      .      .      .      .			 .      .      .      .      .      .
+
+
+
+
+square-averaged ranks 
+	 
+	 .      .      .      .      .      .
+		w       v     w      v      w
+		
+	 .      .      .      .      .      .
+		u       t     u      t      u
+
+	 .      .      .      .      .      .
+		w       v     w      v      w
+		
+	 .      .      .      .      .      .
+		u       t     u      t      u
+
+	 .      .      .      .      .      .
+		w       v     w      v      w
+		
+	 .      .      .      .      .      .
+ 
+ 
+ then take minimum (best) ranks such that
+ the corresponding squares connect both
+ left and right, and upper and lower sides
+ 
