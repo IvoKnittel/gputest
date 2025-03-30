@@ -1,37 +1,269 @@
- .      .      .      .      .      .
-    ab      ab    ab     ab     ab
-    cd      cd    cd     cd     cd
- .      .      .      .      .      .
-    ab      ab    ab     ab     ab
-    cd      cd    cd     cd     cd
- .      .      .      .      .      .
-    ab      ab    ab     ab     ab
-    cd      cd    cd     cd     cd
- .      .      .      .      .      .
-    ab      ab    ab     ab     ab
-    cd      cd    cd     cd     cd
- .      .      .      .      .      .
-    ab      ab    ab     ab     ab
-    cd      cd    cd     cd     cd
- .      .      .      .      .      .
+Start with a 2D-array of mergable items
+
+	 .      .      .      .      .      .      .
+		i       i     i      i      i      i
+		
+	 .      .      .      .      .      .      .
+  		i       i     i      i      i      i
+  
+  	 .      .      .      .      .      .      .
+  		i       i     i      i      i      i
+  		
+  	 .      .      .      .      .      .      .
+  		i       i     i      i      i      i
+  
+  	 .      .      .      .      .      .      .
+  		i       i     i      i      i      i
+  		
+	 .      .      .      .      .      .      .
+  		i       i     i      i      i      i		                       
+		
+	 .      .      .      .      .      .      . 
+	 
+
+merge each element with its right neighbor
+in horzional direction	 
+	 
+	 .      .      .      .      .      .      .			 .      .      .      .      .      .      .			 .      .      .      .      .      .      .
+		i       i     i      i      i      i																			m		z      m	  z     m      
+		
+	 .      .      .      .      .      .      .			 .      .      .      .      .      .      .			 .      .      .      .      .      .      .
+  		i       x     y      i      i      i							z												m		z      m	  z     m      
+  
+  	 .      .      .      .      .      .      .			 .      .      .      .      .      .      .			 .      .      .      .      .      .      .
+  		i       i     j      k      i      i								   m										m		z      m	  z     m      	
+  		
+  	 .      .      .      .      .      .      .			 .      .      .      .      .      .      .			 .      .      .      .      .      .      .
+  		i       i     i      i      i      i																			m		z      m	  z     m    
+  
+  	 .      .      .      .      .      .      .			 .      .      .      .      .      .      .			 .      .      .      .      .      .      .
+  		i       i     i      i      i      i																			m		z      m	  z     m    
+  		
+	 .      .      .      .      .      .      .			 .      .      .      .      .      .      .			 .      .      .      .      .      .      .
+  		i       i     i      i      i      i																			m		z      m	  z     m    
+		
+	 .      .      .      .      .      .      .			 .      .      .      .      .      .      .			 .      .      .      .      .      .      . 	 
  
  
-  .      .      .      .      .      .
-    ef      ef    ef     ef     ef
-    gh      gh    gh     gh     gh
- .      .      .      .      .      .
-    ef      ef    ef     ef     ef
-    gh      gh    gh     gh     gh
- .      .      .      .      .      .
-    ef      ef    ef     ef     ef
-    gh      gh    gh     gh     gh
- .      .      .      .      .      .
-    ef      ef    ef     ef     ef
-    gh      gh    gh     gh     gh
- .      .      .      .      .      .
-    ef      ef    ef     ef     ef
-    gh      gh    gh     gh     gh
- .      .      .      .      .      .
+then the result of that in vertical direction 
+
+	 .      .      .      .      .      .      .	
+		i       i     i      i      i      i	
+		
+	 .      .      .      .      .      .      .	
+  		i       x     i      i      i      i		
+  
+  	 .      .      .      .      .      .      .	
+  		i       y     j      i      i      i		
+  		
+  	 .      .      .      .      .      .      .	
+  		i       i     k      i      i      i		
+  
+  	 .      .      .      .      .      .      .	
+  		i       i     i      i      i      i		
+  		
+	 .      .      .      .      .      .      .	
+  		i       i     i      i      i      i																			
+		
+	 .      .      .      .      .      .      .	
+ 
+ 
+ 
+
+
+	.      .      .      .      .      .      .				 .      .      .      .      .      .      .
+																l		m      l	  m     l		m   
+
+	.      .      .      .      .      .      .				 .      .      .      .      .      .      .
+			   m												l		m	   l	  m     l       m	 
+
+	.      .      .      .      .      .      .				 .      .      .      .      .      .      .	
+	                 l											l		m      l	  m     l		m   
+	
+	.      .      .      .      .      .      .				 .      .      .      .      .      .      .
+																l		m	   l	  m     l       m	 
+
+	.      .      .      .      .      .      .				 .      .      .      .      .      .      .
+																l		m	   l	  m     l       m	 
+
+	.      .      .      .      .      .      .				 .      .      .      .      .      .      .
+	
+
+	.      .      .      .      .      .      .				 .      .      .      .      .      .      .	
+	
+	
+
+m3 is the square item ij in {0,1]
+
+	 .      .      .      .      .      .      .
+		                                    
+		
+	 .      .      .      .      .      .      .
+  		        m3                            
+                00    01
+  	 .      .      .      .      .      .      .
+  		                                    
+  		        10    11
+  	 .      .      .      .      .      .      .
+  		                                    
+  
+  	 .      .      .      .      .      .      .
+  		                                    
+  		
+	 .      .      .      .      .      .      .
+  		                                    		                       
+		
+	 .      .      .      .      .      .      . 
+
+
+now conside the items m0 to m3, 
+
+	 .      .      .      .      .      .      .
+		                                    
+		m0		m1
+	 .      .      .      .      .      .      .
+  		m2      m3                            
+		
+  	 .      .      .      .      .      .      .
+  		                                    
+
+  	 .      .      .      .      .      .      .
+  		                                    
+  
+  	 .      .      .      .      .      .      .
+  		                                    
+  		
+	 .      .      .      .      .      .      .
+  		                                    		                       
+		
+	 .      .      .      .      .      .      . 
+ 
+call quality values q0 to q3 of and store them in a new array 
+at the position of m3 
+
+	 .      .      .      .      .      .      .
+		                                    
+		
+	 .      .      .      .      .      .      .
+  		      q0q1
+			  q2q3
+  	 .      .      .      .      .      .      .
+  		                                    
+
+  	 .      .      .      .      .      .      .
+  		                                    
+  
+  	 .      .      .      .      .      .      .
+  		                                    
+  		
+	 .      .      .      .      .      .      .
+  		                                    		                       
+		
+	 .      .      .      .      .      .      . 
+
+rank the q0-4, with rank 0 for the best, 3 for the worst
+and call the rank of q0: a, q1: b ...
+ 
+ .      .      .      .      .      .      .   
+
+	 d      cd    cd     cd     cd      c
+ .      .      .      .      .      .      .
+	 b      ab    ab     ab     ab		a
+     d      cd    cd     cd     cd		c
+ .      .      .      .      .      .      .
+     b      ab    ab     ab     ab		a
+     d      cd    cd     cd     cd		c
+ .      .      .      .      .      .      .
+     b      ab    ab     ab     ab		a
+     d      cd    cd     cd     cd		c
+ .      .      .      .      .      .      .
+     b      ab    ab     ab     ab		a
+     d      cd    cd     cd     cd		c
+ .      .      .      .      .      .      .
+     b      ab    ab     ab     ab		a
+
+ .      .      .      .      .      .      .
+
+
+
+Now, assune b is the rank 0, this means that item
+prefers to belong to the upper-right square indicated
+
+
+	 .      .      .      .      .      .      .
+		        x      x                                    
+		 
+	 .      .      .      .      .      .      .
+  		       ab      x
+			   cd
+  	 .      .      .      .      .      .      .
+  		                                    
+
+  	 .      .      .      .      .      .      .
+  		                                    
+  
+  	 .      .      .      .      .      .      .
+  		                                    
+  		
+	 .      .      .      .      .      .      .
+  		                                    		                       
+		
+	 .      .      .      .      .      .      . 
+
+
+
+But to decide if that square is a good choice,
+the preferences of the items x
+also have to be considered.
+
+the preference of the square is the
+average rank of d0,c1,b, and a2
+
+
+	 .      .      .      .      .      .      .
+		        d0     c1                                    
+		 
+	 .      .      .      .      .      .      .
+  		       ab      a2
+			   cd
+  	 .      .      .      .      .      .      .
+  		                                    
+
+  	 .      .      .      .      .      .      .
+  		                                    
+  
+  	 .      .      .      .      .      .      .
+  		                                    
+  		
+	 .      .      .      .      .      .      .
+  		                                    		                       
+		
+	 .      .      .      .      .      .      . 
+
+
+The averages derived from the ranks a,b,c,d are 
+ranked again, called e,f,g,h
+
+ 
+ .      .      .      .      .      .      .
+
+     h      gh    gh     gh     gh     g
+ .      .      .      .      .      .      .
+     f      ef    ef     ef     ef     e
+     h      gh    gh     gh     gh     g
+ .      .      .      .      .      .      .
+     f      ef    ef     ef     ef     e
+     h      gh    gh     gh     gh     g
+ .      .      .      .      .      .      .
+     f      ef    ef     ef     ef     e
+     h      gh    gh     gh     gh     g
+ .      .      .      .      .      .      .
+     f      ef    ef     ef     ef     e
+     h      gh    gh     gh     gh     g
+ .      .      .      .      .      .      .
+     f      ef    ef     ef     ef     e
+
+ .      .      .      .      .      .      .
 
 
 
@@ -40,119 +272,133 @@
  
   u			   1      2
 u			---------------  
-	 .      .      .      .      .      .
-	   e       e      e      e     e
+	 .      .      .      .      .      .      .
+	                                
 
 
-	 .      .      .      .      .      .
-	|  e       z      z      e     e
+	 .      .      .      .      .      .      .
+	|          e      z      z     e       e
 	|
 1	|
-	|.      .      .      .      .      .
-	|  e       z      x      e     e
+	|.      .      .      .      .      .      .
+	|          e      z      x     e       e
 	|
 2	|
-	 .      .      .      .      .      .
-	   e       e      e      e     e
+	 .      .      .      .      .      .      .
+	           e      e      e     e       e
 
 
-	 .      .      .      .      .      .
-	   e       e      e      e     e
+	 .      .      .      .      .      .      .
+	           e      e      e     e       e
 
 
-	 .      .      .      .      .      .
+	 .      .      .      .      .      .      .
+	           e      e      e     e       e
+
+
+	 .      .      .      .      .      .      .
  
 
  
  
  g						2      3
 u					---------------  
-	 .      .      .      .      .      .
+	 .      .      .      .      .      .      .
 	  
-	 	f       f      f      f     f
+
      
-	 .      .      .      .      .      .
+	 .      .      .      .      .      .      .
 	|
 1	|	f       f      z      z     f
 	|
-	|.      .      .      .      .      .
+	|.      .      .      .      .      .      .
 	|
 2	|	f       f      x      z     f
     |
-	 .      .      .      .      .      .
+	 .      .      .      .      .      .      .
 	 
 		f       f      f      f     f
 
-	 .      .      .      .      .      .
+	 .      .      .      .      .      .      .
 	 
 		f       f      f      f     f
 
-	 .      .      .      .      .      .
+	 .      .      .      .      .      .      .
+	 
+	 	f       f      f      f     f
+
+	 .      .      .      .      .      .      .
  
 	 
  
 
  u              1      2
 g			---------------
-	 .      .      .      .      .      .
+	 .      .      .      .      .      .      .
 
-		g       g     g      g      g 
-	 .      .      .      .      .      .
+		        g     g      g      g      g 
+	 .      .      .      .      .      .      .
 	
-	    g       g     g      g      g     
-	 .      .      .      .      .      .
+	            g     g      g      g      g     
+	 .      .      .      .      .      .      .
 	|
-2	|   g       z     x      g      g 
-	|.      .      .      .      .      .
+2	|           z     x      g      g      g 
+	|.      .      .      .      .      .      .
     |
-3	|	g       z     z      g      g 
-	 .      .      .      .      .      .
+3	|	        z     z      g      g      g 
+	 .      .      .      .      .      .      .
 
-		g       g     g      g      g 
-	 .      .      .      .      .      .
+	            g     g      g      g      g 
+	 .      .      .      .      .      .      .
 	 
 	 
  
 
    g				   2      3
 g				    --------------- 
-	 .      .      .      .      .      .
+	 .      .      .      .      .      .      .
 
-		 h       h     h      h      h
-	 .      .      .      .      .      .
+		 h       h     h      h      h      
+	 .      .      .      .      .      .      .
     
-		 h       h     h      h      h
-	 .      .      .      .      .      .
+		 h       h     h      h      h      
+	 .      .      .      .      .      .      .
     |
-2	|	 h       h     x      z      h
-	|.      .      .      .      .      .
+2	|	 h       h     x      z      h      
+	|.      .      .      .      .      .      .
 3	|
-	|	 h       h     z      z      h
-	 .      .      .      .      .      .
+	|	 h       h     z      z      h      
+	 .      .      .      .      .      .      .
 
-		 h       h     h      h      h
-	 .      .      .      .      .      .
+		 h       h     h      h      h      
+	 .      .      .      .      .      .      .
+
+
+	 .      .      .      .      .      .      .
 
 
  
 ranks	 
 	 
-	 .      .      .      .      .      .
-		pq      pq    pq     pq     pq
-		rs      rs    rs     rs     rs
-	 .      .      .      .      .      .
-		pq      pq    pq     pq     pq
-		rs      rs    rs     rs     rs
-	 .      .      .      .      .      .
-		pq      pq    pq     pq     pq
-		rs      rs    rs     rs     rs
-	 .      .      .      .      .      .
-		pq      pq    pq     pq     pq
-		rs      rs    rs     rs     rs
-	 .      .      .      .      .      .
-		pq      pq    pq     pq     pq
-		rs      rs    rs     rs     rs
-	 .      .      .      .      .      .
+	 .      .      .      .      .      .      .
+
+		 s      rs    rs     rs     r
+	 .      .      .      .      .      .      .
+		 q      pq    pq     pq     pq     p
+		 s      rs    rs     rs     rs     r
+	 .      .      .      .      .      .      .
+		 q      pq    pq     pq     pq     p
+		 s      rs    rs     rs     rs     r
+	 .      .      .      .      .      .      .
+		 q      pq    pq     pq     pq     p
+		 s      rs    rs     rs     rs     r
+	 .      .      .      .      .      .      .
+		 q      pq    pq     pq     pq     p
+		 s      rs    rs     rs     rs     r
+	 .      .      .      .      .      .      .
+		 q      pq    pq     pq     pq     p
+
+	 .      .      .      .      .      .      .
 	 
 
 
@@ -161,71 +407,86 @@ average rank										write value into upper left position
 	 
   u			   1      2  						u			   1      2
 u			---------------  				  u				---------------  
-	 .      .      .      .      .      .			 .      .      .      .      .      .
-		pq      pq    pq     pq     pq
-		rs      rs    rs     rs     rs
-	 .      .      .      .      .      .			 .      .      .      .      .      .
-	|	pq      xq    xq     pq     pq				|			t
-	|	rs      rs    rs     rs     rs				|
-1	|.      .      .      .      .      .		1	|.      .      .      .      .      .
-	|	pq      xq    xq     pq     pq				|
-	|	rs      rs    rs     rs     rs				|
-2	|.      .      .      .      .      .		2	|.      .      .      .      .      .
-		pq      pq    pq     pq     pq
-		rs      rs    rs     rs     rs
-	 .      .      .      .      .      .	 		 .      .      .      .      .      .
-		pq      pq    pq     pq     pq
-		rs      rs    rs     rs     rs
-	 .      .      .      .      .      .			 .      .      .      .      .      .
+	 .      .      .      .      .      .      .			 .      .      .      .      .      .      .
+
+		 s      rs    rs     rs     rs     r
+	 .      .      .      .      .      .      .			 .      .      .      .      .      .      .
+	|	 q      xq    xq     pq     pq     p				|			t
+	|	 s      rs    rs     rs     rs     r				|
+1	|.      .      .      .      .      .      .		1	|.      .      .      .      .      .      .
+	|	 q      xq    xq     pq     pq     p				|
+	|	 s      rs    rs     rs     rs     r				|
+2	|.      .      .      .      .      .      .		2	|.      .      .      .      .      .      .
+		 q      pq    pq     pq     pq     p
+		 s      rs    rs     rs     rs     r
+	 .      .      .      .      .      .      .	 		 .      .      .      .      .      .      .
+		 q      pq    pq     pq     pq     p
+		 s      rs    rs     rs     rs     r
+	 .      .      .      .      .      .      .	 		 .      .      .      .      .      .      .
+		 q      pq    pq     pq     pq     p
+
+	 .      .      .      .      .      .      .			 .      .      .      .      .      .      .
  
 
 
 
 average rank										write value into upper left  position
 	 
-  g		        	   2      3  						g			   2      3
-u			        ---------------  				  u				---------------  
-	 .      .      .      .      .      .			 .      .      .      .      .      .
-		pq      pq    pq     pq     pq					 	    	                 
-		rs      rs    rs     rs     rs
-	 .      .      .      .      .      .			 .      .      .      .      .      .
-	|	pq      pq    xq     xq     pq				|	 	   t	   u      t        
-	|	rs      rs    rs     rs     rs				|
-1	|.      .      .      .      .      .		1	|.      .      .      .      .      .
-	|	pq      pq    xq     xq     pq				|	 	    	                 
-	|	rs      rs    rs     rs     rs				|
-2	|.      .      .      .      .      .		2	|.      .      .      .      .      .
-		pq      pq    pq     pq     pq					 	   t	          t      
-		rs      rs    rs     rs     rs
-	 .      .      .      .      .      .	 		 .      .      .      .      .      .
-		pq      pq    pq     pq     pq					 	    	                 
-		rs      rs    rs     rs     rs
-	 .      .      .      .      .      .			 .      .      .      .      .      .
+  g		        	   2      3  						    g			   2      3
+u			        ---------------  			      	  u				---------------  
+	 .      .      .      .      .      .      .			 .      .      .      .      .      .      .
+				 	    	                 
+		 s      rs    rs     rs     rs     r
+	 .      .      .      .      .      .      .			 .      .      .      .      .      .      .
+	|	 q      pq    xq     xq     pq     p				|	 	   t	   u      t        
+	|	 s      rs    rs     rs     rs     r				|
+1	|.      .      .      .      .      .      .		1	|.      .      .      .      .      .      .
+	|	 q      pq    xq     xq     pq     p				|	 	    	                 
+	|	 s      rs    rs     rs     rs     r				|
+2	|.      .      .      .      .      .      .		2	|.      .      .      .      .      .      .
+		 q      pq    pq     pq     pq     p					 	   t	          t      
+		 s      rs    rs     rs     rs     r
+	 .      .      .      .      .      .      .	 		 .      .      .      .      .      .      .
+		 q      pq    pq     pq     pq     p					 	    	                 
+		 s      rs    rs     rs     rs     r
+	 .      .      .      .      .      .      .			 .      .      .      .      .      .      .		 
+		 q      pq    pq     pq     pq     p					 	   t 	          t       
+
+	 .      .      .      .      .      .      .			 .      .      .      .      .      .      .
 
 
-
-
+ tu
+ vw
 square-averaged ranks 
 	 
-	 .      .      .      .      .      .
+	 .      .      .      .      .      .      .
 		w       v     w      v      w
 		
-	 .      .      .      .      .      .
-		u       t     u      t      u
-
-	 .      .      .      .      .      .
-		w       v     w      v      w
+	 .      .      .      .      .      .      .
+|		u       t     u      t      u
+|
+|	 .      .      .      .      .      .      .
+|		w       v     w      v      w
+|		
+|	 .      .      .      .      .      .      .
+|		u       t     u      t      u
+|
+|	 .      .      .      .      .      .      .
+|		w       v     w      v      w
+|		
+	 .      .      .      .      .      .      .
+		                       
 		
-	 .      .      .      .      .      .
-		u       t     u      t      u
-
-	 .      .      .      .      .      .
-		w       v     w      v      w
-		
-	 .      .      .      .      .      .
+	 .      .      .      .      .      .      . 
+             --------------------------- 
  
- 
- then take minimum (best) ranks such that
+ For the inner 4x4,
+ take minimum (best) ranks such that
  the corresponding squares connect both
- left and right, and upper and lower sides
+ left and right, and upper and lower sides.
+ A connection is a path made of squares and gaps of one.
+ 
+ However, ensure there is no square bordering to 
+ gaps in both the vertical and horizontal direction
+ - each gap must have a square exclusive
  
