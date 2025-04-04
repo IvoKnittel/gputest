@@ -116,7 +116,7 @@ m3 is the square item ij in {0,1]
 	 .      .      .      .      .      .      . 
 
 
-now conside the items m0 to m3, 
+now consider the items m0 to m3, 
 
 	 .      .      .      .      .      .      .
 		                                    
@@ -186,9 +186,71 @@ and call the rank of q0: a, q1: b ...
 
 
 
-Now, assune b is the rank 0, this means that item
+Now, assume a is the rank 0, this means that item
 prefers to belong to the upper-right square indicated
+the preference of the square for a 
 
+	 .      .      .      .      .      .      .
+		 x       x                                         
+		 
+	 .      .      .      .      .      .      .
+  		 x     ab      
+			   cd
+  	 .      .      .      .      .      .      .
+  		                                    
+
+  	 .      .      .      .      .      .      .
+  		                                    
+  
+  	 .      .      .      .      .      .      .
+  		                                    
+  		
+	 .      .      .      .      .      .      .
+  		                                    		                       
+		
+	 .      .      .      .      .      .      . 
+
+But to decide if that square is a good choice,
+the preferences of the items x
+also have to be considered.
+The rank of square a is the
+average rank of d0,c1,a2, and b, with
+d0 = d[i-1,j-1], c1=c[i-1,j], a2=a[i,j-1],b=b[i,j] 
+d[i-1,j]  =r[2*(i-1)+1,2*(j-1)+1], 
+c[i-1,j]  =r[2*(i-1)+1,2* j     ],
+a[i,j-1]  =r[2*i      ,2*(j-1)  ],
+b[i,j]    =r[2*i      ,2* j+1   ]
+
+The result e[i,j]=mean(
+[
+r[2*(i-1)+1,2*(j-1)+1], 
+r[2*(i-1)+1,2* j     ],
+r[2*i      ,2*(j-1)  ],
+r[2*i      ,2* j+1   ]
+]
+
+
+	 .      .      .      .      .      .      .
+		 d0    c1                                         
+		 
+	 .      .      .      .      .      .      .
+  		 a2    ab      
+			   cd
+  	 .      .      .      .      .      .      .
+  		                                    
+
+  	 .      .      .      .      .      .      .
+  		                                    
+  
+  	 .      .      .      .      .      .      .
+  		                                    
+  		
+	 .      .      .      .      .      .      .
+  		                                    		                       
+
+the preference of the square for b
+
+	 .      .      .      .      .      .      . 
 
 	 .      .      .      .      .      .      .
 		        x      x                                    
@@ -212,19 +274,27 @@ prefers to belong to the upper-right square indicated
 
 
 
-But to decide if that square is a good choice,
-the preferences of the items x
-also have to be considered.
+the preference of the square belonging to b is the
+average rank of d0,c1,b, and a3, with
+d0 = d[i-1,j], c1=c[i-1,j+1], a=a[i,j], b3=b[i,j+1]
+d[i-1,j]  =r[2*(i-1)+1,2*j+1], 
+c[i-1,j+1]=r[2*(i-1)+1,2*(j+1)],
+a[i,j]    =r[2*i,2*j],
+b[i,j+1]  =r[2*i,2*(j+1)+1]
 
-the preference of the square is the
-average rank of d0,c1,b, and a2
-
+The result f[i,j]=mean(
+[
+r[2*(i-1)+1,2*j+1], 
+r[2*(i-1)+1,2*(j+1)],
+r[2*i,2*j],
+r[2*i,2*(j+1)+1]
+]
 
 	 .      .      .      .      .      .      .
-		        d0     c1                                    
+		       d0     c1                                    
 		 
 	 .      .      .      .      .      .      .
-  		       ab      a2
+  		       ab      a3
 			   cd
   	 .      .      .      .      .      .      .
   		                                    
@@ -240,6 +310,128 @@ average rank of d0,c1,b, and a2
 		
 	 .      .      .      .      .      .      . 
 
+
+
+
+the preference of the square for c 
+
+
+	 .      .      .      .      .      .      .
+		                                                 
+		 
+	 .      .      .      .      .      .      .
+  		 x     ab      
+			   cd
+  	 .      .      .      .      .      .      .
+  		 x     x                              
+
+  	 .      .      .      .      .      .      .
+  		                                    
+  
+  	 .      .      .      .      .      .      .
+  		                                    
+  		
+	 .      .      .      .      .      .      .
+  		                                    		                       
+		
+	 .      .      .      .      .      .      . 
+
+
+is the
+average rank of d0,c,b2, and a3
+d0 = d[i,j-1], c=c[i,j], b2=b[i+1,j-1],a3=a3[i+1,j] 
+d[i,j-1]  =r[2*i+1    ,2*(j-1)+1], 
+c[i,j]    =r[2*i+1    ,2* j     ],
+a[i+1,j-1]=r[2*(i+1)  ,2*(j-1)  ],
+b[i+1,j]  =r[2*(i+1)  ,2* j+1   ]
+		                                                 
+The result g[i,j]=mean(
+[
+r[2*i+1    ,2*(j-1)+1], 
+r[2*i+1    ,2* j     ],
+r[2*(i+1)  ,2*(j-1)  ],
+r[2*(i+1)  ,2* j+1   ]
+]
+
+	 .      .      .      .      .      .      .
+
+	 
+	 .      .      .      .      .      .      .
+  		 d0    ab      
+			   cd
+  	 .      .      .      .      .      .      .
+  		 b2     a3                              
+
+  	 .      .      .      .      .      .      .
+  		                                    
+  
+  	 .      .      .      .      .      .      .
+  		                                    
+  		
+	 .      .      .      .      .      .      .
+  		                                    		                       
+		
+	 .      .      .      .      .      .      . 
+
+
+the preference of the square for d 
+
+	 .      .      .      .      .      .      .
+		                                                 
+		 
+	 .      .      .      .      .      .      .
+  		       ab     x 
+			   cd
+  	 .      .      .      .      .      .      .
+  		       x      x                        
+
+  	 .      .      .      .      .      .      .
+  		                                    
+  
+  	 .      .      .      .      .      .      .
+  		                                    
+  		
+	 .      .      .      .      .      .      .
+  		                                    		                       
+		
+	 .      .      .      .      .      .      . 
+
+
+is the
+average rank of d ,c1 ,b2, and a3
+d = d[i,j], c1=c1[i,j+1], b2=b[i+1,j],a3=a3[i+1,j+1]
+d[i,j]    =r[2*i+1    ,2*j      ], 
+c[i,j+1]  =r[2*i+1    ,2*(j+1)  ],
+a[i+1,j]  =r[2*(i+1)  ,2*j      ],
+b[i+1,j+1]=r[2*(i+1)  ,2*(j+1)   ]
+
+The result h[i,j]=mean(
+[
+r[2*i+1    ,2*j      ], 
+r[2*i+1    ,2*(j+1)  ],
+r[2*(i+1)  ,2*j      ],
+[2*(i+1)  ,2*(j+1)   ]
+]
+
+	 .      .      .      .      .      .      .
+		                                                 
+		 
+	 .      .      .      .      .      .      .
+  		       ab     c1 
+			   cd
+  	 .      .      .      .      .      .      .
+  		       b2     a3                        
+
+  	 .      .      .      .      .      .      .
+  		                                    
+  
+  	 .      .      .      .      .      .      .
+  		                                    
+  		
+	 .      .      .      .      .      .      .
+  		                                    		                       
+		
+	 .      .      .      .      .      .      . 
 
 The averages derived from the ranks a,b,c,d are 
 ranked again, called e,f,g,h
@@ -265,220 +457,20 @@ ranked again, called e,f,g,h
 
  .      .      .      .      .      .      .
 
+s[2*i,2*j]=e[i,j]
+s[2*i,2*j+1]=f[i,j]
+s[2*i+1,2*j]=g[i,j]
+s[2*i+1,2*j+1]=h[i,j]
 
 
- 
- 
- 
-  u			   1      2
-u			---------------  
-	 .      .      .      .      .      .      .
-	                                
 
 
-	 .      .      .      .      .      .      .
-	|          e      z      z     e       e
-	|
-1	|
-	|.      .      .      .      .      .      .
-	|          e      z      x     e       e
-	|
-2	|
-	 .      .      .      .      .      .      .
-	           e      e      e     e       e
-
-
-	 .      .      .      .      .      .      .
-	           e      e      e     e       e
-
-
-	 .      .      .      .      .      .      .
-	           e      e      e     e       e
-
-
-	 .      .      .      .      .      .      .
+s[2*i,2*j]=np.mean([r[2*(i-1)+1,2*(j-1)+1], r[2*(i-1)+1,2*j],r[2*i,2*(j-1)],r[2*i,2* j+1]]
+s[2*i,2*j+1]=np.mean([r[2*(i-1)+1,2*j+1], r[2*(i-1)+1,2*(j+1)],r[2*i,2*j],r[2*i,2*(j+1)+1]]
+s[2*i+1,2*j]=np.mean([r[2*i+1,2*(j-1)+1], r[2*i+1,2* j],r[2*(i+1),2*(j-1)],r[2*(i+1),2* j+1]]
+s[2*i+1,2*j+1]=np.mean([r[2*i+1,2*j], r[2*i+1,2*(j+1)],r[2*(i+1),2*j],[2*(i+1),2*(j+1)]]
  
 
- 
- 
- g						2      3
-u					---------------  
-	 .      .      .      .      .      .      .
-	  
-
-     
-	 .      .      .      .      .      .      .
-	|
-1	|	f       f      z      z     f
-	|
-	|.      .      .      .      .      .      .
-	|
-2	|	f       f      x      z     f
-    |
-	 .      .      .      .      .      .      .
-	 
-		f       f      f      f     f
-
-	 .      .      .      .      .      .      .
-	 
-		f       f      f      f     f
-
-	 .      .      .      .      .      .      .
-	 
-	 	f       f      f      f     f
-
-	 .      .      .      .      .      .      .
- 
-	 
- 
-
- u              1      2
-g			---------------
-	 .      .      .      .      .      .      .
-
-		        g     g      g      g      g 
-	 .      .      .      .      .      .      .
-	
-	            g     g      g      g      g     
-	 .      .      .      .      .      .      .
-	|
-2	|           z     x      g      g      g 
-	|.      .      .      .      .      .      .
-    |
-3	|	        z     z      g      g      g 
-	 .      .      .      .      .      .      .
-
-	            g     g      g      g      g 
-	 .      .      .      .      .      .      .
-	 
-	 
- 
-
-   g				   2      3
-g				    --------------- 
-	 .      .      .      .      .      .      .
-
-		 h       h     h      h      h      
-	 .      .      .      .      .      .      .
-    
-		 h       h     h      h      h      
-	 .      .      .      .      .      .      .
-    |
-2	|	 h       h     x      z      h      
-	|.      .      .      .      .      .      .
-3	|
-	|	 h       h     z      z      h      
-	 .      .      .      .      .      .      .
-
-		 h       h     h      h      h      
-	 .      .      .      .      .      .      .
-
-
-	 .      .      .      .      .      .      .
-
-
- 
-ranks	 
-	 
-	 .      .      .      .      .      .      .
-
-		 s      rs    rs     rs     r
-	 .      .      .      .      .      .      .
-		 q      pq    pq     pq     pq     p
-		 s      rs    rs     rs     rs     r
-	 .      .      .      .      .      .      .
-		 q      pq    pq     pq     pq     p
-		 s      rs    rs     rs     rs     r
-	 .      .      .      .      .      .      .
-		 q      pq    pq     pq     pq     p
-		 s      rs    rs     rs     rs     r
-	 .      .      .      .      .      .      .
-		 q      pq    pq     pq     pq     p
-		 s      rs    rs     rs     rs     r
-	 .      .      .      .      .      .      .
-		 q      pq    pq     pq     pq     p
-
-	 .      .      .      .      .      .      .
-	 
-
-
-
-average rank										write value into upper left position
-	 
-  u			   1      2  						u			   1      2
-u			---------------  				  u				---------------  
-	 .      .      .      .      .      .      .			 .      .      .      .      .      .      .
-
-		 s      rs    rs     rs     rs     r
-	 .      .      .      .      .      .      .			 .      .      .      .      .      .      .
-	|	 q      xq    xq     pq     pq     p				|			t
-	|	 s      rs    rs     rs     rs     r				|
-1	|.      .      .      .      .      .      .		1	|.      .      .      .      .      .      .
-	|	 q      xq    xq     pq     pq     p				|
-	|	 s      rs    rs     rs     rs     r				|
-2	|.      .      .      .      .      .      .		2	|.      .      .      .      .      .      .
-		 q      pq    pq     pq     pq     p
-		 s      rs    rs     rs     rs     r
-	 .      .      .      .      .      .      .	 		 .      .      .      .      .      .      .
-		 q      pq    pq     pq     pq     p
-		 s      rs    rs     rs     rs     r
-	 .      .      .      .      .      .      .	 		 .      .      .      .      .      .      .
-		 q      pq    pq     pq     pq     p
-
-	 .      .      .      .      .      .      .			 .      .      .      .      .      .      .
- 
-
-
-
-average rank										write value into upper left  position
-	 
-  g		        	   2      3  						    g			   2      3
-u			        ---------------  			      	  u				---------------  
-	 .      .      .      .      .      .      .			 .      .      .      .      .      .      .
-				 	    	                 
-		 s      rs    rs     rs     rs     r
-	 .      .      .      .      .      .      .			 .      .      .      .      .      .      .
-	|	 q      pq    xq     xq     pq     p				|	 	   t	   u      t        
-	|	 s      rs    rs     rs     rs     r				|
-1	|.      .      .      .      .      .      .		1	|.      .      .      .      .      .      .
-	|	 q      pq    xq     xq     pq     p				|	 	    	                 
-	|	 s      rs    rs     rs     rs     r				|
-2	|.      .      .      .      .      .      .		2	|.      .      .      .      .      .      .
-		 q      pq    pq     pq     pq     p					 	   t	          t      
-		 s      rs    rs     rs     rs     r
-	 .      .      .      .      .      .      .	 		 .      .      .      .      .      .      .
-		 q      pq    pq     pq     pq     p					 	    	                 
-		 s      rs    rs     rs     rs     r
-	 .      .      .      .      .      .      .			 .      .      .      .      .      .      .		 
-		 q      pq    pq     pq     pq     p					 	   t 	          t       
-
-	 .      .      .      .      .      .      .			 .      .      .      .      .      .      .
-
-
- tu
- vw
-square-averaged ranks 
-	 
-	 .      .      .      .      .      .      .
-		w       v     w      v      w
-		
-	 .      .      .      .      .      .      .
-|		u       t     u      t      u
-|
-|	 .      .      .      .      .      .      .
-|		w       v     w      v      w
-|		
-|	 .      .      .      .      .      .      .
-|		u       t     u      t      u
-|
-|	 .      .      .      .      .      .      .
-|		w       v     w      v      w
-|		
-	 .      .      .      .      .      .      .
-		                       
-		
-	 .      .      .      .      .      .      . 
-             --------------------------- 
  
  For the inner 4x4,
  take minimum (best) ranks such that
