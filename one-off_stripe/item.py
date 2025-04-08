@@ -25,17 +25,30 @@ class Item:
         elif len(args) == 2 and all(isinstance(arg, Item) for arg in args):
             # Initialize with two Item objects
             item1, item2 = args
-            self.sum = item1.sum + item2.sum
-            self.sum_of_squares = item1.sum_of_squares + item2.sum_of_squares
-            self.num = item1.num + item2.num
+            if item1.num ==0:
+                self.sum = item2.sum
+                self.sum_of_squares = item2.sum_of_squares
+                self.num = item2.num
+            elif item2.num==0:
+                self.sum = item1.sum
+                self.sum_of_squares = item1.sum_of_squares
+                self.num = item1.num
+            else:
+                self.sum = item1.sum + item2.sum
+                self.sum_of_squares = item1.sum_of_squares + item2.sum_of_squares
+                self.num = item1.num + item2.num
+
         elif len(args) == 0:
             self.sum = math.nan
             self.sum_of_squares = math.nan
             self.num = 0
+            self.quality = -1.0
         else:
             raise ValueError("Invalid arguments. Expected a single value or two Item objects.")
         if self.num == 1:
             self.quality = 1
+        elif np.isnan(self.sum):
+            self.quality = -1.0
         elif math.fabs(self.sum) > 1e-5:
             n=self.num
             error = (self.sum_of_squares / n - pow(self.sum / n, 2)) / pow(self.sum / n, 2)
@@ -48,6 +61,7 @@ class Item:
         n = self.num
         error =  math.sqrt((self.sum_of_squares / n) - pow(self.sum / n, 2))
         return self.sum/self.num
+
 
     def __repr__(self):
         """
