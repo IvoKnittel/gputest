@@ -49,7 +49,7 @@ def image_squares(image):
     return image_2x2_items
 
 def image_squares_ranked0(image_squares):
-    squares_ranked0 = np.zeros((2*(image_squares.shape[0]-1),2*(image_squares.shape[1])), dtype=int)
+    squares_ranked0 = np.zeros((2*(image_squares.shape[0]-1),2*(image_squares.shape[1]-1)), dtype=int)
     for i in range(1, image_squares.shape[0]):
         for j in range(1, image_squares.shape[1]):
 
@@ -67,13 +67,79 @@ def image_squares_ranked0(image_squares):
 
     return squares_ranked0
 
+def pad_ranked_squares(m):
+    r0 = m % 6
+    if r0 < 4:
+        return 4 - r0
+
+    if r0 == 5:
+        return 1
+
+    return 0
+
 def image_squares_ranked(r):
-    s = np.zeros(r.shape, dtype=float)
+    e = (pad_ranked_squares(r.shape[0]),pad_ranked_squares(r.shape[0]))
+    s = -np.ones((r.shape[0]+e[0],r.shape[1]+e[1]), dtype=int)
     for i in range(2, r.shape[0]-2):
         for j in range(2, r.shape[1]-2):
-            s[2 * i, 2 * j] = np.mean([r[2 * (i - 1) + 1, 2 * (j - 1) + 1], r[2 * (i - 1) + 1, 2 * j], r[2 * i, 2 * (j - 1)], r[2 * i, 2 * j + 1]])
-            s[2 * i, 2 * j + 1] = np.mean([r[2 * (i - 1) + 1, 2 * j + 1], r[2 * (i - 1) + 1, 2 * (j + 1)], r[2 * i, 2 * j],r[2 * i, 2 * (j + 1) + 1]])
-            s[2 * i + 1, 2 * j] = np.mean([r[2 * i + 1, 2 * (j - 1) + 1], r[2 * i + 1, 2 * j], r[2 * (i + 1), 2 * (j - 1)],r[2 * (i + 1), 2 * j + 1]])
-            s[2 * i + 1, 2 * j + 1] = np.mean([r[2 * i + 1, 2 * j], r[2 * i + 1, 2 * (j + 1)], r[2 * (i + 1), 2 * j], [2 * (i + 1), 2 * (j + 1)]])
+            M = np.iinfo(np.int32).max/3 #3 is the max rank value
+            s[2 * i, 2 * j] = int(M*np.mean([r[2 * (i - 1) + 1, 2 * (j - 1) + 1], r[2 * (i - 1) + 1, 2 * j], r[2 * i, 2 * (j - 1)], r[2 * i, 2 * j + 1]]))
+            s[2 * i, 2 * j + 1] = int(M*np.mean([r[2 * (i - 1) + 1, 2 * j + 1], r[2 * (i - 1) + 1, 2 * (j + 1)], r[2 * i, 2 * j],r[2 * i, 2 * (j + 1) + 1]]))
+            s[2 * i + 1, 2 * j] = int(M*np.mean([r[2 * i + 1, 2 * (j - 1) + 1], r[2 * i + 1, 2 * j], r[2 * (i + 1), 2 * (j - 1)],r[2 * (i + 1), 2 * j + 1]]))
+            s[2 * i + 1, 2 * j + 1] = int(M*np.mean([r[2 * i + 1, 2 * j], r[2 * i + 1, 2 * (j + 1)], r[2 * (i + 1), 2 * j], [2 * (i + 1), 2 * (j + 1)]]))
     return s
-#  def image_rank_quA(image_squares):
+
+def size_(n):
+    r= n%6
+    N = np.ceil((n-1)/6)
+    M = np.ceil((n + 3) / 6)
+    return (max(3+6*N, 6*M),N,M)
+
+def image_squares_select(s):
+    h, H0, H1 = size_(s.shape[0])
+    w, W0, W1 = size_(s.shape[1])
+    sz= (h,w)
+    q = -np.ones(sz, dtype=int)
+    q[3:3+s.shape[0],3:3+s.shape[1]]=s
+    for I in range(0,H0):
+        for J in range(0, W0):
+            r=s[3+6*I:3+6*(I+1),3+6*J:3+6*(J+1)]
+            mx = -np.ones((0,4),dtype=int)
+            mi =  np.empty((0,4),dtype=(int,int))
+            for k in range(0,6):
+                for l in range(0, 6):
+                    v=r[k,l]
+                    if v>mx[0]:
+                        mx[0]=v
+                        mi[0]=(k,l)
+                    elif v>mx[1]:
+                        mx[1]=v
+                        mi[1]=(k,l)
+                    elif v>mx[2]:
+                        mx[2]=v
+                        mi[2]=(k,l)
+                    elif v>mx[3]:
+                        mx[3]=v
+                        mi[3]=(k,l)
+
+    for I in range(0,H1):
+        for J in range(0, W1):
+            r=s[6*I:6*(I+1),6*J:6*(J+1)]
+            mx = -np.ones((0,4),dtype=int)
+            mi =  np.empty((0,4),dtype=(int,int))
+            for k in range(0,6):
+                for l in range(0, 6):
+                    v=r[k,l]
+                    if v>mx[0]:
+                        mx[0]=v
+                        mi[0]=(k,l)
+                    elif v>mx[1]:
+                        mx[1]=v
+                        mi[1]=(k,l)
+                    elif v>mx[2]:
+                        mx[2]=v
+                        mi[2]=(k,l)
+                    elif v>mx[3]:
+                        mx[3]=v
+                        mi[3]=(k,l)
+
