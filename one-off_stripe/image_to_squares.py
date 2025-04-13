@@ -1,4 +1,6 @@
 import numpy as np
+from scipy.stats import false_discovery_control
+
 from item import Item
 
 def expand4(n):
@@ -95,51 +97,85 @@ def size_(n):
     M = np.ceil((n + 3) / 6)
     return (max(3+6*N, 6*M),N,M)
 
+def find_best4(r):
+    mx = -np.ones((0, 4), dtype=int)
+    mi = np.empty((0, 4), dtype=(int, int))
+    for k in range(0, 6):
+        for l in range(0, 6):
+            v = r[k, l]
+            if v > mx[0]:
+                mx[0] = v
+                mi[0] = (k, l)
+            elif v > mx[1]:
+                mx[1] = v
+                mi[1] = (k, l)
+            elif v > mx[2]:
+                mx[2] = v
+                mi[2] = (k, l)
+            elif v > mx[3]:
+                mx[3] = v
+                mi[3] = (k, l)
+    return mx,mi
+
+def is_free(t,idx):
+    if t[idx[0]+1,idx[1]+1] > -1:
+        return False
+    if t[idx[0]+1,idx[1]] > -1:
+        return False
+    if t[idx[0],idx[1]+1] > -1:
+        return False
+    if t[idx[0],idx[1]] > -1:
+        return False
+    return True
+
+def is_connected(t,upper_left_idx, dim):
+    return True
+
+def is_contested(t,upper_left_idx):
+    return True
+
+def select_(t,upper_left_idx, mivec):
+    sel = []
+    for mi in mivec:
+        if not is_free(t, mi):
+            continue
+        if is_contested(t,mi):
+            continue
+        sel.append(mi)
+        if is_connected(t, upper_left_idx, 0) and is_connected(t, upper_left_idx, 0):
+            break
+
+    return sel
+
+def insert_t(t,sel):
+    for idx in sel:
+        t[idx[0] + 1, idx[1] + 1] = 1
+        t[idx[0] + 1, idx[1]] =1
+        t[idx[0], idx[1] + 1] = 1
+        t[idx[0], idx[1]]=1
+
+def update_gaps(t,sel):
+    # for idx in sel:
+
 def image_squares_select(s):
     h, H0, H1 = size_(s.shape[0])
     w, W0, W1 = size_(s.shape[1])
     sz= (h,w)
     q = -np.ones(sz, dtype=int)
     q[3:3+s.shape[0],3:3+s.shape[1]]=s
+    t = -np.ones(sz, dtype=int)
     for I in range(0,H0):
         for J in range(0, W0):
-            r=s[3+6*I:3+6*(I+1),3+6*J:3+6*(J+1)]
-            mx = -np.ones((0,4),dtype=int)
-            mi =  np.empty((0,4),dtype=(int,int))
-            for k in range(0,6):
-                for l in range(0, 6):
-                    v=r[k,l]
-                    if v>mx[0]:
-                        mx[0]=v
-                        mi[0]=(k,l)
-                    elif v>mx[1]:
-                        mx[1]=v
-                        mi[1]=(k,l)
-                    elif v>mx[2]:
-                        mx[2]=v
-                        mi[2]=(k,l)
-                    elif v>mx[3]:
-                        mx[3]=v
-                        mi[3]=(k,l)
+            upper_left_idx=(3+6*I,3+6*J)
+            mx,mi=find_best4(s[upper_left_idx[0]+1:upper_left_idx[0]+4,upper_left_idx[1]+1:upper_left_idx[1]+4])
+            sel=select_(t, upper_left_idx, mi)
+            insert_t(t, sel)
+            update_gaps(t,sel)
 
     for I in range(0,H1):
         for J in range(0, W1):
-            r=s[6*I:6*(I+1),6*J:6*(J+1)]
-            mx = -np.ones((0,4),dtype=int)
-            mi =  np.empty((0,4),dtype=(int,int))
-            for k in range(0,6):
-                for l in range(0, 6):
-                    v=r[k,l]
-                    if v>mx[0]:
-                        mx[0]=v
-                        mi[0]=(k,l)
-                    elif v>mx[1]:
-                        mx[1]=v
-                        mi[1]=(k,l)
-                    elif v>mx[2]:
-                        mx[2]=v
-                        mi[2]=(k,l)
-                    elif v>mx[3]:
-                        mx[3]=v
-                        mi[3]=(k,l)
-
+            upper_left_idx=(6*I,6*J)
+            mx,mi=find_best4(s[upper_left_idx[0]+1:upper_left_idx[0]+4,upper_left_idx[1]+1:upper_left_idx[1]+4])
+            sel=select_(t, upper_left_idx, mi)
+            insert_t(t, sel)
+            update_gaps(t,sel)
