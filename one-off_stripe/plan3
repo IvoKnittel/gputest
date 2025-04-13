@@ -1140,57 +1140,26 @@ mod4 (2)
  .  .  .  .  .  .  .  .  .  .  .  .  .  .  .  .  .  .  .  .  .  .  .  .   
 
 
-	  
- Divide the array of s into 6x6 tiles (extend to match)
- 
-    6       6    r<4 extend to 4
- ------- ------- --
- xx xxxx xx xxxx xx x. 
- 
- xx xxxx xxxx xx xxxx x  r=5 extend to 6 
- M = int(m/6) + r0
- 
- r0=m%6
- if r0<4
-    extend by 4-r0
-
- if r0==5:
-    extend by 1
- 
- Now the array is in both dimensions of the form
-  
-
- xx xxxx xxxx xx xxxx
- or
- 
- xx xxxx xxxx xx xxxx xx
- 
- x|x xxxx xxxx xx xxxx
- xx xxxx xxxx xx xxxx 
- 
- xx xxxx xxxx xx xxxx xx
-
-
  
  For the inner 4x4,
  
   	 .      .      .      .      .      .      .
-		                                    
+		 x 		x	  x		  x		 x		x                                   
 		
 	 .      .      .      .      .      .      .
-  		       x       x     x       x
+  		 x      r       r     r       s		x
 			  
   	 .      .      .      .      .      .      .
-  		       x       x     x       x       
+  		 x      r       r     r       s      x 
 
   	 .      .      .      .      .      .      .
-  		       x       x      x      x         
+  		 x      r       r     r       s     x     
   
   	 .      .      .      .      .      .      .
-  		       x      x       x      x          
+  		x       s      s       s      s     x      
   		
 	 .      .      .      .      .      .      .
-  		                                    		                       
+		 x 		x	  x		  x		 x		x                         
 		
 	 .      .      .      .      .      .      . 
  
