@@ -91,42 +91,43 @@ def image_squares_ranked(r):
             s[2 * i + 1, 2 * j + 1] = int(M*np.mean([r[2 * i + 1, 2 * j], r[2 * i + 1, 2 * (j + 1)], r[2 * (i + 1), 2 * j], [2 * (i + 1), 2 * (j + 1)]]))
     return s
 
-def size_(n):
+def size_expand1d(n):
     r= n%6
     N = np.ceil((n-1)/6)
     M = np.ceil((n + 3) / 6)
     return (max(3+6*N, 6*M),N,M)
 
-def find_best4(r):
-    mx = -np.ones((0, 4), dtype=int)
-    mi = np.empty((0, 4), dtype=(int, int))
-    for k in range(0, 6):
-        for l in range(0, 6):
-            v = r[k, l]
-            if v > mx[0]:
-                mx[0] = v
-                mi[0] = (k, l)
-            elif v > mx[1]:
-                mx[1] = v
-                mi[1] = (k, l)
-            elif v > mx[2]:
-                mx[2] = v
-                mi[2] = (k, l)
-            elif v > mx[3]:
-                mx[3] = v
-                mi[3] = (k, l)
-    return mx,mi
+def size_expand2d(_shape):
+    h, H0, H1 = size_expand1d(_shape[0])
+    w, W0, W1 = size_expand1d(_shape[1])
+    sz_expand= (h,w)
+    return sz_expand, ((H0,W0), (H1,W1))
 
-def is_free(t,idx):
-    if t[idx[0]+1,idx[1]+1] > -1:
+def is_free(extension_map,k,l):
+    if extension_map[k+1,l+1] > -1:
         return False
-    if t[idx[0]+1,idx[1]] > -1:
+    if extension_map[k+1,l] > -1:
         return False
-    if t[idx[0],idx[1]+1] > -1:
+    if extension_map[k,l+1] > -1:
         return False
-    if t[idx[0],idx[1]] > -1:
+    if extension_map[k,l] > -1:
         return False
     return True
+
+def find_best9(storage_map, extension_map):
+    best_ranks = -np.ones((0, 9), dtype=int)
+    best_ranks_idx =  np.empty((0, 9), dtype=(int, int))
+    for k in range(0, 5):
+        for l in range(0, 5):
+            if not is_free(extension_map, k, l):
+                continue
+
+            rank = storage_map[k, l]
+            for m in range(0, 9):
+                if rank > best_ranks[m]:
+                    best_ranks[m] = rank
+                    best_ranks_idx[m] = (k, l)
+    return best_ranks_idx
 
 def is_connected(t,upper_left_idx, dim):
     return True
@@ -134,48 +135,49 @@ def is_connected(t,upper_left_idx, dim):
 def is_contested(t,upper_left_idx):
     return True
 
-def select_(t,upper_left_idx, mivec):
+def select_(extension_map,upper_left_idx, best_ranks_idx):
     sel = []
-    for mi in mivec:
-        if not is_free(t, mi):
+    for i in best_ranks_idx:
+        if is_contested(extension_map,i):
             continue
-        if is_contested(t,mi):
-            continue
-        sel.append(mi)
-        if is_connected(t, upper_left_idx, 0) and is_connected(t, upper_left_idx, 0):
+        sel.append(i)
+        if is_connected(extension_map, upper_left_idx, 0) and is_connected(extension_map, upper_left_idx, 0):
             break
 
     return sel
 
-def insert_t(t,sel):
+def insert_t(extension_map,sel):
     for idx in sel:
-        t[idx[0] + 1, idx[1] + 1] = 1
-        t[idx[0] + 1, idx[1]] =1
-        t[idx[0], idx[1] + 1] = 1
-        t[idx[0], idx[1]]=1
+        extension_map[idx[0] + 1, idx[1] + 1] = 1
+        extension_map[idx[0] + 1, idx[1]] =1
+        extension_map[idx[0], idx[1] + 1] = 1
+        extension_map[idx[0], idx[1]]=1
 
-def update_gaps(t,sel):
+#def update_gaps(t,sel):
     # for idx in sel:
 
-def image_squares_select(s):
-    h, H0, H1 = size_(s.shape[0])
-    w, W0, W1 = size_(s.shape[1])
-    sz= (h,w)
-    q = -np.ones(sz, dtype=int)
-    q[3:3+s.shape[0],3:3+s.shape[1]]=s
-    t = -np.ones(sz, dtype=int)
-    for I in range(0,H0):
-        for J in range(0, W0):
-            upper_left_idx=(3+6*I,3+6*J)
-            mx,mi=find_best4(s[upper_left_idx[0]+1:upper_left_idx[0]+4,upper_left_idx[1]+1:upper_left_idx[1]+4])
-            sel=select_(t, upper_left_idx, mi)
-            insert_t(t, sel)
-            update_gaps(t,sel)
+#    square_extension_map = -np.ones(sz_expand, dtype=int)
+def image_squares_select(square_extension_map, square_storage_location_map):
+    sz_expand, num_tiles_expand = size_expand2d(square_storage_location_map.shape)
+    square_storage_location_map_expand = -np.ones(sz_expand, dtype=int)
+    square_storage_location_map_expand[3:3+square_storage_location_map.shape[0],3:3+square_storage_location_map.shape[1]]=square_storage_location_map
 
-    for I in range(0,H1):
-        for J in range(0, W1):
+    for I in range(0,num_tiles_expand[0][0]):
+        for J in range(0, num_tiles_expand[0][1]):
+            upper_left_idx=(3+6*I,3+6*J)
+            square_extension_tile=square_extension_map[upper_left_idx[0]:upper_left_idx[0]+6,upper_left_idx[1]:upper_left_idx[1]+6]
+            square_storage_location_tile=square_storage_location_map_expand[upper_left_idx[0]:upper_left_idx[0]+5,upper_left_idx[1]:upper_left_idx[1]+5]
+            best_ranks_idx=find_best9(square_extension_tile, square_storage_location_tile)
+            sel=select_(square_extension_map, upper_left_idx, best_ranks_idx)
+            insert_t(square_extension_map, sel)
+            #update_gaps(square_extension_map,sel)
+
+    for I in range(0,num_tiles_expand[1][0]):
+        for J in range(0, num_tiles_expand[1][1]):
             upper_left_idx=(6*I,6*J)
-            mx,mi=find_best4(s[upper_left_idx[0]+1:upper_left_idx[0]+4,upper_left_idx[1]+1:upper_left_idx[1]+4])
-            sel=select_(t, upper_left_idx, mi)
-            insert_t(t, sel)
-            update_gaps(t,sel)
+            square_extension_tile=square_extension_map[upper_left_idx[0]:upper_left_idx[0]+6,upper_left_idx[1]:upper_left_idx[1]+6]
+            square_storage_location_tile=square_storage_location_map_expand[upper_left_idx[0]:upper_left_idx[0]+5,upper_left_idx[1]:upper_left_idx[1]+5]
+            best_ranks_idx=find_best9(square_extension_tile, square_storage_location_tile)
+            sel=select_(square_extension_map, upper_left_idx, best_ranks_idx)
+            insert_t(square_extension_map, sel)
+            #update_gaps(square_extension_map,sel)

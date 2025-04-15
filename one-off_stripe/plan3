@@ -1141,38 +1141,66 @@ mod4 (2)
 
 
  
- For the inner 4x4,
+ Connection and gaps,
  
-  	 .      .      .      .      .      .      .
-		 x 		x	  x		  x		 x		x                                   
+q: the square storage location map:
+r: squares of the 6x6 map
+s: squres of the 4x4 map
+ 
+   	 .      .      .      .      .      .      .
+		r 		r	   r	 r		r	   x                                   
 		
-	 .      .      .      .      .      .      .
-  		 x      r       r     r       s		x
-			  
+	 .      .       .     .      .      .      .
+  		r       s      s     s      r	   x
+			   					    
   	 .      .      .      .      .      .      .
-  		 x      r       r     r       s      x 
-
+  		r       s      s     s      r      x 
+			 					    
   	 .      .      .      .      .      .      .
-  		 x      r       r     r       s     x     
-  
+  		r       s      s     s      r      x     
+			                        
   	 .      .      .      .      .      .      .
-  		x       s      s       s      s     x      
+  		r       r      r     r      r      x      
   		
 	 .      .      .      .      .      .      .
-		 x 		x	  x		  x		 x		x                         
+		x 		x	   x	 x      x	   x                         
+		
+	 .      .      .      .      .      .      . 
+	 
+	 
+	 
+t: the square extension map:	
+ 
+  	 .      .      .      .      .      .      .
+		   		 	   		   		  		                                    
+		
+	 .      . ---- . ---- . ---- . ---- .      .
+  		    |                      		|   		 
+			|  					   		|
+  	 .      .      .      .      .      .      .
+  		    |                      		|           
+			|					   		|
+  	 .      .      .      .      .      .      .
+  		    |                      		|              
+			|					   		|
+  	 .      .      .      .      .      .      .
+  		    |					   		|                                      
+			|					   		|
+	 .      . ---- . ---- . ---- . ---- .      .
+		   		 	   		   		  		                          
 		
 	 .      .      .      .      .      .      . 
  
  
- take minimum (best) ranks such that
- the corresponding squares 
+ Take minimum (best) ranks such that the corresponding squares 
  
- - do not overlap
+ - do not overlap,
  
- - connect both
- left and right, and upper and lower sides.
- A connection is a path made of squares and gaps of one.
+ - connect the inner 4x4 square both left and right, and upper and lower sides.
+   A connection is a path made of squares and gaps of one.
+   However, ensure there is no square bordering to gaps in both the vertical and horizontal direction - each gap must have a square exclusive.
+   
+ Then keep a square only if it lies completely inside the inner 4x4, and a gap if it lies inside the 4x4 or belongs to a square that was kept.
  
- However, ensure there is no square bordering to 
- gaps in both the vertical and horizontal direction
- - each gap must have a square exclusive
+ 
+
