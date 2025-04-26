@@ -1,5 +1,4 @@
 import numpy as np
-from scipy.stats import false_discovery_control
 
 from item import Item
 
@@ -114,37 +113,59 @@ def is_free(extension_map,k,l):
         return False
     return True
 
-def find_best9(storage_map, extension_map):
-    best_ranks = -np.ones((0, 9), dtype=int)
-    best_ranks_idx =  np.empty((0, 9), dtype=(int, int))
+def find_best(extension_map, storage_map):
+    best_rank = -1
+    best_rank_idx =  (np.nan,np.nan)
     for k in range(0, 5):
         for l in range(0, 5):
             if not is_free(extension_map, k, l):
                 continue
 
             rank = storage_map[k, l]
-            for m in range(0, 9):
-                if rank > best_ranks[m]:
-                    best_ranks[m] = rank
-                    best_ranks_idx[m] = (k, l)
-    return best_ranks_idx
+            if rank > best_rank:
+                best_rank = rank
+                best_rank_idx = (k, l)
+    return best_rank_idx
 
-def is_connected(t,upper_left_idx, dim):
-    return True
+# def find_best9(storage_map, extension_map):
+#     best_ranks = -np.ones((0, 9), dtype=int)
+#     best_ranks_idx =  np.empty((0, 9), dtype=(int, int))
+#     for k in range(0, 5):
+#         for l in range(0, 5):
+#             if not is_free(extension_map, k, l):
+#                 continue
+#
+#             rank = storage_map[k, l]
+#             for m in range(0, 9):
+#                 if rank > best_ranks[m]:
+#                     best_ranks[m] = rank
+#                     best_ranks_idx[m] = (k, l)
+#     return best_ranks_idx
 
-def is_contested(t,upper_left_idx):
-    return True
+# def is_connected(t,upper_left_idx):
+#     if t[upper_left_idx[0]+1,upper_left_idx[1]+1]==1:
+#         return True
+#     if t[upper_left_idx[0]+1,upper_left_idx[1]+2]==1:
+#         return True
+#     if t[upper_left_idx[0]+2,upper_left_idx[1]+1]==1:
+#         return True
+#     if t[upper_left_idx[0]+2,upper_left_idx[1]+1]==2:
+#         return True
+#     return False
 
-def select_(extension_map,upper_left_idx, best_ranks_idx):
-    sel = []
-    for i in best_ranks_idx:
-        if is_contested(extension_map,i):
-            continue
-        sel.append(i)
-        if is_connected(extension_map, upper_left_idx, 0) and is_connected(extension_map, upper_left_idx, 0):
-            break
+#def is_contested(t,upper_left_idx):
+#    return True
 
-    return sel
+# def select_(extension_map,upper_left_idx, best_ranks_idx):
+#     sel = []
+#     for i in best_ranks_idx:
+#         #if is_contested(extension_map,i):
+#         #    continue
+#         sel.append(i)
+#         if is_connected(extension_map, upper_left_idx):
+#             break
+#
+#     return sel
 
 def insert_t(extension_map,sel):
     for idx in sel:
@@ -153,31 +174,32 @@ def insert_t(extension_map,sel):
         extension_map[idx[0], idx[1] + 1] = 1
         extension_map[idx[0], idx[1]]=1
 
-#def update_gaps(t,sel):
-    # for idx in sel:
 
-#    square_extension_map = -np.ones(sz_expand, dtype=int)
 def image_squares_select(square_extension_map, square_storage_location_map):
     sz_expand, num_tiles_expand = size_expand2d(square_storage_location_map.shape)
     square_storage_location_map_expand = -np.ones(sz_expand, dtype=int)
-    square_storage_location_map_expand[3:3+square_storage_location_map.shape[0],3:3+square_storage_location_map.shape[1]]=square_storage_location_map
+    square_storage_location_map_expand[3:3 + square_storage_location_map.shape[0],
+    3:3 + square_storage_location_map.shape[1]] = square_storage_location_map
 
-    for I in range(0,num_tiles_expand[0][0]):
+    for I in range(0, num_tiles_expand[0][0]):
         for J in range(0, num_tiles_expand[0][1]):
-            upper_left_idx=(3+6*I,3+6*J)
-            square_extension_tile=square_extension_map[upper_left_idx[0]:upper_left_idx[0]+6,upper_left_idx[1]:upper_left_idx[1]+6]
-            square_storage_location_tile=square_storage_location_map_expand[upper_left_idx[0]:upper_left_idx[0]+5,upper_left_idx[1]:upper_left_idx[1]+5]
-            best_ranks_idx=find_best9(square_extension_tile, square_storage_location_tile)
-            sel=select_(square_extension_map, upper_left_idx, best_ranks_idx)
-            insert_t(square_extension_map, sel)
-            #update_gaps(square_extension_map,sel)
+            upper_left_idx = (3 + 6 * I, 3 + 6 * J)
+            square_extension_tile = square_extension_map[upper_left_idx[0]:upper_left_idx[0] + 6,
+                                    upper_left_idx[1]:upper_left_idx[1] + 6]
+            square_storage_location_tile = square_storage_location_map_expand[upper_left_idx[0]:upper_left_idx[0] + 5,
+                                           upper_left_idx[1]:upper_left_idx[1] + 5]
+            best_rank_idx = find_best(square_extension_tile, square_storage_location_tile)
+            insert_t(square_extension_map, best_rank_idx)
 
-    for I in range(0,num_tiles_expand[1][0]):
+    for I in range(0, num_tiles_expand[1][0]):
         for J in range(0, num_tiles_expand[1][1]):
-            upper_left_idx=(6*I,6*J)
-            square_extension_tile=square_extension_map[upper_left_idx[0]:upper_left_idx[0]+6,upper_left_idx[1]:upper_left_idx[1]+6]
-            square_storage_location_tile=square_storage_location_map_expand[upper_left_idx[0]:upper_left_idx[0]+5,upper_left_idx[1]:upper_left_idx[1]+5]
-            best_ranks_idx=find_best9(square_extension_tile, square_storage_location_tile)
-            sel=select_(square_extension_map, upper_left_idx, best_ranks_idx)
-            insert_t(square_extension_map, sel)
-            #update_gaps(square_extension_map,sel)
+            upper_left_idx = (6 * I, 6 * J)
+            square_extension_tile = square_extension_map[upper_left_idx[0]:upper_left_idx[0] + 6,
+                                    upper_left_idx[1]:upper_left_idx[1] + 6]
+            square_storage_location_tile = square_storage_location_map_expand[upper_left_idx[0]:upper_left_idx[0] + 5,
+                                           upper_left_idx[1]:upper_left_idx[1] + 5]
+            best_rank_idx = find_best(square_extension_tile, square_storage_location_tile)
+            square_storage_location_map[best_rank_idx[0],square_storage_location_map[1]].selected=True
+            insert_t(square_extension_map, best_rank_idx)
+
+    return square_extension_map, square_storage_location_map

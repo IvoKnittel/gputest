@@ -11,6 +11,7 @@ def sz(items):
     return len(items)
 
 class Item:
+    selected=False
     def __init__(self, *args):
         """
         Initialize an Item object.
