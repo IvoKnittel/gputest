@@ -19,8 +19,8 @@ def test_image_to_squares():
     plt.imshow(image_array, cmap='gray')
     plt.axis('on')
     plt.show()
-    image_squares_= image_squares(image)
-    r= image_squares_ranked0(image_squares_)
+
+    r= image_squares_ranked0(image2x2)
     square_storage_location_map=image_squares_ranked(r)
     square_extension_map = -np.ones((2*square_storage_location_map.shape[0], 2*square_storage_location_map.shape[1]), dtype=int)
     square_extension_map, square_storage_location_map= image_squares_select(square_extension_map, square_storage_location_map)
