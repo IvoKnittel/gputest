@@ -6,12 +6,21 @@ def expand4(n):
     num_tiles = int(np.ceil(n/4))
     return 4*num_tiles , num_tiles
 
-def image_squares(image):
-    height_expanded, num_tiles_vertical = expand4(image.shape[0])
-    width_expanded, num_tiles_horizontal = expand4(image.shape[1])
+def image2items(image_arr):
+    image_items = np.full(image_arr.shape, Item(), dtype=object)
+    for i in range(0, image_arr.shape[0]):
+        for j in range(0, image_arr.shape[1]):
+            image_items[i,j]=Item(int(image_arr[i,j]))
+    return image_items
+
+def image_squares(image_arr):
+    image_items = image2items(image_arr)
+    sz = image_arr.shape
+    height_expanded, num_tiles_vertical = expand4(sz[0])
+    width_expanded, num_tiles_horizontal = expand4(sz[1])
 
     image_expanded = np.full((height_expanded, width_expanded), Item(), dtype=object)
-    image_expanded[0:image.shape[0],0:image.shape[1]]=np.full(image.shape, Item(1), dtype=object)
+    image_expanded[0:sz[0],0:sz[1]]=image_items
     image_1x2_items = np.full((height_expanded, width_expanded), Item(), dtype=object)
     for i in range(0, num_tiles_vertical-1):
         for j in range(0, num_tiles_horizontal):
@@ -19,14 +28,14 @@ def image_squares(image):
                 m=4*i
                 n=4*j
                 image_1x2_items[m,n+k] = Item(image_expanded[m, n + k], image_expanded[m + 1, n + k])
-                image_1x2_items[m+1,n+k] = Item(image_expanded[m+1,n+k], image_expanded[m+2,n+k])
+                image_1x2_items[m+2,n+k] = Item(image_expanded[m+2,n+k], image_expanded[m+3,n+k])
 
     for i in range(0, num_tiles_vertical-1):
         for j in range(0, num_tiles_horizontal):
             for k in range(0,4):
                 m=4*i
                 n=4*j
-                image_1x2_items[m+2,n+k] = Item(image_expanded[m+2,n+k], image_expanded[m+3,n+k])
+                image_1x2_items[m+1,n+k] = Item(image_expanded[m+1,n+k], image_expanded[m+2,n+k])
                 image_1x2_items[m+3,n+k] = Item(image_expanded[m+3,n+k], image_expanded[m+4,n+k])
 
 
@@ -177,8 +186,8 @@ def insert_t(extension_map,idx):
 def image_squares_select(square_extension_map, square_storage_location_map):
     sz_expand, num_tiles_expand = size_expand2d(square_storage_location_map.shape)
     square_storage_location_map_expand = -np.ones(sz_expand, dtype=int)
-    square_storage_location_map_expand[3:3 + square_storage_location_map.shape[0],
-    3:3 + square_storage_location_map.shape[1]] = square_storage_location_map
+    square_storage_location_map_expand[2:2 + square_storage_location_map.shape[0],
+    2:2 + square_storage_location_map.shape[1]] = square_storage_location_map
 
     for I in range(0, num_tiles_expand[0][0]):
         for J in range(0, num_tiles_expand[0][1]):
@@ -190,7 +199,7 @@ def image_squares_select(square_extension_map, square_storage_location_map):
             best_rank_idx = find_best(square_extension_tile, square_storage_location_tile)
             if np.isnan(best_rank_idx[0]) or np.isnan(best_rank_idx[0]):
                 continue
-            square_storage_location_map[best_rank_idx[0],square_storage_location_map[1]].selected=True
+            square_storage_location_map[best_rank_idx[0],square_storage_location_map[1]]=5
             insert_t(square_extension_map, best_rank_idx)
 
     for I in range(0, num_tiles_expand[1][0]):
@@ -203,7 +212,7 @@ def image_squares_select(square_extension_map, square_storage_location_map):
             best_rank_idx = find_best(square_extension_tile, square_storage_location_tile)
             if np.isnan(best_rank_idx[0]) or np.isnan(best_rank_idx[0]):
                 continue
-            square_storage_location_map[best_rank_idx[0],square_storage_location_map[1]].selected=True
+            square_storage_location_map[best_rank_idx[0],square_storage_location_map[1]]=5
             insert_t(square_extension_map, best_rank_idx)
 
     return square_extension_map, square_storage_location_map
