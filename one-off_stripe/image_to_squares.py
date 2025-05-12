@@ -13,6 +13,7 @@ def image2items(image_arr):
             image_items[i,j]=Item(int(image_arr[i,j]))
     return image_items
 
+
 def image_squares(image_arr):
     image_items = image2items(image_arr)
     sz = image_arr.shape
@@ -58,22 +59,43 @@ def image_squares(image_arr):
 
     return image_2x2_items
 
+def ranks_(vec4):
+    if np.any(vec4<0):
+        return False, np.array(0, dtype=float)
+
+    ranks = np.argsort(vec4).astype(int)
+    for i in range(1,4):
+        if vec4[ranks[i]]==vec4[ranks[i-1]]:
+            r = np.min([ranks[i],ranks[i-1]])
+            ranks[i] = r
+            ranks[i - 1] = r
+
+    return True, ranks.astype(float)
+
+
 def image_squares_ranked0(image_squares):
-    squares_ranked0 = np.zeros((2*(image_squares.shape[0]-1),2*(image_squares.shape[1]-1)), dtype=int)
+    pos = [(0, 0), (1, 0), (0, 1), (1, 1)]
+    squares_ranked0 = -np.ones((2*(image_squares.shape[0]-1),2*(image_squares.shape[1]-1)), dtype=float)
     for i in range(1, image_squares.shape[0]-1):
         for j in range(1, image_squares.shape[1]-1):
 
             qvec=np.zeros(4, dtype=float)
-            qvec[0] = image_squares[i-1, j-1].quality
-            qvec[1] = image_squares[i-1, j].quality
-            qvec[2] = image_squares[i, j-1].quality
-            qvec[3] = image_squares[i, j].quality
+            qvec[0] = image_squares[(i-1)+pos[0][0], (j-1)+pos[0][1]].quality
+            qvec[1] = image_squares[(i-1)+pos[1][0], (j-1)+pos[1][1]].quality
+            qvec[2] = image_squares[(i-1)+pos[2][0], (j-1)+pos[2][1]].quality
+            qvec[3] = image_squares[(i-1)+pos[3][0], (j-1)+pos[3][1]].quality
             ranks = np.argsort(qvec)
+            success, ranks_reduced = ranks_(qvec)
+            if not success:
+                continue
+
+            c = 6.0 - np.sum(ranks_reduced)
+            ranks_reduced = ranks_reduced + c/4.0
             q=(2*i,2*j)
-            squares_ranked0[q[0], q[1]] = ranks[0]
-            squares_ranked0[q[0], q[1] + 1] = ranks[1]
-            squares_ranked0[q[0] + 1, q[1]] = ranks[2]
-            squares_ranked0[q[0] + 1, q[1] + 1] = ranks[3]
+            squares_ranked0[q[0]+pos[ranks[0]][0], q[1]+pos[ranks[0]][1]] = ranks_reduced[3]
+            squares_ranked0[q[0]+pos[ranks[1]][0], q[1]+pos[ranks[1]][1]] = ranks_reduced[2]
+            squares_ranked0[q[0]+pos[ranks[2]][0], q[1]+pos[ranks[2]][1]] = ranks_reduced[1]
+            squares_ranked0[q[0]+pos[ranks[3]][0], q[1]+pos[ranks[3]][1]] = ranks_reduced[0]
 
     return squares_ranked0
 
@@ -89,14 +111,14 @@ def pad_ranked_squares(m):
 
 def image_squares_ranked(r):
     e = (pad_ranked_squares(r.shape[0]),pad_ranked_squares(r.shape[0]))
-    s = -np.ones((r.shape[0]+e[0],r.shape[1]+e[1]), dtype=int)
+    s = -np.ones((int((r.shape[0]+e[0])/2),int((r.shape[1]+e[1])/2)), dtype=float)
     for i in range(2, int((r.shape[0]-1)/2)):
         for j in range(2, int((r.shape[1]-1)/2)):
-            M = np.iinfo(np.int32).max/3 #3 is the max rank value
-            s[2 * i, 2 * j] = int(M*np.mean([r[2 * (i - 1) + 1, 2 * (j - 1) + 1], r[2 * (i - 1) + 1, 2 * j], r[2 * i, 2 * (j - 1)], r[2 * i, 2 * j + 1]]))
-            s[2 * i, 2 * j + 1] = int(M*np.mean([r[2 * (i - 1) + 1, 2 * j + 1], r[2 * (i - 1) + 1, 2 * (j + 1)], r[2 * i, 2 * j],r[2 * i, 2 * (j + 1) + 1]]))
-            s[2 * i + 1, 2 * j] = int(M*np.mean([r[2 * i + 1, 2 * (j - 1) + 1], r[2 * i + 1, 2 * j], r[2 * (i + 1), 2 * (j - 1)],r[2 * (i + 1), 2 * j + 1]]))
-            s[2 * i + 1, 2 * j + 1] = int(M*np.mean([r[2 * i + 1, 2 * j], r[2 * i + 1, 2 * (j + 1)], r[2 * (i + 1), 2 * j], r[2 * (i + 1), 2 * (j + 1)]]))
+            # M = np.iinfo(np.int32).max/3 #3 is the max rank value
+            # s[i, j] = int(M*np.mean([r[2 * (i - 1) + 1, 2 * (j - 1) + 1], r[2 * (i - 1) + 1, 2 * j], r[2 * i, 2 * (j - 1)], r[2 * i, 2 * j + 1]]))
+            # s[i, j] = int(M*np.mean([r[2 * (i - 1) + 1, 2 * j + 1], r[2 * (i - 1) + 1, 2 * (j + 1)], r[2 * i, 2 * j],r[2 * i, 2 * (j + 1) + 1]]))
+            # s[i, j] = int(M*np.mean([r[2 * i + 1, 2 * (j - 1) + 1], r[2 * i + 1, 2 * j], r[2 * (i + 1), 2 * (j - 1)],r[2 * (i + 1), 2 * j + 1]]))
+            s[i, j] = np.mean([r[2 * i + 1, 2 * j], r[2 * i + 1, 2 * (j + 1)], r[2 * (i + 1), 2 * j], r[2 * (i + 1), 2 * (j + 1)]])
     return s
 
 def size_expand1d(n):

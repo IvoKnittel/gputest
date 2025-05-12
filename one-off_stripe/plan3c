@@ -1,12 +1,43 @@
-	 .      .      .      .      .      .      .
-		                                    
+
+To compute the ranks of the 2D-array of square items,
+
+	 .      .      .      .      .      .      .      .
+		                                    x	   n
+		 
+	 .      .      .      .      .      .      .      .
+  		        m(i,j)    					x 	   n                       
+                00    01		
+  	 .      .      .      .      .      .      .      .
+											x 	   n 
+  		        10    11
+  	 .      .      .      .      .      .      .      .
+		                                    x 	   n  
+  
+  	 .      .      .      .      .      .      .      .
+		                                    x 	   n  
+  		
+	 .      .      .      .      .      .      .      .
+		z      y      y       y      y      z 	   n   		                       
 		
+	 .      .      .      .      .      .      .      . 
+ 	    n 	   n  	   n	 n       n 	    n  	   n   
+
+	 .      .      .      .      .      .      .      . 	
+
+where n might be of size 0, x of size 2, y of 2, z of 1
+	 
+	 
+now consider the items m0 to m3, 
+
 	 .      .      .      .      .      .      .
-  		        m3                            
-                00    01
+		m[i-1,j]                               
+		m[i-1,j-1]
+	 .      .      .      .      .      .      .
+  		m[j-1]m(i,j)                            
+		
   	 .      .      .      .      .      .      .
   		                                    
-  		        10    11
+
   	 .      .      .      .      .      .      .
   		                                    
   
