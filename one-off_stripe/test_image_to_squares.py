@@ -4,7 +4,9 @@ from image_to_squares import (image_squares,
                               image_squares_quality,
                               image_squares_ranked0,
                               image_squares_ranked,
-                              image_squares_select)
+                              size_expand2d,
+                              image_squares_select_single,
+                              tile_display_single)
 
 from PIL import Image
 import matplotlib.pyplot as plt
@@ -39,12 +41,11 @@ def display_superposition(a, b):
     plt.axis('off')
     plt.show()
 
-
 def test_image_to_squares():
     image_path = 'image2_monochrom.bmp'
     image = Image.open(image_path)
-    binary_image = np.ones((10,10))
-    binary_image[2:6,2:6]=0
+    binary_image = np.ones((40,40))
+    binary_image[7:22,7:22]=0
     binary_array = np.array(binary_image).astype(np.uint8)
     binary_array_u8_range = binary_array * 200 + 20  # Low value = 1, High value = 254
 
@@ -55,14 +56,14 @@ def test_image_to_squares():
     image_noisy_array = np.clip(binary_array_u8_range + noise, 0, 255).astype(np.uint8)
     image2x2 = image_squares(image_noisy_array)
 
-    #plt.imshow(image_noisy_array, cmap='gray')
-    #plt.axis('on')
-    #plt.show()
+    plt.imshow(image_noisy_array, cmap='gray')
+    plt.axis('on')
+    plt.show()
     squares_quality = image_squares_quality(image2x2)
 
-    #plt.imshow(squares_quality, cmap='gray')
-    #plt.axis('on')
-    #plt.show()
+    # plt.imshow(squares_quality, cmap='gray')
+    # plt.axis('on')
+    # plt.show()
 
     r= image_squares_ranked0(squares_quality)
     #plt.imshow(r, cmap='gray')
@@ -70,17 +71,47 @@ def test_image_to_squares():
     #plt.show()
 
     square_storage_location_map=image_squares_ranked(r)
-    #plt.imshow(square_storage_location_map, cmap='gray')
-    #plt.axis('on')
-    #plt.show()
+    szl=square_storage_location_map.shape
+    sze=(szl[0]+1,szl[1]+1)
+    # plt.imshow(square_storage_location_map, cmap='gray')
+    # plt.axis('on')
+    # plt.show()
+    sz_halftile=3
+    sz_expand, num_tiles_expand = size_expand2d(square_storage_location_map.shape)
+    square_storage_location_map_expand = -np.ones(sz_expand, dtype=float)
+    square_storage_location_map_expand[sz_halftile:sz_halftile + square_storage_location_map.shape[0],sz_halftile:sz_halftile + square_storage_location_map.shape[1]] = square_storage_location_map
+    square_extension_map_expand = -np.zeros((square_storage_location_map_expand.shape[0]+1, square_storage_location_map_expand.shape[1]+1), dtype=int)
 
-    square_extension_map, square_storage_location_map= image_squares_select(square_storage_location_map)
-    #plt.imshow(square_extension_map, cmap='gray')
-    #plt.axis('on')
-    #plt.show()
-    plt.imshow(square_extension_map, cmap='gray')
-    plt.axis('on')
-    plt.show()
-    plt.imshow(square_storage_location_map, cmap='gray')
+    # square_extension_map_expand = tile_display(square_extension_map_expand, num_tiles_expand, (0,0),(1,1), (1,2))
+    #square_storage_location_map_expand, square_extension_map_expand = image_squares_select(square_storage_location_map_expand, square_extension_map_expand, num_tiles_expand, (0,0),(1,1))
+    square_storage_location_map_expand, square_extension_map_expand = image_squares_select_single(square_storage_location_map_expand, square_extension_map_expand, num_tiles_expand, (0,0))
+    square_storage_location_map_expand, square_extension_map_expand = image_squares_select_single(square_storage_location_map_expand, square_extension_map_expand, num_tiles_expand,(1,1))
+
+    #square_extension_map = square_extension_map_expand[sz_halftile:sz_halftile + sze[0],sz_halftile:sz_halftile + sze[1]]
+    #square_storage_location_map = square_storage_location_map_expand[sz_halftile:sz_halftile + szl[0],sz_halftile:sz_halftile + szl[1]]
+    # plt.imshow(square_storage_location_map, cmap='gray')
+    # plt.axis('on')
+    # plt.show()
+
+    # square_extension_map_expand = tile_display_single(square_extension_map_expand, num_tiles_expand, (0,0), 3)
+    # square_extension_map_expand = tile_display_single(square_extension_map_expand, num_tiles_expand,(0,0),4)
+
+    #square_extension_map = square_extension_map_expand[sz_halftile:sz_halftile + sze[0],sz_halftile:sz_halftile + sze[1]]
+    # plt.imshow(square_extension_map, cmap='gray')
+    # plt.axis('on')
+    # plt.show()
+    # square_storage_location_map_expand, square_extension_map_expand = image_squares_check_select_single(square_storage_location_map_expand, square_extension_map_expand, num_tiles_expand, (1,0))
+    # square_storage_location_map_expand, square_extension_map_expand = image_squares_check_select_single(square_storage_location_map_expand, square_extension_map_expand, num_tiles_expand,(0,1))
+
+    # square_storage_location_map_expand, square_extension_map_expand = image_squares_select_single(square_storage_location_map_expand, square_extension_map_expand, num_tiles_expand, (0,0))
+    # square_storage_location_map_expand, square_extension_map_expand = image_squares_select_single(square_storage_location_map_expand, square_extension_map_expand, num_tiles_expand,(1,1))
+
+    square_extension_map = square_extension_map_expand[sz_halftile:sz_halftile + sze[0],sz_halftile:sz_halftile + sze[1]]
+    # square_storage_location_map = square_storage_location_map_expand[sz_halftile:sz_halftile + szl[0],sz_halftile:sz_halftile + szl[1]]
+    # plt.imshow(square_storage_location_map, cmap='gray')
+    # plt.axis('on')
+    # plt.show()
+
+    plt.imshow(square_extension_map[0:40,0:40]+binary_array, cmap='gray')
     plt.axis('on')
     plt.show()
