@@ -181,7 +181,7 @@ def is_free(extension_map,k,l):
         return False
     return True
 
-def find_best(extension_map, storage_map, upper_left_idx):
+def find_best(extension_map, storage_map):
     best_rank = -1
     best_rank_idx_storage =  (np.nan,np.nan)
     for k in range(0, 5):
@@ -193,8 +193,7 @@ def find_best(extension_map, storage_map, upper_left_idx):
             if rank > best_rank:
                 best_rank = rank
                 best_rank_idx_storage = (k, l)
-    best_rank_idx_storage_abs=(upper_left_idx[0] + best_rank_idx_storage[0], upper_left_idx[1] + best_rank_idx_storage[1])
-    return best_rank_idx_storage_abs, (2*(best_rank_idx_storage_abs[0]-3),2*(best_rank_idx_storage_abs[1]-3))
+    return best_rank_idx_storage
 
 # def find_best9(storage_map, extension_map):
 #     best_ranks = -np.ones((0, 9), dtype=int)
@@ -236,38 +235,67 @@ def find_best(extension_map, storage_map, upper_left_idx):
 #
 #     return sel
 
+occupied = -2.0
 def insert_t(extension_map,idx):
     if idx[0] >= extension_map.shape[0] or idx[1] >= extension_map.shape[1]:
         return
 
-    extension_map[idx[0] + 1, idx[1] + 1] = 1
-    extension_map[idx[0] + 1, idx[1]] =1
-    extension_map[idx[0], idx[1] + 1] = 1
-    extension_map[idx[0], idx[1]]=1
-
+    extension_map[idx[0]:idx[0] + 1, idx[1]:idx[1] + 1] = occupied
     return extension_map
 
+
+def assign_best(square_extension_tile, square_storage_location_tile):
+    found, best_idx_storage = find_best(square_extension_tile, square_storage_location_tile)
+    persistent = False
+    if not found:
+        return found, persistent, (np.nan,np.nan)
+
+    if best_idx_storage[0] >= 2 and best_idx_storage[0] <= 3 and best_idx_storage[1] >= 2 and best_idx_storage[1] <= 3:
+        return True, True, best_idx_storage
+
+    return True, False, best_idx_storage
+
+
+def insert_best(square_extension_tile, square_storage_location_tile, upper_left_idx, square_storage_location_map, square_extension_map):
+    while True:
+        found, persistent, best_idx_storage_tile = assign_best(square_extension_tile, square_storage_location_tile)
+        if found:
+            square_storage_location_tile[best_idx_storage_tile[0], best_idx_storage_tile[1]] = occupied
+            best_idx_extension = (2 * (best_idx_storage_tile[0] - 3), 2 * (best_idx_storage_tile[1] - 3))
+            square_extension_tile = insert_t(square_extension_tile, best_idx_extension)
+            if persistent:
+                best_idx_storage = (
+                best_idx_storage_tile[0] + upper_left_idx[0], best_idx_storage_tile[0] + upper_left_idx[0])
+                best_idx_storage_nomargin = (best_idx_storage[0] - 3, best_idx_storage[1] - 3)
+                square_storage_location_map[best_idx_storage_nomargin[0], best_idx_storage_nomargin[1]] = occupied
+
+                best_idx_extension = (2 * (best_idx_storage[0] - 3), 2 * (best_idx_storage[1] - 3))
+                square_extension_map = insert_t(square_extension_map, best_idx_extension)
+                return True, square_storage_location_map, square_extension_map
+        else:
+            return False, square_storage_location_map, square_extension_map
 
 def image_squares_select(square_storage_location_map):
     square_extension_map = -np.ones((2*square_storage_location_map.shape[0], 2*square_storage_location_map.shape[1]), dtype=int)
     sz_expand, num_tiles_expand = size_expand2d(square_storage_location_map.shape)
     square_storage_location_map_expand = -np.ones(sz_expand, dtype=float)
     square_storage_location_map_expand[3:3 + square_storage_location_map.shape[0],3:3 + square_storage_location_map.shape[1]] = square_storage_location_map
-    occupied=5.0
+
     for I in range(0, num_tiles_expand[0][0]):
         for J in range(0, num_tiles_expand[0][1]):
             upper_left_idx = (3 + 6 * I, 3 + 6 * J)
-            square_extension_tile = square_extension_map[upper_left_idx[0]:upper_left_idx[0] + 6,
-                                    upper_left_idx[1]:upper_left_idx[1] + 6]
-            square_storage_location_tile = square_storage_location_map_expand[upper_left_idx[0]:upper_left_idx[0] + 5,
-                                           upper_left_idx[1]:upper_left_idx[1] + 5]
-            best_rank_idx_storage, best_rank_idx_location = find_best(square_extension_tile, square_storage_location_tile, upper_left_idx)
-            if np.isnan(best_rank_idx_storage[0]) or np.isnan(best_rank_idx_storage[1]):
-                continue
-
-            best_rank_idx_storage_nomargin = (best_rank_idx_storage[0]-3, best_rank_idx_storage[1]-3)
-            square_storage_location_map[best_rank_idx_storage_nomargin[0],best_rank_idx_storage_nomargin[1]]=occupied
-            square_extension_map = insert_t(square_extension_map, best_rank_idx_location)
+            square_extension_tile = np.array(square_extension_map[upper_left_idx[0]:upper_left_idx[0] + 6,
+                                             upper_left_idx[1]:upper_left_idx[1] + 6])
+            square_storage_location_tile = np.array(
+                square_storage_location_map_expand[upper_left_idx[0]:upper_left_idx[0] + 5,
+                upper_left_idx[1]:upper_left_idx[1] + 5])
+            success, square_storage_location_map, square_extension_map = insert_best(square_extension_tile,
+                                                                                   square_storage_location_tile,
+                                                                                   upper_left_idx,
+                                                                                   square_storage_location_map,
+                                                                                   square_extension_map)
+            if not success:
+                return False, (I,J), square_storage_location_map, square_extension_map
 
     for I in range(0, num_tiles_expand[1][0]):
         for J in range(0, num_tiles_expand[1][1]):
@@ -276,11 +304,12 @@ def image_squares_select(square_storage_location_map):
                                     upper_left_idx[1]:upper_left_idx[1] + 6]
             square_storage_location_tile = square_storage_location_map_expand[upper_left_idx[0]:upper_left_idx[0] + 5,
                                            upper_left_idx[1]:upper_left_idx[1] + 5]
-            best_rank_idx_storage, best_rank_idx_storage_extension = find_best(square_extension_tile, square_storage_location_tile, upper_left_idx)
-            if np.isnan(best_rank_idx_storage[0]) or np.isnan(best_rank_idx_storage[1]):
-                continue
-            best_rank_idx_storage_nomargin = (best_rank_idx_storage[0]-3, best_rank_idx_storage[1]-3)
-            square_storage_location_map[best_rank_idx_storage_nomargin[0],best_rank_idx_storage_nomargin[1]]=occupied
-            square_extension_map = insert_t(square_extension_map, best_rank_idx_storage_extension)
+            success, square_storage_location_map, square_extension_map = insert_best(square_extension_tile,
+                                                                                   square_storage_location_tile,
+                                                                                   upper_left_idx,
+                                                                                   square_storage_location_map,
+                                                                                   square_extension_map)
+            if not success:
+                return False, (I,J), square_storage_location_map, square_extension_map
 
-    return square_extension_map, square_storage_location_map
+    return True, (-1,-1), square_extension_map, square_storage_location_map

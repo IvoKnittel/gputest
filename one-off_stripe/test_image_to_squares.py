@@ -74,7 +74,8 @@ def test_image_to_squares():
     #plt.axis('on')
     #plt.show()
 
-    square_extension_map, square_storage_location_map= image_squares_select(square_storage_location_map)
+    success, dummy, square_extension_map, square_storage_location_map= image_squares_select(square_storage_location_map)
+    assert success
     #plt.imshow(square_extension_map, cmap='gray')
     #plt.axis('on')
     #plt.show()
