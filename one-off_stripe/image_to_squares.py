@@ -40,6 +40,24 @@ def image_squares(image_arr):
                 image_1x2_items[m+3,n+k] = Item(image_expanded[m+3,n+k], image_expanded[m+4,n+k])
 
 
+    image_2x1_items = np.full((height_expanded, width_expanded), Item(), dtype=object)
+    for i in range(0, num_tiles_vertical):
+        for j in range(0, num_tiles_horizontal):
+            for k in range(0,4):
+                m=4*i
+                n=4*j
+                image_2x1_items[m+k,n] = Item(image_expanded[m+k, n], image_expanded[m+k, n+1])
+                image_2x1_items[m+k,n+2] = Item(image_expanded[m+k,n+2], image_expanded[m+k,n+3])
+
+    for i in range(0, num_tiles_vertical):
+        for j in range(0, num_tiles_horizontal):
+            for k in range(0,4):
+                m=4*i
+                n=4*j
+                image_2x1_items[m+k,n+1] = Item(image_expanded[m+k,n+1], image_expanded[m+k,n+2])
+                image_2x1_items[m+k,n+3] = Item(image_expanded[m+k,n+3], image_expanded[m+k,n+4])
+
+
     image_2x2_items = np.full((height_expanded, width_expanded), Item(), dtype=object)
     for i in range(0, num_tiles_vertical):
         for j in range(0, num_tiles_horizontal):
@@ -57,7 +75,7 @@ def image_squares(image_arr):
                 image_2x2_items[m+k,n+1] = Item(image_1x2_items[m+k,n+1], image_1x2_items[m+k,n+2])
                 image_2x2_items[m+k,n+3] = Item(image_1x2_items[m+k,n+3], image_1x2_items[m+k,n+4])
 
-    return image_2x2_items[0:image_arr.shape[0],0:image_arr.shape[1]]
+    return image_2x2_items[0:image_arr.shape[0],0:image_arr.shape[1]], image_1x2_items[0:image_arr.shape[0],0:image_arr.shape[1]], image_2x1_items[0:image_arr.shape[0],0:image_arr.shape[1]]
 
 def ranks_(vec40, ranks0):
     vec4  = np.sort(vec40)
@@ -179,19 +197,24 @@ def is_free(extension_map,k,l):
     return True
 
 occupied = -2.0
-def insert_t(extension_tile,idx):
+emtpy    = 0
+
+def insert_t(extension_tile,idx, fill_value):
     if idx[0] >= extension_tile.shape[0] or idx[1] >= extension_tile.shape[1]:
         return extension_tile
 
-    extension_tile[idx[0]:idx[0] + 2, idx[1]:idx[1] + 2] = occupied
+    extension_tile[idx[0]:idx[0] + 2, idx[1]:idx[1] + 2] = fill_value
     return extension_tile
 
-def find_best(extension_tile, storage_tile):
+def find_best(extension_tile, storage_tile, check):
     best_rank = -1
     best_rank_idx_storage =  (np.nan,np.nan)
     found = False
-    for k in range(0, 5):
-        for l in range(0, 5):
+    r=(0,5)
+    if check:
+        r=(1,4)
+    for k in range(r[0], r[1]):
+        for l in range(r[0], r[1]):
             if not is_free(extension_tile, k, l):
                 continue
 
@@ -243,35 +266,122 @@ def find_best(extension_tile, storage_tile):
 #
 #     return sel
 
-def assign_best(square_extension_tile, square_storage_location_tile, check):
-    found, best_idx_storage = find_best(square_extension_tile, square_storage_location_tile)
-    persistent = False
-    if not found:
-        return found, persistent, (np.nan,np.nan)
-
-    if best_idx_storage[0] >= 1 and best_idx_storage[0] <= 3 and best_idx_storage[1] >= 1 and best_idx_storage[1] <= 3:
-        return True, True, best_idx_storage
-
-    return True, False, best_idx_storage
-
 def tile_core_display(tile,color):
     core = tile[1:5,1:5]
     core[core != -2] = color
     tile[1:5, 1:5] = core
     return tile
 
-def insert_best(square_extension_tile, square_storage_location_tile, upper_left_idx, square_storage_location_map, square_extension_map, check):
+def is_occupied(neighbors, s, i, j):
+    if i-1<0 or j-1<0:
+        return False
+    if s[i,j] < 0:
+        neighbors.append((i,j))
+    return neighbors
+
+def is_crowded(s, i,j):
+    if s[i-2,j] < 0:
+        return False
+
+    neighbors = []
+    for k in range(j-2,j+2):
+        neighbors = is_occupied(neighbors, s, i-2, k)
+
+    neighbors = is_occupied(neighbors, s, i-1, j-2)
+    neighbors = is_occupied(neighbors, s, i-1, j+1)
+    neighbors = is_occupied(neighbors, s, i, j - 2)
+    neighbors = is_occupied(neighbors, s, i, j + 1)
+
+    for k in range(j-2,j+2):
+        neighbors = is_occupied(neighbors, s, i+1, k)
+
+    return neighbors
+
+def process_crowded(s, neighbors, i, j):
+
+    return s
+
+def crowd_check_process(s, t, i, j):
+    if i-1 < 0 or j-1 < 0:
+        return s, t
+
+    neigbors = is_crowded(s, i - 1, j - 1)
+    if len(neigbors)>1:
+        s = process_crowded(s, neigbors, i - 1, j - 1)
+    return s, t
+
+def quarter_rotation(i, j, rot, flip_i, n, m):
+    """Returns (i', j') in the original array for (i, j) in the rotated array."""
+    I=0
+    J=0
+    if rot == 0:
+        I = i
+        J = j
+    elif rot == 1: # 90 degrees (pi/2)
+        I = n - 1 - j
+        J = i
+    elif rot == 2: # 180 degrees (pi)
+        I = n - 1 - i
+        J = m - 1 - j
+    elif rot == 3: # 270 degrees (3pi/2)
+        I = j
+        J = m - 1 - i
+
+
+    if flip_i:
+        I = n - 1 - I
+    return I,J
+
+def check_(best_idx, square_extension_tile, square_storage_location_tile):
+    found = False
+    more = None
+    i = best_idx[0]
+    j = best_idx[1]
+    s = square_storage_location_tile
+    t = square_extension_tile
+    for k in range(j-1,j+3):
+        s, t = crowd_check_process(s, t, i-1, k)
+
+    s, t = crowd_check_process(s, t, i, j-1)
+    s, t = crowd_check_process(s, t, i, j+2)
+    s, t = crowd_check_process(s, t, i+1, j-1)
+    s, t = crowd_check_process(s, t, i+1, j+2)
+    for k in range(j-1,j+3):
+        s, t = crowd_check_process(s, t, i+2, k)
+
+    return found, more
+
+
+def assign_best(square_extension_tile, square_storage_location_tile, check, images):
+    more = None
+    found, best_idx_storage = find_best(square_extension_tile, square_storage_location_tile)
+    if not found:
+        return False, False, (np.nan,np.nan), more
+    if check:
+        found, more = check_(best_idx_storage, square_extension_tile, square_storage_location_tile)
+
+    if not found:
+        return False, False, (np.nan,np.nan), more
+
+    if best_idx_storage[0] >= 1 and best_idx_storage[0] <= 3 and best_idx_storage[1] >= 1 and best_idx_storage[1] <= 3:
+        return True, True, best_idx_storage, more
+
+    return True, False, best_idx_storage, more
+
+
+def insert_best(square_extension_tile, square_storage_location_tile, upper_left_idx, square_storage_location_map, square_extension_map, check, images):
     while True:
-        found, persistent, best_idx_tile = assign_best(square_extension_tile, square_storage_location_tile, check)
+        found, persistent, best_idx_tile, more = assign_best(square_extension_tile, square_storage_location_tile, check, images)
         if found:
-            best_idx = (best_idx_tile[0] + upper_left_idx[0], best_idx_tile[1] + upper_left_idx[1])
-            if persistent:
-                square_storage_location_map[best_idx[0], best_idx[1]] = occupied
-                square_extension_map = insert_t(square_extension_map, best_idx)
-                return True, square_storage_location_map, square_extension_map
-            else:
-                square_storage_location_tile[best_idx_tile[0], best_idx_tile[1]] = occupied
-                square_extension_tile = insert_t(square_extension_tile, best_idx_tile)
+            if more is None:
+                best_idx = (best_idx_tile[0] + upper_left_idx[0], best_idx_tile[1] + upper_left_idx[1])
+                if persistent:
+                    square_storage_location_map[best_idx[0], best_idx[1]] = np.float16(occupied)
+                    square_extension_map = insert_t(square_extension_map, best_idx, occupied)
+                    return True, square_storage_location_map, square_extension_map
+                else:
+                    square_storage_location_tile[best_idx_tile[0], best_idx_tile[1]] = occupied
+                    square_extension_tile = insert_t(square_extension_tile, best_idx_tile, occupied)
         else:
             return False, square_storage_location_map, square_extension_map
 
@@ -294,7 +404,7 @@ def tile_display(square_extension_map, num_tiles_expand_noshift_shift, shift1, s
     tile_display_single(square_extension_map, num_tiles_expand_noshift_shift, shift2, color_val[1])
     return square_extension_map
 
-def image_squares_select_single(square_storage_location_map, square_extension_map, num_tiles_expand_noshift_shift, shift, check):
+def image_squares_select_single(square_storage_location_map, square_extension_map, num_tiles_expand_noshift_shift, shift, check, images):
     sz_tile=2*sz_halftile
     num_tiles_expand_row = num_tiles_expand_noshift_shift[shift[0]][0]
     num_tiles_expand_col = num_tiles_expand_noshift_shift[shift[1]][1]
@@ -312,17 +422,5 @@ def image_squares_select_single(square_storage_location_map, square_extension_ma
                                                                                    square_storage_location_tile,
                                                                                    upper_left_idx,
                                                                                    square_storage_location_map,
-                                                                                   square_extension_map, check)
-    return square_storage_location_map, square_extension_map
-
-def image_squares_select(square_storage_location_map, square_extension_map, num_tiles_expand_noshift_shift, shift1, shift2, check):
-    square_storage_location_map, square_extension_map = image_squares_select_single(square_storage_location_map,
-                                                                                    square_extension_map,
-                                                                                    num_tiles_expand_noshift_shift,
-                                                                                    shift1, check)
-    square_storage_location_map, square_extension_map = image_squares_select_single(square_storage_location_map,
-                                                                                    square_extension_map,
-                                                                                    num_tiles_expand_noshift_shift,
-                                                                                    shift2, check)
-
+                                                                                   square_extension_map, check, images)
     return square_storage_location_map, square_extension_map
