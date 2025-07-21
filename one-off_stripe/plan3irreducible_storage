@@ -62,24 +62,24 @@ A02:				x    <x
 
                     o o o o
 					x>    x 
-					o   . .         v
+					o   . .         ^
 					o o . x   0|0 1 4
 
 						   
                     o o o o
 A03  				o     x 
-					x>  . .       v
+					x>  . .       ^
 					o o . x   0|0 1 5 
 
 					o o o o
-A04:				o    <x 
-					o   . .     ^
-					x o . x   0|0 1 6
+A04:				o     x 
+					o   . .     
+					x o .<x   0|<0 1 6
 
 					o o o o
-					o    <x 
-					o   . .       v
-					x o . x   0|0 1 6
+					o     x 
+					o   . .       
+					x>o . x   0|0 1 6>
 
 					o o o o
 A05:				o     x 
@@ -87,25 +87,33 @@ A05:				o     x
 					o x . x   0|0 1 7						   				   
 						   
 						   
-A11:				x o o x 				 
+A11:				x o o<x 				 
 					o     o 
-				    o   . . 
-					o o . x   0|0 2 2
+				    o   . ^ 
+					o o . x   0|0> 2> 2
 
+A11:				x>o o x 				 
+					o     v 
+				    o   . . 
+					o o . x   0|0<2<2
 							 
 A12:				o o o x 				 
-					x     o 
-				    o   . . 
-				    o o . x  0|0 2 3
+					x>    o 
+				    o   . ^         ^
+				    o o . x  0|0> 2 3
 
+A12:				o o o x 				 
+					x>    v 
+				    o   . .         ^
+				    o o . x  0|0 <2 3
 				
-A30':				o o x o 
-					x     o 
-					o     o      
+A30':				o o x o  
+					x   v o 
+					o     o      ^   
 					o o o x  0|0 3 2
 							 
 A20:
-    			    o o x o 
+    			    o o x o  impossible
 				    o     o 
 					x   . . 
 				    o o . x  0|0 3 3
@@ -113,14 +121,18 @@ A20:
 
 B11:  				o o x o 
     				x     o
-					o   . x 
+					o   .<x    ^
 					o o . .  0|1 2 2
 				 
 
 B12:  				o o x o
     				o     o 
-					x   . x 
-					o o . .  0|
-					1 2 3
+					x   .<x    ^
+					o o . .  0|1 2 3
 					
+					
+B12:  				o o x o
+    				o     o 
+					x>  . x        ^
+					o o . .  0|1 2 3
 					

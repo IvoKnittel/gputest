@@ -1,12 +1,13 @@
 import numpy as np
 
 from image_to_squares import (image_squares,
+                              image_squares2,
                               image_squares_quality,
                               image_squares_ranked0,
                               image_squares_ranked,
                               size_expand2d,
                               image_squares_select_single,
-                              tile_display_single)
+                              image_squares_complete)
 
 from PIL import Image
 import matplotlib.pyplot as plt
@@ -56,27 +57,28 @@ def test_image_to_squares():
     image_noisy_array = np.clip(binary_array_u8_range + noise, 0, 255).astype(np.uint8)
     image2x2, image1x2, image2x1 = image_squares(image_noisy_array)
     images=(image2x2, image1x2, image2x1)
+    image_all = image_squares2(image_noisy_array)
     plt.imshow(image_noisy_array, cmap='gray')
     plt.axis('on')
     plt.show()
-    squares_quality = image_squares_quality(image2x2)
+    squares_quality2 = image_squares_quality(image_all)
 
     # plt.imshow(squares_quality, cmap='gray')
     # plt.axis('on')
     # plt.show()
 
-    r= image_squares_ranked0(squares_quality)
+    r= image_squares_ranked0(squares_quality2)
     #plt.imshow(r, cmap='gray')
     #plt.axis('on')
     #plt.show()
 
     square_storage_location_map = image_squares_ranked(r)
     szl=square_storage_location_map.shape
-    sze=(szl[0]+1,szl[1]+1)
+
     # plt.imshow(square_storage_location_map, cmap='gray')
     # plt.axis('on')
     # plt.show()
-    sz_halftile=3
+    sz_halftile=2*3
     sz_expand, num_tiles_expand = size_expand2d(square_storage_location_map.shape)
     square_storage_location_map_expand = -np.ones(sz_expand, dtype=float)
     square_storage_location_map_expand[sz_halftile:sz_halftile + square_storage_location_map.shape[0],sz_halftile:sz_halftile + square_storage_location_map.shape[1]] = square_storage_location_map
@@ -84,7 +86,7 @@ def test_image_to_squares():
 
     # square_extension_map_expand = tile_display(square_extension_map_expand, num_tiles_expand, (0,0),(1,1), (1,2))
     #square_storage_location_map_expand, square_extension_map_expand = image_squares_select(square_storage_location_map_expand, square_extension_map_expand, num_tiles_expand, (0,0),(1,1))
-    square_storage_location_map_expand, square_extension_map_expand = image_squares_select_single(square_storage_location_map_expand, square_extension_map_expand, num_tiles_expand, (0,0),False, images)
+    square_storage_location_map_expand, square_extension_map_expand = image_squares_select_single(square_storage_location_map_expand, square_extension_map_expand, num_tiles_expand, (0,0), False, images)
     square_storage_location_map_expand, square_extension_map_expand = image_squares_select_single(square_storage_location_map_expand, square_extension_map_expand, num_tiles_expand,(1,1),False, images)
 
     #square_extension_map = square_extension_map_expand[sz_halftile:sz_halftile + sze[0],sz_halftile:sz_halftile + sze[1]]
@@ -101,9 +103,10 @@ def test_image_to_squares():
     # plt.axis('on')
     # plt.show()
     square_storage_location_map_expand, square_extension_map_expand = image_squares_select_single(square_storage_location_map_expand, square_extension_map_expand, num_tiles_expand, (1,0), True, images)
+    square_extension_map_expand = image_squares_complete(square_storage_location_map_expand, square_extension_map_expand, num_tiles_expand, (0,1))
     square_storage_location_map_expand, square_extension_map_expand = image_squares_select_single(square_storage_location_map_expand, square_extension_map_expand, num_tiles_expand,(0,1), True, images)
 
-
+    sze=(szl[0]+1,szl[1]+1)
     square_extension_map = square_extension_map_expand[sz_halftile:sz_halftile + sze[0],sz_halftile:sz_halftile + sze[1]]
     # square_storage_location_map = square_storage_location_map_expand[sz_halftile:sz_halftile + szl[0],sz_halftile:sz_halftile + szl[1]]
     # plt.imshow(square_storage_location_map, cmap='gray')
