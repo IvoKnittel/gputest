@@ -37,7 +37,7 @@ def tree_visual(base_items, tree_data, num_gens, start_plot_gen):
 
 def test_tree_visual_sine():
     base_items = sine_items()
-    num_gens = 5
+    num_gens = 4
     start_plot_gen = 3
     assert num_gens < math.floor(math.log(len(base_items)))
     assert num_gens > start_plot_gen

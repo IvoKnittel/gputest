@@ -180,22 +180,16 @@ Listing only the possible cases, and using symmetry  (u <--> d and reverse)
  
  u u . .  convert to couple 
  . . u u  do nothing
- . u u .  convert inner to couple 
+ x u u .  convert to couple 
  . u u u  convert into s c e u , or into c e c e
  u u u u  convert into u c e s , or into c e c e
  
  
  If majority is d, reverse and exchange d<->u , then reverse-exchange back.
- 
- . . d d  convert to couple 
- . d d .  convert to couple
- d d . .  do nothing 
- . d d d  convert the left items to couple 
- d d . u  convert into c e s u , or into s c e u
- d d d .  convert into d c e s , or into c e c e
- d d d d  convert into s c e d , or into c e c e 
 
 
- 
+ Is this ok?
+ def fu(seq4: npt.NDArray[npt.NDArray('U1')])
+	seq4='cece'  
  
  

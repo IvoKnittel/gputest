@@ -1,4 +1,5 @@
 pip-tools
+pygame
 pytest
 pytest-check
 pybind11

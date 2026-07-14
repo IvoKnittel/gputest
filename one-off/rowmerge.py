@@ -107,6 +107,12 @@ def merges(merges_flat,items, sz):
 def num_merges(merges,sz):
     return len(merges)
 
+def basics(inputs, sz):
+    b = np.full((2, sz), 0)
+    b[0,:]=inputs.prefer_vector
+    b[1,:]=inputs.vote_vector
+    return A0(inputs)
+
 def next_row_items(items_):
     # sz_=20
     sz_=len(items_)
@@ -148,8 +154,7 @@ def tree(base_items, max_gens):
     items_ = base_items
     plot_data = []
     num_gens = 0
-
-    while num_gens <= max_gens and len(items_) < 3:
+    while num_gens <= max_gens and len(items_) > 3:
         num_gens = num_gens + 1
         items2 = next_row_items(items_)
         x2, a2 = items_for_display(items2, base_sz)
