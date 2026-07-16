@@ -1,5 +1,4 @@
 import numpy as np
-from extensions2 import extend2
 from item import Item
 
 # Axis name constants: v = vertical (row), h = horizontal (column).

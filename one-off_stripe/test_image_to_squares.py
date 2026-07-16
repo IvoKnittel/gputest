@@ -1,5 +1,6 @@
 
 import numpy as np
+import pytest
 
 from image_to_squares import (image_squares,
                               image_squares_quality,
@@ -9,116 +10,38 @@ from image_to_squares import (image_squares,
                               image_squares_select_single,
                               image_squares_complete)
 
-from PIL import Image
 import matplotlib.pyplot as plt
+
+from test_utils import image_generator, display_superposition
+from map_of_squares import (place_square_in_core,
+                             map_of_squares_from_quality,
+                             get_placement_map)
+from closure import do_closure
 v=0
 h=1
-def display_superposition(a, b):
-
-    # Example arrays (replace with your own)
-    A = a.astype(np.uint8)
-    B = b.astype(np.uint8)
-
-    # Normalize to [0,1] for alpha
-    A_alpha = A.astype(float) / 255.0
-    B_alpha = B.astype(float) / 255.0
-
-    # Create RGBA images
-    A_rgba = np.zeros((A.shape[v], A.shape[h], 4), dtype=float)
-    B_rgba = np.zeros((B.shape[v], B.shape[h], 4), dtype=float)
-
-    # Black for A
-    A_rgba[..., 0:3] = 0  # RGB = 0,0,0
-    A_rgba[..., 3] = A_alpha  # Alpha
-
-    # Green for B
-    B_rgba[..., 0] = 0  # R
-    B_rgba[..., 1] = 1  # G
-    B_rgba[..., 2] = 0  # B
-    B_rgba[..., 3] = B_alpha  # Alpha
-
-    plt.figure(figsize=(6, 6))
-    plt.imshow(A_rgba)
-    plt.imshow(B_rgba)
-    plt.axis('off')
-    plt.show()
-
-def test_image_to_squares():
-    image_path = 'image2_monochrom.bmp'
-    image = Image.open(image_path)
-    binary_image = np.ones((40,40))
-    binary_image[7:22,7:22]=0
-    binary_array = np.array(binary_image).astype(np.uint8)
-    binary_array_u8_range = binary_array * 200 + 20  # Low value = 1, High value = 254
-
-    # Generate random noise (-1, 0, 1)
-    noise = np.random.choice([-1, 0, 1], size=binary_array_u8_range.shape)
-
-    # Add noise and clip to uint8 range
-    image_noisy_array = np.clip(binary_array_u8_range + noise, 0, 255).astype(np.uint8)
-    image2x2, _, _ = image_squares(image_noisy_array)
-    plt.imshow(image_noisy_array, cmap='gray')
-    plt.axis('on')
-    plt.show()
-    squares_quality2 = image_squares_quality(image2x2)
-
-    plt.imshow(squares_quality2, cmap='gray')
-    plt.axis('on')
-    plt.show()
-
-    r= image_squares_ranked0(squares_quality2)
-    plt.imshow(r, cmap='gray')
-    plt.axis('on')
-    plt.show()
-
-    square_relative_quality_map = image_squares_ranked(r)
-
-    plt.imshow(square_relative_quality_map, cmap='gray')
-    plt.axis('on')
-    plt.show()
 
 
-def place_square_in_core(quality, placement, core_origin, sz_core, check_placement):
-    """Simulate one CUDA call: place the best-quality square in the 3x3 core of a tile.
-
-    quality:        full padded quality map (read-only in the border, writable in core)
-    placement:      full placement map; 0=empty, 1=placed, -1=blocked
-    core_origin:    (row, col) of the top-left of the 3x3 core in padded coordinates
-    sz_core:        size of the mutable core (3)
-    check_placement: if True, verify compatibility with neighbouring squares before placing
-                     (not yet implemented)
+@pytest.fixture
+def quality_map_setup():
+    """Common setup shared by every test in this file: build one synthetic test image
+    via image_generator and run it through the image_squares/quality/ranked pipeline
+    down to the half-resolution quality map every test consumes from here.
     """
-    if check_placement:
-        raise NotImplementedError("Compatibility check before placement is not yet implemented")
-
-    # Find the highest-quality unoccupied position in the core.
-    best_quality = -1.0
-    best_pos = None
-    for di in range(sz_core):
-        for dj in range(sz_core):
-            r, c = core_origin[v] + di, core_origin[h] + dj
-            if placement[r, c] == 0 and quality[r, c] > best_quality:
-                best_quality = quality[r, c]
-                best_pos = (r, c)
-
-    if best_pos is not None:
-        placement[best_pos[v], best_pos[h]] = 1
-
-
-def test_square_placement():
-    # --- build synthetic test image ---
-    binary_image = np.ones((40, 40))
-    binary_image[7:22, 7:22] = 0
-    binary_array = np.array(binary_image).astype(np.uint8)
-    binary_array_u8_range = binary_array * 200 + 20
-    noise = np.random.choice([-1, 0, 1], size=binary_array_u8_range.shape)
-    image_noisy_array = np.clip(binary_array_u8_range + noise, 0, 255).astype(np.uint8)
-
-    # --- compute per-position 2×2 quality map ---
+    binary_image, image_noisy_array = next(image_generator(1, 'noisy_square', seed=None))
     image2x2, _, _ = image_squares(image_noisy_array)
     squares_quality2 = image_squares_quality(image2x2)
     r = image_squares_ranked0(squares_quality2)
     quality_map = image_squares_ranked(r)   # shape (20, 20) for a 40x40 image
+    return binary_image, image_noisy_array, image2x2, squares_quality2, r, quality_map
+
+
+@pytest.fixture
+def map_of_squares_setup(quality_map_setup):
+    """Common setup shared by test_square_placement, test_graph_spread, and
+    test_tiling: the CUDA tile/core layout and the padded map_of_squares built from
+    quality_map_setup's quality_map, ready for place_square_in_core calls.
+    """
+    binary_image, image_noisy_array, image2x2, squares_quality2, r, quality_map = quality_map_setup
     szl = quality_map.shape
 
     # --- CUDA tile/core layout ---
@@ -129,26 +52,108 @@ def test_square_placement():
     sz_core = 3
     sz_border = (sz_tile - sz_core) // 2   # = 1
 
-    check_placement = False
-
     num_tiles_v = int(np.ceil(szl[v] / sz_core))
     num_tiles_h = int(np.ceil(szl[h] / sz_core))
 
     # Pad quality map so every core is fully covered, with a 1-cell read-only border.
+    # sz_border = 1 is exactly the reach of the diagonal alert writes in
+    # place_square_in_core (best_pos +/- 1), so it's enough to keep those writes
+    # in-bounds for cores at the outer edge of the grid too - no extra margin needed.
     padded_rows = sz_border + num_tiles_v * sz_core + sz_border
     padded_cols = sz_border + num_tiles_h * sz_core + sz_border
     quality_padded = -np.ones((padded_rows, padded_cols), dtype=float)
     quality_padded[sz_border:sz_border + szl[v], sz_border:sz_border + szl[h]] = quality_map
 
-    # placement_map tracks which block-positions have a square placed (1) or are blocked (-1).
-    placement_map = np.zeros((padded_rows, padded_cols), dtype=int)
+    # map_of_squares carries all placement state (quality/state/alerts/link) and is the
+    # only thing the algorithm reasons about; the placement_map built at the end is
+    # derived from it purely for display.
+    map_of_squares = np.empty((padded_rows, padded_cols), dtype=object)
+    map_of_squares_from_quality(map_of_squares, quality_padded)
+
+    # shifts select which sublattice of tiles is active in each of the 4 passes, as
+    # (row parity, col parity) of the tile index - not a pixel offset. Within one pass,
+    # active tiles are 2 tiles (6 core-cells) apart, so their cores and 1-cell borders
+    # never touch, which is what makes the direct state writes in place_square_in_core
+    # conflict-free.
+    shifts = [[0, 0], [0, 1], [1, 0], [1, 1]]
+
+    return binary_image, szl, sz_core, sz_border, num_tiles_v, num_tiles_h, map_of_squares, shifts
+
+
+def test_image_to_squares(quality_map_setup):
+    binary_image, image_noisy_array, image2x2, squares_quality2, r, quality_map = quality_map_setup
+
+    plt.imshow(image_noisy_array, cmap='gray')
+    plt.axis('on')
+    plt.show()
+
+    plt.imshow(squares_quality2, cmap='gray')
+    plt.axis('on')
+    plt.show()
+
+    plt.imshow(r, cmap='gray')
+    plt.axis('on')
+    plt.show()
+
+    plt.imshow(quality_map, cmap='gray')
+    plt.axis('on')
+    plt.show()
+
+def test_square_placement(map_of_squares_setup):
+    binary_image, szl, sz_core, sz_border, num_tiles_v, num_tiles_h, map_of_squares, shifts = map_of_squares_setup
 
     # --- one CUDA call per tile: place best square in each 3x3 core ---
-    for I in range(num_tiles_v):
-        for J in range(num_tiles_h):
-            core_origin = (sz_border + I * sz_core, sz_border + J * sz_core)
-            place_square_in_core(quality_padded, placement_map, core_origin, sz_core, check_placement)
+    # This test only runs a single round over the 4 sublattices - it exercises the
+    # placement primitive, not the repeat-until-covered tiling process (see test_tiling).
+    for k in range(4):
+        for I in range(shifts[k][0], num_tiles_v, 2):
+            for J in range(shifts[k][1], num_tiles_h, 2):
+                core_origin = (sz_border + I * sz_core, sz_border + J * sz_core)
+                place_square_in_core(map_of_squares, core_origin, sz_core)
 
+    placement_map = get_placement_map(map_of_squares)
+    # Crop placement result back to original quality map size.
+    placement = placement_map[sz_border:sz_border + szl[v], sz_border:sz_border + szl[h]]
+
+    plt.imshow(placement + binary_image[:szl[v], :szl[h]], cmap='gray')
+    plt.axis('on')
+    plt.show()
+
+# Not specified yet - see the "Open question" note in do_closure's docstring. The
+# idea is that get_graphs collects the connected groups of alert_chosen items (by
+# graph_id) that form under repeated do_closure calls, and eval_graphs measures how
+# far each one spreads spatially (max_graph_extension) and how many nodes it has
+# (max_num_nodes), so the "closure keeps graphs bounded to ~10 cells" hypothesis can
+# be checked empirically before anyone tries to prove it.
+def test_graph_spread(map_of_squares_setup):
+    binary_image, szl, sz_core, sz_border, num_tiles_v, num_tiles_h, map_of_squares, shifts = map_of_squares_setup
+
+    for k in range(4):
+        for I in range(shifts[k][0], num_tiles_v, 2):
+            for J in range(shifts[k][1], num_tiles_h, 2):
+                core_origin = (sz_border + I * sz_core, sz_border + J * sz_core)
+                place_square_in_core(map_of_squares, core_origin, sz_core)
+
+    graphs = get_graphs(map_of_squares)
+
+    [max_graph_extension, max_num_nodes] = eval_graphs(graphs)
+
+
+def test_tiling(map_of_squares_setup):
+    binary_image, szl, sz_core, sz_border, num_tiles_v, num_tiles_h, map_of_squares, shifts = map_of_squares_setup
+
+    # --- one CUDA call per tile: place best square in each 3x3 core ---
+    # Repeat the 4-sublattice round until the whole plane is covered.
+    while not is_tiling_complete(map_of_squares):
+        for k in range(4):
+            for I in range(shifts[k][0], num_tiles_v, 2):
+                for J in range(shifts[k][1], num_tiles_h, 2):
+                    core_origin = (sz_border + I * sz_core, sz_border + J * sz_core)
+                    place_square_in_core(map_of_squares, core_origin, sz_core)
+
+            do_closure(map_of_squares)
+
+    placement_map = get_placement_map(map_of_squares)
     # Crop placement result back to original quality map size.
     placement = placement_map[sz_border:sz_border + szl[v], sz_border:sz_border + szl[h]]
 
