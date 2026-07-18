@@ -101,6 +101,18 @@ def map_of_squares_from_quality(map_of_squares, quality_padded):
             map_of_squares[i, j] = SquareItem(quality=quality, state=state)
 
 
+def get_placement_map(map_of_squares):
+    """Collapse each cell's .state into a display value: chosen=1, blocked=-1, free=0."""
+    rows, cols = map_of_squares.shape
+    display = np.zeros((rows, cols), dtype=float)
+    for i in range(rows):
+        for j in range(cols):
+            state = map_of_squares[i, j].state
+            if state == StateEnum.chosen:
+                display[i, j] = 1.0
+            elif state == StateEnum.blocked:
+                display[i, j] = -1.0
+    return display
 
 
 class InvalidTilingError(RuntimeError):
