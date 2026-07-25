@@ -139,6 +139,74 @@ def display_map_of_squares_3States(map_of_squares):
     return display
 
 
+# Fixed colour scheme for every display in this module: free=white, chosen=cyan,
+# blocked=gray. Grid lines (drawn separately, e.g. by a grid_on helper) are black.
+# margin=light grey - for the space around an axes' actual cells when its extent is
+# inset within a shared, larger frame (e.g. map_of_squares next to real_space_map).
+FREE_COLOR = (1, 1, 1)
+CHOSEN_COLOR = (0, 1, 1)
+BLOCKED_COLOR = (0.5, 0.5, 0.5)
+MARGIN_COLOR = (0.9, 0.9, 0.9)
+
+# alert_blocked/alert_chosen overlay colours - see colorize_with_alerts. A cell can
+# carry either flag alone or both at once (blue, yellow, green respectively);
+# neither flag falls back to its plain state colour above.
+ALERT_BLOCKED_COLOR = (0, 0, 1)
+ALERT_CHOSEN_COLOR = (1, 1, 0)
+ALERT_BOTH_COLOR = (0, 1, 0)
+
+
+def display_map_of_squares_alerts(map_of_squares):
+    """Collapse each cell's .alert_blocked/.alert_chosen flags into a display value
+    for colorize: both=2, alert_chosen only=1, alert_blocked only=-1, neither=0.
+    Pair with {0: <cell's plain state colour>, -1: ALERT_BLOCKED_COLOR,
+    1: ALERT_CHOSEN_COLOR, 2: ALERT_BOTH_COLOR} so unflagged cells still show their
+    free/chosen/blocked colour underneath.
+    """
+    rows, cols = map_of_squares.shape
+    display = np.zeros((rows, cols), dtype=float)
+    for i in range(rows):
+        for j in range(cols):
+            item = map_of_squares[i, j]
+            if item.alert_blocked and item.alert_chosen:
+                display[i, j] = 2.0
+            elif item.alert_chosen:
+                display[i, j] = 1.0
+            elif item.alert_blocked:
+                display[i, j] = -1.0
+    return display
+
+
+def colorize(display, color_by_value):
+    """Turn a 2D array of values into an (rows, cols, 3) RGB image for imshow, by
+    looking each cell's value up in color_by_value (a {value: (r, g, b)} mapping).
+    Values not present in color_by_value default to white.
+    """
+    rows, cols = display.shape
+    rgb = np.ones((rows, cols, 3))
+    for value, color in color_by_value.items():
+        rgb[display == value] = color
+    return rgb
+
+
+def colorize_with_alerts(map_of_squares):
+    """RGB image for a map_of_squares that shows free/chosen/blocked state
+    (display_map_of_squares_3States's colours) everywhere, except a cell with
+    alert_blocked and/or alert_chosen raised is overridden with
+    ALERT_BLOCKED_COLOR / ALERT_CHOSEN_COLOR / ALERT_BOTH_COLOR instead - so
+    alert flags are visible on top of, rather than instead of, the underlying
+    placement state.
+    """
+    state_display = display_map_of_squares_3States(map_of_squares)
+    rgb = colorize(state_display, {0: FREE_COLOR, 1: CHOSEN_COLOR, -1: BLOCKED_COLOR})
+
+    alert_display = display_map_of_squares_alerts(map_of_squares)
+    rgb[alert_display == -1] = ALERT_BLOCKED_COLOR
+    rgb[alert_display == 1] = ALERT_CHOSEN_COLOR
+    rgb[alert_display == 2] = ALERT_BOTH_COLOR
+    return rgb
+
+
 # link library
 
 
@@ -181,7 +249,7 @@ def build_vertex(map_of_squares, sources, target):
 
 def describe_links(map_of_squares):
     """Return one line per alert_chosen item: its index, link target (or "terminal"
-    if it has none), graph_id, and centrality - the last two shown as "-" while
+    if it has none), patch_id, and centrality - the last two shown as "-" while
     still unassigned (-1), since most hand-built scenarios start out that way.
     """
     rows, cols = map_of_squares.shape
@@ -192,9 +260,9 @@ def describe_links(map_of_squares):
             if not item.alert_chosen:
                 continue
             target = str(item.link) if item.link is not None else "terminal"
-            graph_id = item.graph_id if item.graph_id != -1 else "-"
+            patch_id = item.patch_id if item.patch_id != -1 else "-"
             centrality = item.centrality if item.centrality != -1 else "-"
-            lines.append(f"({i}, {j}) -> {target}   graph_id={graph_id} centrality={centrality}")
+            lines.append(f"({i}, {j}) -> {target}   patch_id={patch_id} centrality={centrality}")
     return lines
 
 
@@ -217,8 +285,8 @@ def display_links(map_of_squares, title=None):
                     color='black' if is_terminal else 'tab:blue',
                     zorder=3)
             label = f"({i},{j})"
-            if item.graph_id != -1:
-                label += f"\ng={item.graph_id}"
+            if item.patch_id != -1:
+                label += f"\np={item.patch_id}"
             if item.centrality != -1:
                 label += f" c={item.centrality}"
             ax.annotate(label, (j, i), textcoords="offset points",

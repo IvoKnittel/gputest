@@ -65,42 +65,23 @@ def link_chosen_items(item, i, j, map_of_squares):
             item.link = neighbour.link
 
 
-def assign_graph_id(item, i, j, rows, map_of_squares):
-    """Give item a graph_id if it doesn't have one yet (using its flattened index
-    i * rows + j), then reconcile it with its linked item's graph_id: if the linked
-    item has none yet, it adopts item's id; if both already have one, the smaller of
-    the two wins and is assigned to both. This way a chain of linked alert_chosen
-    items converges on a single shared graph_id regardless of visit order.
-    """
-    if item.graph_id == -1:
-        item.graph_id = i * rows + j
-    if item.link is not None:
-        linked = map_of_squares[item.link]
-        if linked.graph_id == -1:
-            linked.graph_id = item.graph_id
-        else:
-            shared_id = min(item.graph_id, linked.graph_id)
-            item.graph_id = shared_id
-            linked.graph_id = shared_id
-
-
-def mark_graph_conflicts(item, i, j, map_of_squares):
+def mark_patch_conflicts(item, i, j, map_of_squares):
     """Choosing an alert_chosen item blocks its four diagonal neighbours. If one of
-    them is itself alert_chosen with a different graph_id, choosing either graph would
-    block a member of the other, so the two graphs exclude each other - record each
-    other's graph_id in .conflicts (skipping duplicates). If one of them shares this
-    item's own graph_id, the graph would end up blocking one of its own members, which
+    them is itself alert_chosen with a different patch_id, choosing either patch would
+    block a member of the other, so the two patches exclude each other - record each
+    other's patch_id in .conflicts (skipping duplicates). If one of them shares this
+    item's own patch_id, the patch would end up blocking one of its own members, which
     should never happen - raise InvalidTilingError.
     """
     for di, dj in DIAGONAL_OFFSETS:
         neighbour = map_of_squares[i + di, j + dj]
         if not neighbour.alert_chosen:
             continue
-        if neighbour.graph_id == item.graph_id:
+        if neighbour.patch_id == item.patch_id:
             raise InvalidTilingError(
-                f"graph {item.graph_id} is self-contradictory: item at "
+                f"patch {item.patch_id} is self-contradictory: item at "
                 f"({i}, {j}) would block its own member at ({i + di}, {j + dj})")
-        if neighbour.graph_id not in item.conflicts:
-            item.conflicts.append(neighbour.graph_id)
-        if item.graph_id not in neighbour.conflicts:
-            neighbour.conflicts.append(item.graph_id)
+        if neighbour.patch_id not in item.conflicts:
+            item.conflicts.append(neighbour.patch_id)
+        if item.patch_id not in neighbour.conflicts:
+            neighbour.conflicts.append(item.patch_id)

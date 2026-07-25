@@ -14,9 +14,9 @@ import matplotlib.pyplot as plt
 
 from test_utils import image_generator, display_superposition
 from map_of_squares import (place_square_in_core,
-                             map_of_squares_from_quality,
-                             get_placement_map)
-from closure import do_closure, find_graphs, find_central_graph_items
+                             map_of_squares_from_quality)
+from representation import map_of_squares_to_array  
+from closure import do_closure, find_patches, find_central_patch_items
 v=0
 h=1
 
@@ -65,7 +65,7 @@ def map_of_squares_setup(quality_map_setup):
     quality_padded[sz_border:sz_border + szl[v], sz_border:sz_border + szl[h]] = quality_map
 
     # map_of_squares carries all placement state (quality/state/alerts/link) and is the
-    # only thing the algorithm reasons about; the placement_map built at the end is
+    # only thing the algorithm reasons about; the map_of_squares_to_array built at the end is
     # derived from it purely for display.
     map_of_squares = np.empty((padded_rows, padded_cols), dtype=object)
     map_of_squares_from_quality(map_of_squares, quality_padded)
@@ -111,19 +111,19 @@ def test_square_placement(map_of_squares_setup):
                 core_origin = (sz_border + I * sz_core, sz_border + J * sz_core)
                 place_square_in_core(map_of_squares, core_origin, sz_core)
 
-    placement_map = get_placement_map(map_of_squares)
+    map_of_squares_to_array = map_of_squares_to_array(map_of_squares)
     # Crop placement result back to original quality map size.
-    placement = placement_map[sz_border:sz_border + szl[v], sz_border:sz_border + szl[h]]
+    placement = map_of_squares_to_array[sz_border:sz_border + szl[v], sz_border:sz_border + szl[h]]
 
     plt.imshow(placement + binary_image[:szl[v], :szl[h]], cmap='gray')
     plt.axis('on')
     plt.show()
 
 # Not specified yet - see the "Open question" note in do_closure's docstring. The
-# idea is that get_graphs collects the connected groups of alert_chosen items (by
-# graph_id) that form under repeated do_closure calls, and eval_graphs measures how
+# idea is that get_graphs collects the connected patches of alert_chosen items (by
+# patch_id) that form under repeated do_closure calls, and eval_graphs measures how
 # far each one spreads spatially (max_graph_extension) and how many nodes it has
-# (max_num_nodes), so the "closure keeps graphs bounded to ~10 cells" hypothesis can
+# (max_num_nodes), so the "closure keeps patches bounded to ~10 cells" hypothesis can
 # be checked empirically before anyone tries to prove it.
 def test_graph_spread(map_of_squares_setup):
     binary_image, szl, sz_core, sz_border, num_tiles_v, num_tiles_h, map_of_squares, shifts = map_of_squares_setup
@@ -134,21 +134,32 @@ def test_graph_spread(map_of_squares_setup):
                 core_origin = (sz_border + I * sz_core, sz_border + J * sz_core)
                 place_square_in_core(map_of_squares, core_origin, sz_core)
 
-        find_graphs(map_of_squares)
+        find_patches(map_of_squares)
         found = True
         gen = -1
         insane_number_of_gens = 20
         while found:
             gen = gen + 1
-            found = find_central_graph_items(map_of_squares, gen)
+            found = find_central_patch_items(map_of_squares, gen)
 
             if gen >= insane_number_of_gens:
                 raise RuntimeError("something wrong with the centrality number")
 
         centrality = gen-1
-        # graphs = get_graphs(map_of_squares)
+        # patches = get_graphs(map_of_squares)
 
-    # [max_graph_extension, max_num_nodes] = eval_graphs(graphs)
+    # [max_graph_extension, max_num_nodes] = eval_graphs(patches)
+
+
+# Not specified yet - see the "Alert resolution" note above
+# closure.find_patch_combinations. Once find_patch_combinations / choose_combination
+# / place_closure are fleshed out, this should place one square via
+# place_square_in_core, run find_patches + mark_patch_conflicts to discover whatever
+# alert patches and conflicts that placement created, then call
+# resolve_square_closure(map_of_squares, S) and check that S and exactly the squares
+# belonging to the chosen q ended up StateEnum.chosen - nothing more, nothing less.
+def test_alert_resolution_closure(map_of_squares_setup):
+    pass
 
 
 def test_tiling(map_of_squares_setup):
@@ -165,9 +176,9 @@ def test_tiling(map_of_squares_setup):
 
             do_closure(map_of_squares)
 
-    placement_map = get_placement_map(map_of_squares)
+    map_of_squares_to_array = map_of_squares_to_array(map_of_squares)
     # Crop placement result back to original quality map size.
-    placement = placement_map[sz_border:sz_border + szl[v], sz_border:sz_border + szl[h]]
+    placement = map_of_squares_to_array[sz_border:sz_border + szl[v], sz_border:sz_border + szl[h]]
 
     plt.imshow(placement + binary_image[:szl[v], :szl[h]], cmap='gray')
     plt.axis('on')
