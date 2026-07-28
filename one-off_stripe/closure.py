@@ -1,12 +1,14 @@
+import dataclasses
 import random
 
 import numpy as np
 
 from map_of_squares import StateEnum, InvalidTilingError, CoreItem
 from alert_graphs import (RING_OFFSETS,
+                           DIAGONAL_OFFSETS,
                            set_alert_blocked,
                            set_alert_chosen,
-                           link_chosen_items,
+                           resolve_chosen_link,
                            mark_patch_conflicts as mark_item_patch_conflicts)
 
 
@@ -32,15 +34,18 @@ def find_alerts(map_of_squares):
     """find_patches stage 2 (set_alert_blocked, set_alert_chosen, iter_alert_thirds):
     an "alert" is a 2x2 block with three items blocked and one free. For a free
     item, look at its 8 neighbours (direct + diagonal) in ring order (RING_OFFSETS).
-    Each of the 4 possible 2x2 blocks touching the item corresponds to one run of 3
-    consecutive ring indices (QUADRANT_TRIPLES): two direct neighbours and the
-    diagonal between them. If two ring-adjacent neighbours are blocked *and* the
-    third (completing) corner of that block is still free, blocking this item
-    would turn that block into a real alert - iter_alert_thirds yields exactly
-    those completing corners. When that happens: set_alert_blocked raises
-    .alert_blocked on the item under consideration, and set_alert_chosen raises
-    .alert_chosen on the free completing corner, recording the pairing by pointing
-    the alert_blocked item's .link at the alert_chosen item's index.
+    Each of the 4 possible 2x2 blocks touching the item is that item plus one run of
+    3 consecutive ring indices (QUADRANT_TRIPLES): two direct neighbours and the
+    diagonal corner between them. If two of those three are already blocked and the
+    third is still free, blocking this item would turn that block into a real
+    alert - iter_alert_thirds yields exactly that free third corner. The two
+    already-blocked can be either a ring-adjacent pair (direct+corner, or
+    corner+direct) or the triple's two direct neighbours themselves (leaving the
+    corner between them, though not ring-adjacent to either, as the free third).
+    When that happens: set_alert_blocked raises .alert_blocked on the item under
+    consideration, and set_alert_chosen raises .alert_chosen on the free completing
+    corner, recording the pairing by appending the alert_chosen item's index to the
+    alert_blocked item's .reverse_links.
     """
     rows, cols = map_of_squares.shape
     for i in range(1, rows - 1):
@@ -55,26 +60,182 @@ def find_alerts(map_of_squares):
 
 
 def link_patches(map_of_squares):
-    """find_patches stage 3 (link_chosen_items): choosing an item blocks its 4
-    diagonal neighbours (DIAGONAL_OFFSETS). For every alert_chosen item, if one of
-    those diagonal neighbours is itself alert_blocked (and already has a .link
-    from stage 2), that link is adopted: item.link = neighbour.link. The result is
-    a direct link between two alert_chosen items. Meaning: choosing one of them
-    blocks their shared alert_blocked neighbour, which by construction would
-    immediately create an alert at the *other* linked item - so linked
+    """find_patches stage 3 (resolve_chosen_link): choosing an item blocks its 4
+    diagonal neighbours (DIAGONAL_OFFSETS). Every one of those diagonal neighbours
+    that is itself alert_blocked (and already has a link from stage 2) is adopted:
+    item.reverse_links is *replaced* with all of them (see SquareItem.reverse_links - every one
+    is kept, not just one, but this stage's finding as a whole supersedes
+    whatever reverse_links stage 2 gave the item, not merges with it - see below). Each
+    is a direct link between two alert_chosen items. Meaning: choosing one of
+    them blocks their shared alert_blocked neighbour, which by construction
+    would immediately create an alert at the *other* linked item - so linked
     alert_chosen items must eventually be chosen together.
+
+    Replacing rather than appending matters for an item that is itself
+    alert_blocked (stage 2 gave it its own reverse_links there): those reverse_links describe
+    what would need to be chosen *if this item ended up blocked* - a hypothetical
+    that this stage's finding makes moot, because a qualifying diagonal neighbour
+    means this item is (or is becoming) alert_chosen, i.e. slated to be *chosen*,
+    not blocked. Once that's true, the only reverse_links worth keeping are the forward
+    ones this stage computes - what choosing this item drags in - not the
+    stage-2 ones describing an outcome that's no longer on the table. An item
+    resolve_chosen_link finds nothing for keeps whatever stage 2 gave it
+    untouched.
+
+    This is checked for every free item, not only ones find_alerts already
+    marked alert_chosen - see the "Why closure looks past find_alerts's own
+    alert_chosen items" note on do_closure. An item can have an alert_blocked
+    diagonal neighbour without find_alerts ever having flagged it itself (it
+    doesn't have to be the specific free corner *of that neighbour's own*
+    quadrant - any diagonal neighbour's choice blocks it just the same, see
+    test_4links_situation), and if it does, choosing it is exactly as
+    consequential as choosing an item find_alerts already flagged: it forces the
+    same downstream alert_chosen item(s) to be chosen too. resolve_chosen_link
+    finding at least one link is what makes an item alert_chosen here - not the
+    other way around.
+
+    A diagonal neighbour can itself be an alert_chosen item whose own .reverse_links this
+    same stage is about to replace - so every item's new reverse_links are resolved from
+    the map as it stood at the start of this stage, and only applied once every
+    free item has been resolved (same snapshot-then-apply discipline as
+    find_central_patch_items and find_cycle_patches), keeping the result
+    independent of which item happens to be visited first.
+
+    Each new link also appends the item's own position to that target's
+    .links (see SquareItem.links) - the incoming-side record of
+    the same relationship .reverse_links keeps on the outgoing side. Because .reverse_links is
+    *replaced* here, not merged, the item's *old* reverse_links (from stage 2, or from an
+    earlier call) are retracted first: this item's position is removed from each
+    old target's .links before the new reverse_links - and their .links
+    entries - are installed. Without that retraction, a .links entry can
+    go stale the moment the item it points from gets new reverse_links here, still
+    naming a "forcing" relationship that no longer holds - see
+    remove_blocked_links, which assumes every .links entry it reads is
+    live, not stale.
     """
     rows, cols = map_of_squares.shape
+    updates = []
     for i in range(1, rows - 1):
         for j in range(1, cols - 1):
             item = map_of_squares[i, j]
-            if item.alert_chosen:
-                link_chosen_items(item, i, j, map_of_squares)
+            if item.state != StateEnum.free:
+                continue
+            new_links = resolve_chosen_link(i, j, map_of_squares)
+            if new_links:
+                updates.append((i, j, item, new_links))
+    for i, j, item, new_links in updates:
+        item.alert_chosen = True
+        for old_target in item.reverse_links:
+            old_target_item = map_of_squares[old_target]
+            if (i, j) in old_target_item.links:
+                old_target_item.links.remove((i, j))
+        item.reverse_links = new_links
+        for target_pos in new_links:
+            map_of_squares[target_pos].links.append((i, j))
+
+
+def remove_blocked_links(map_of_squares):
+    """Cleanup stage after link_patches: an item's own .reverse_links can end up naming a
+    target that is actually guaranteed to end up blocked, not chosen - something
+    link_patches itself doesn't catch, since it only ever looks at an item's own
+    diagonal neighbours, never at what its own links already commit it to.
+
+    Concretely (see test_do_closure_steps): (6, 4).reverse_links == [(6, 3)], asserting
+    that choosing (6, 4) also requires choosing (6, 3). But (7, 2) is in
+    (6, 4).links - (7, 2).reverse_links contains (6, 4), so (7, 2) is itself
+    guaranteed to be chosen alongside (6, 4) (that's exactly what a links
+    entry means). Choosing (7, 2) blocks all 4 of its own diagonal neighbours -
+    and (6, 3) is one of them (DIAGONAL_OFFSETS from (7, 2) reach (6, 1), (6, 3),
+    (8, 1), (8, 3)). So (6, 3) is doomed to end up blocked by (7, 2) at the same
+    time (7, 2) forces (6, 4) - making (6, 4)'s own link to (6, 3)
+    self-contradictory: it names a target that can never actually be chosen.
+
+    For every item, and every item Y in its .links (an item guaranteed
+    chosen, since Y is what forced this one), any of Y's diagonal neighbours that
+    also appears in this item's own .reverse_links is removed - Y being chosen is exactly
+    what dooms that neighbour to end up blocked instead of chosen. Removing it
+    also retracts this item's own position from that target's .links, so
+    the target no longer lists a forcer that no longer actually forces it (see
+    SquareItem.links) - the same retraction link_patches does when it
+    replaces an item's reverse_links.
+
+    A single pass, not a fixed point: removing one invalid link here could, in
+    principle, itself change what some other item's links commit it to,
+    invalidating a further link elsewhere. Not chased down further for now - the
+    simplest version, on the assumption it's already enough.
+    """
+    rows, cols = map_of_squares.shape
+    removals = []
+    for i in range(rows):
+        for j in range(cols):
+            item = map_of_squares[i, j]
+            if not item.reverse_links:
+                continue
+            for yi, yj in item.links:
+                for di, dj in DIAGONAL_OFFSETS:
+                    blocked_pos = (yi + di, yj + dj)
+                    if blocked_pos in item.reverse_links:
+                        removals.append((i, j, item, blocked_pos))
+
+    for i, j, item, target in removals:
+        if target in item.reverse_links:
+            item.reverse_links.remove(target)
+            target_item = map_of_squares[target]
+            if (i, j) in target_item.links:
+                target_item.links.remove((i, j))
+
+
+def copy_map_reverse(map_of_squares):
+    """Build a copy of map_of_squares, identical in every field except .reverse_links,
+    which point the other way: for every edge source -> target in the original,
+    the copy has target -> source instead.
+
+    -- Why this exists: the "link out of a cycle" case find_cycle_patches doesn't
+    handle --
+    find_cycle_patches's ring-leader election assumes every node it looks at is
+    either on the ring itself, or a tail feeding into it (see the "why max_ids is
+    a list" note there) - candidates from a tail always eventually lose to a
+    bigger id and die out, never disturbing the ring's own leader election. But a
+    link running the other way - out of a ring, to some node beyond it, rather
+    than into it - isn't one of those two shapes, and isn't handled: nothing
+    currently walks a ring's members looking for one of *their* diagonal
+    neighbours needing a link back out again. Reversing every link turns exactly
+    that case into an ordinary tail (now feeding out of, rather than into, the
+    reversed ring) - at the cost of turning genuine tails into the same
+    unhandled shape instead. Running the same cycle/centrality resolution on both
+    the original and the reversed copy, and comparing the two side by side (see
+    test_do_closure_steps_reverse_check), is a stopgap for surfacing which shape
+    is actually present - not a real fix for handling both at once.
+
+    Every other field (.state, .alert_chosen, .alert_blocked, .quality,
+    .centrality, .patch_id, .max_id) is copied as-is; .conflicts is copied as a
+    new list (not the same list object) so mutating one copy's .conflicts - e.g.
+    during find_central_patch_items - can never leak into the other's. .reverse_links
+    and .links are rebuilt from scratch, reversed relative to the
+    original (see SquareItem.links) - each of the copy's own .reverse_links
+    entries also appends the matching .links entry, the same as every
+    other place .reverse_links gets created.
+    """
+    rows, cols = map_of_squares.shape
+    reversed_map = np.empty((rows, cols), dtype=object)
+    for i in range(rows):
+        for j in range(cols):
+            item = map_of_squares[i, j]
+            reversed_map[i, j] = dataclasses.replace(
+                item, reverse_links=[], links=[], conflicts=list(item.conflicts))
+
+    for i in range(rows):
+        for j in range(cols):
+            for ti, tj in map_of_squares[i, j].reverse_links:
+                reversed_map[ti, tj].reverse_links.append((i, j))
+                reversed_map[i, j].links.append((ti, tj))
+
+    return reversed_map
 
 
 def check_tiling_invariant(map_of_squares):
     """find_patches stage 4: a 2x2 block of blocked items must never happen - the
-    alert_blocked/alert_chosen/link bookkeeping from stages 2 and 3 exists
+    alert_blocked/alert_chosen/reverse_links bookkeeping from stages 2 and 3 exists
     specifically to prevent it. If it happens anyway, raise InvalidTilingError:
     that signals a bug upstream, not a recoverable case.
     """
@@ -105,8 +266,8 @@ def find_patches(map_of_squares):
       .state          StateEnum.free / .chosen / .blocked.
       .alert_blocked  see stage 2 below.
       .alert_chosen   see stage 2 below.
-      .link           (row, col) index of another item this one is paired with, or
-                       None - see stages 2 and 3.
+      .reverse_links  (row, col) index(es) of other item(s) this one is paired
+                      with, or [] - see stages 2 and 3.
     Padding cells start out permanently StateEnum.blocked (quality < 0), so they can
     never be selected and the loops below only need a 1-cell margin of safety.
 
@@ -134,25 +295,35 @@ def find_patches(map_of_squares):
     2. alert_blocked / alert_chosen (set_alert_blocked, set_alert_chosen,
        iter_alert_thirds): an "alert" is a 2x2 block with three items blocked and one
        free. For a free item, look at its 8 neighbours (direct + diagonal) in ring
-       order (RING_OFFSETS). Each of the 4 possible 2x2 blocks touching the item
-       corresponds to one run of 3 consecutive ring indices (QUADRANT_TRIPLES): two
-       direct neighbours and the diagonal between them. If two ring-adjacent
-       neighbours are blocked *and* the third (completing) corner of that block is
-       still free, blocking this item would turn that block into a real alert -
-       iter_alert_thirds yields exactly those completing corners. When that happens:
-       set_alert_blocked raises .alert_blocked on the item under consideration, and
-       set_alert_chosen raises .alert_chosen on the free completing corner, recording
-       the pairing by pointing the alert_blocked item's .link at the alert_chosen
-       item's index.
+       order (RING_OFFSETS). Each of the 4 possible 2x2 blocks touching the item is
+       that item plus one run of 3 consecutive ring indices (QUADRANT_TRIPLES): two
+       direct neighbours and the diagonal corner between them. If two of those three
+       are already blocked and the third is still free, blocking this item would turn
+       that block into a real alert - iter_alert_thirds yields exactly that free
+       third corner. The two already-blocked can be either a ring-adjacent pair
+       (direct+corner, or corner+direct) or the triple's two direct neighbours
+       themselves (leaving the corner between them, though not ring-adjacent to
+       either, as the free third). When that happens: set_alert_blocked raises
+       .alert_blocked on the item under consideration, and set_alert_chosen raises
+       .alert_chosen on the free completing corner, recording the pairing by
+       appending the alert_chosen item's index to the alert_blocked item's .reverse_links.
 
-    3. link_chosen_items: choosing an item blocks its 4 diagonal neighbours
-       (DIAGONAL_OFFSETS). For every alert_chosen item, if one of those diagonal
-       neighbours is itself alert_blocked (and already has a .link from stage 2), that
-       link is adopted: item.link = neighbour.link. The result is a direct link
-       between two alert_chosen items. Meaning: choosing one of them blocks their
-       shared alert_blocked neighbour, which by construction would immediately create
-       an alert at the *other* linked item - so linked alert_chosen items must
-       eventually be chosen together.
+    3. resolve_chosen_link: choosing an item blocks its 4 diagonal neighbours
+       (DIAGONAL_OFFSETS). For every free item, every diagonal neighbour that is
+       itself alert_blocked (and already has a link from stage 2) is adopted: its
+       link(s) are appended to item.reverse_links - not just for items stage 2 already
+       flagged alert_chosen, but for *any* free item with a qualifying diagonal
+       neighbour, which this stage itself then marks alert_chosen (see the "Why
+       link_patches looks past find_alerts's own alert_chosen items" note on
+       do_closure). The result is a direct link between two alert_chosen items.
+       Meaning: choosing one of them blocks their shared alert_blocked neighbour,
+       which by construction would immediately create an alert at the *other*
+       linked item - so linked alert_chosen items must eventually be chosen
+       together. Every item's new reverse_links are resolved from the map as it stood at
+       the start of this stage and only applied once every free item has been
+       resolved (same snapshot-then-apply discipline as find_central_patch_items
+       and find_cycle_patches), since a diagonal neighbour can itself be an
+       alert_chosen item whose own .reverse_links this same stage appends to.
 
     4. Invariant check: a fully-blocked 2x2 block must never occur - stage 2/3's
        alert_blocked/alert_chosen/link bookkeeping exists specifically to prevent it.
@@ -217,16 +388,16 @@ def find_central_patch_items(map_of_squares, gen):
 
     gen counts how many times this function has already been called for
     map_of_squares: call it with gen=0 first, then gen=1, 2, ... on each subsequent
-    call. Requires find_patches to have already run (.alert_chosen/.link must be set).
+    call. Requires find_patches to have already run (.alert_chosen/.reverse_links must be set).
 
     The function runs over all alert_chosen item. If gen=0 and the current item has a linked item
-    with no .link of its own, the linked item is a terminal item, and we set its centrality to 0,
+    with no .reverse_links of its own, the linked item is a terminal item, and we set its centrality to 0,
     and its patch_id to its own flattened index (i * rows + j) - a fresh id for the patch that
     starts there.
 
     Each later call looks at every alert_chosen item that has a link: if the linked
     item's centrality is gen-1, the current item's centrality becomes gen. So
-    centrality ends up measuring distance, in .link hops, from a terminal item
+    centrality ends up measuring distance, in .reverse_links hops, from a terminal item
     outward, one ring further with each generation.
 
     In that same step, patch_id propagates outward alongside centrality: the linked
@@ -237,14 +408,17 @@ def find_central_patch_items(map_of_squares, gen):
         whichever of the two is larger - an arbitrary but consistent tie-break,
       - if it already has the *same* one, this item has already been reached by this
         patch once before - the only way that happens is by looping back around a
-        cycle - so instead of reassigning, the current item's own .link is cut
-        (set to None) to stop the patch from being retraced forever.
+        cycle - so instead of reassigning, the current item's own .reverse_links is cut
+        (cleared to []) to stop the patch from being retraced forever - retracting
+        this item's own position from each old link's .links first (see
+        SquareItem.links), so nothing downstream keeps listing it as a
+        forcer it no longer is.
 
     A merge like that only fixes the patch_id of the item sitting at the merge point
     itself - everything closer to the terminal on the losing patch was already given
     the smaller id in some earlier call, before the merge was even discovered, and
     that's stale now. So on every call, every item that already has a patch_id
-    additionally checks its own .link target: if that target now holds a *bigger*
+    additionally checks its own .reverse_links target: if that target now holds a *bigger*
     patch_id than the item itself has, the item adopts it too. Doing this every call
     lets a corrected id travel back down the losing patch, one hop per call, until
     the whole patch shares the same, single id - which is what makes patch_id
@@ -253,7 +427,7 @@ def find_central_patch_items(map_of_squares, gen):
     already needs for centrality.
 
     .conflicts propagates outward the same way, in that same ongoing check: every
-    item copies over any entry from its .link target's .conflicts that it doesn't
+    item copies over any entry from its .reverse_links target's .conflicts that it doesn't
     already have. mark_patch_conflicts only ever writes a conflict at the specific
     item whose diagonal neighbour caused it, which can be anywhere in the patch, not
     just near the terminal - and unlike patch_id, that can happen at any time, not
@@ -276,20 +450,20 @@ def find_central_patch_items(map_of_squares, gen):
     Returns found: True if this call assigned a centrality, or propagated a
     patch_id or a conflicts correction, to at least one item, False otherwise -
     callers can loop, incrementing gen, until found comes back False to know
-    everything reachable by .link chains has fully converged.
+    everything reachable by .reverse_links chains has fully converged.
     """
     rows, cols = map_of_squares.shape
     found = False
     for i in range(1, rows - 1):
         for j in range(1, cols - 1):
             item = map_of_squares[i, j]
-            if not (item.alert_chosen and item.link is not None):
+            if not (item.alert_chosen and item.reverse_links):
                 continue
-            linked = map_of_squares[item.link]
+            linked = map_of_squares[item.reverse_links[0]]
             if gen == 0:
-                if linked.link is None:
+                if not linked.reverse_links:
                     linked.centrality = 0
-                    li, lj = item.link
+                    li, lj = item.reverse_links[0]
                     linked.patch_id = li * rows + lj
                     found = True
             elif linked.centrality == gen - 1:
@@ -303,16 +477,20 @@ def find_central_patch_items(map_of_squares, gen):
                 elif p != q:
                     item.patch_id = max(p, q)
                 else:
-                    item.link = None
+                    for old_link in item.reverse_links:
+                        old_link_item = map_of_squares[old_link]
+                        if (i, j) in old_link_item.links:
+                            old_link_item.links.remove((i, j))
+                    item.reverse_links = []
 
     corrections = []
     conflict_updates = []
     for i in range(1, rows - 1):
         for j in range(1, cols - 1):
             item = map_of_squares[i, j]
-            if not (item.alert_chosen and item.link is not None):
+            if not (item.alert_chosen and item.reverse_links):
                 continue
-            linked = map_of_squares[item.link]
+            linked = map_of_squares[item.reverse_links[0]]
 
             if item.patch_id != -1 and linked.patch_id > item.patch_id:
                 corrections.append((item, linked.patch_id))
@@ -344,6 +522,21 @@ def find_cycle_patches(map_of_squares, gen):
     flattened index (i * rows + j), the same convention find_central_patch_items
     uses to seed a terminal's patch_id.
 
+    -- Known gap: fan-in candidates can still crowd each other out --
+    More than one item can point at the same target via .reverse_links[0] - fan-in, the
+    same shape link_patches's own .reverse_links exists to support (see
+    test_4links_situation) - so more than one candidate id can arrive at the same
+    node in the same generation (test_do_closure_steps: (2, 2) receives a
+    candidate from each of (2, 4), (3, 3), (4, 2), and (4, 4) at once, but only
+    (3, 3) is actually on (2, 2)'s ring - the other three are tail branches that
+    merely feed into it). max_id is a single scalar, so only one of several
+    simultaneous candidates survives each generation - a list-based fix (one
+    entry per still-live candidate) was tried and works, but was reverted in
+    favour of the copy_map_reverse workaround (see its docstring and
+    test_do_closure_steps_reverse_check) to avoid the extra bookkeeping. This
+    scalar version is still subject to the crowding-out this describes; not
+    fixed here.
+
     All reads below see map_of_squares exactly as it was at the start of this call
     - writes are collected and only applied once every edge has been evaluated, the
     same synchronisation a genuinely parallel pass over the ring would need before
@@ -352,7 +545,7 @@ def find_cycle_patches(map_of_squares, gen):
     edge per call, regardless of iteration order.
 
     For the current item A (a = A's unique_id, at position (i, j)) and its linked
-    item B (B = map_of_squares[A.link]):
+    item B (B = map_of_squares[A.reverse_links[0]]):
 
     - If either A or B already has a real centrality, this pair isn't part of a
       pure ring (it's on a tree or a tadpole's tail) - max_id has no meaning there,
@@ -370,11 +563,14 @@ def find_cycle_patches(map_of_squares, gen):
           full lap of the ring back to where it started. Because every smaller
           candidate gets deleted somewhere along the way (a node with a bigger id
           is always encountered eventually), only the true maximum's own candidate
-          can ever come back around - so this is the leader, confirmed. A.link is
-          removed, opening the ring right here: A becomes an ordinary terminal
+          can ever come back around - so this is the leader, confirmed. A.reverse_links is
+          cleared, opening the ring right here: A becomes an ordinary terminal
           (something points at it, it points at nothing), which is exactly what
           find_central_patch_items needs to seed centrality/patch_id from - once
-          called again after the ring has been opened.
+          called again after the ring has been opened. Clearing A.reverse_links also
+          retracts A's own position from each of those reverse_links' .links
+          (see SquareItem.links), so nothing downstream still lists A as
+          a forcer it no longer is.
         * A.max_id > a: the candidate is still ahead of A - A does not beat it, so
           it moves on: A.max_id is cleared and B.max_id takes the value A had.
     """
@@ -387,9 +583,9 @@ def find_cycle_patches(map_of_squares, gen):
     for i in range(1, rows - 1):
         for j in range(1, cols - 1):
             A = map_of_squares[i, j]
-            if not (A.alert_chosen and A.link is not None):
+            if not (A.alert_chosen and A.reverse_links):
                 continue
-            B = map_of_squares[A.link]
+            B = map_of_squares[A.reverse_links[0]]
 
             if A.centrality != -1 or B.centrality != -1:
                 if A.max_id != -1:
@@ -410,7 +606,7 @@ def find_cycle_patches(map_of_squares, gen):
             if a > A.max_id:
                 resets.append(A)
             elif a == A.max_id:
-                cuts.append(A)
+                cuts.append((i, j, A))
             else:  # A.max_id > a
                 resets.append(A)
                 propagations.append((B, A.max_id))
@@ -419,8 +615,12 @@ def find_cycle_patches(map_of_squares, gen):
         target.max_id = -1
     for target, value in seeds:
         target.max_id = value
-    for target in cuts:
-        target.link = None
+    for i, j, target in cuts:
+        for old_link in target.reverse_links:
+            old_link_item = map_of_squares[old_link]
+            if (i, j) in old_link_item.links:
+                old_link_item.links.remove((i, j))
+        target.reverse_links = []
     for target, value in propagations:
         target.max_id = value
 
@@ -437,9 +637,39 @@ def do_closure(map_of_squares):
     patches, which pairs of patches exclude each other. Both are exposed as standalone
     functions so callers - e.g. test_graph_spread - can invoke find_patches on its own.
 
+    -- Why this exists at all: closure is what keeps an avalanche from building up --
+    The whole point of running closure after every sweep, rather than only ever
+    placing squares and reacting to problems as they're discovered, is to never leave
+    the plane in a metastable state: one that looks fine (no invariant is currently
+    violated) but that some single future placement could detonate into a much larger,
+    unplanned cascade of forced consequences. An alert_blocked item sitting there
+    unresolved is exactly such a stored-up cascade waiting for a trigger - closure's
+    job is to find every one of those triggers now, while they're still cheap to
+    reason about, and fold them into patches that get placed deliberately together,
+    rather than being discovered piecemeal later as an "avalanche" of forced
+    placements the parallel sweep can't safely absorb (see the "Parallel placement"
+    note on find_patches for why that would be a problem: a forced placement
+    triggered mid-avalanche could reach outside the tile a sweep is allowed to
+    touch).
+
+    -- Why link_patches looks past find_alerts's own alert_chosen items --
+    find_alerts only marks an item alert_chosen if it happens to be the literal free
+    corner of one specific 2x2 block. But *any* free item diagonal to an alert_blocked
+    item is an equally real trigger: choosing it blocks that neighbour exactly the same
+    way, regardless of which quadrant originally made the neighbour alert_blocked (see
+    test_4links_situation: an item with four alert_blocked diagonal neighbours, none of
+    which find_alerts ever paired with *it* specifically - so find_alerts alone leaves
+    it looking perfectly free, when choosing it would actually detonate four separate,
+    widely-separated alerts at once). Left undetected, a cell like that is precisely
+    the metastable trap described above. So link_patches (see its docstring)
+    checks every free item, not only ones already flagged alert_chosen - an item
+    with at least one qualifying alert_blocked diagonal neighbour is promoted to
+    alert_chosen right here, in the same pass that discovers the hazard, so its
+    full consequences are captured immediately rather than left to detonate later.
+
     -- Open question: do pivots ever miss a *shorter* branch's conflicts? --
     find_central_patch_items propagates .conflicts strictly from lower centrality to
-    higher, one .link hop at a time - so an item's .conflicts is the union of
+    higher, one .reverse_links hop at a time - so an item's .conflicts is the union of
     everything found on the *one* path from the terminal up to it, not necessarily
     everything found anywhere in the patch. map_patches_to_pivots closes the gap for
     items tied at the patch's own maximum centrality (see its docstring), by merging

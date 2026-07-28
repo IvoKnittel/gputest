@@ -22,15 +22,37 @@ class SquareItem:
     alert_chosen:  raised by a neighbouring tile's placement pass instead of writing
                    .state directly; resolved into real state by do_closure().
     alert_blocked: same as alert_chosen, for the blocked outcome.
-    link:          (row, col) index of another item in map_of_squares this one is
-                    paired with - e.g. an alert_blocked item points at the
-                    alert_chosen item that would resolve its risk - or None.
+    reverse_links: every (row, col) index this item is paired with, in the order
+                    each pairing was made - e.g. an alert_blocked item's .reverse_links
+                    holds the alert_chosen item(s) that would resolve its risk;
+                    empty means unpaired (a "terminal" item, in patch terms). A
+                    list rather than a single value because one item can
+                    legitimately be paired with more than one other at once
+                    (resolve_chosen_link finding several qualifying diagonal
+                    neighbours - see test_4links_situation, where one item has
+                    four) and none of them should be silently discarded in
+                    favour of another. A cut (find_central_patch_items,
+                    find_cycle_patches) clears this back to [], severing the
+                    pairing entirely.
+    links:         every (row, col) index that has ever pointed at this item via
+                    its own .reverse_links - i.e. the incoming side of the same
+                    relationship .reverse_links (the outgoing side) records, filled
+                    alongside it wherever a .reverse_links entry is created (set_alert_chosen,
+                    link_patches, copy_map_reverse, representation.set_link) so it's
+                    always available without needing a separate reversed copy of the
+                    map to look it up. link_patches retracts the old entries here
+                    when it replaces an item's .reverse_links, so a .links entry
+                    stays live rather than describing a forcing relationship that no
+                    longer holds (see link_patches and remove_blocked_links, which
+                    depends on that). A reverse_links cut (find_central_patch_items,
+                    find_cycle_patches) does not retract, though - a stale entry can
+                    still be left behind that way.
     conflicts:     patch_ids of other patches that exclude this item's patch - i.e.
                     choosing a member of this patch would block a member of theirs.
                     Populated by do_closure once patch_id has settled; empty until
                     then.
-    centrality:    distance, in .link hops, from this item's chain to the closest
-                    terminal (no-.link) item of its patch; assigned by
+    centrality:    distance, in .reverse_links hops, from this item's chain to the closest
+                    terminal (no-.reverse_links) item of its patch; assigned by
                     closure.find_central_patch_items one generation at a time, -1
                     while unassigned.
     patch_id:      id of the patch this item belongs to. A "patch" is a connected
@@ -41,7 +63,7 @@ class SquareItem:
                     time by closure.find_central_patch_items; -1 while unassigned.
                     Two patches merging get reconciled to whichever id is larger;
                     a patch looping back on its own id instead has its closing
-                    link cut, so cycles don't propagate forever. (This field used
+                    reverse_links cut, so cycles don't propagate forever. (This field used
                     to be called path_id, back when we still called this concept
                     a "path" rather than a "patch".)
     max_id:        candidate for the largest flattened index among a pure ring's
@@ -51,12 +73,17 @@ class SquareItem:
                     relying on processing order; -1 while unassigned, and reset
                     back to -1 as soon as this item (or its linked item) gets a real
                     centrality, since max_id has no meaning outside a pure ring.
+                    A single scalar, so more than one item pointing at this one via
+                    .reverse_links[0] at once (see .reverse_links above and test_do_closure_steps)
+                    can still have one candidate crowd out another here - see the
+                    "Known gap" note on find_cycle_patches.
     """
     quality: float = -1.0
     state: StateEnum = StateEnum.free
     alert_chosen: bool = False
     alert_blocked: bool = False
-    link: "tuple[int, int] | None" = None
+    reverse_links: list = field(default_factory=list)
+    links: list = field(default_factory=list)
     conflicts: list = field(default_factory=list)
     centrality: int = -1
     patch_id: int = -1

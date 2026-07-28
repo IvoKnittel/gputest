@@ -1,4 +1,4 @@
-"""Tools for hand-building small map_of_squares scenarios and displaying their .link
+"""Tools for hand-building small map_of_squares scenarios and displaying their .reverse_links
 structure directly, instead of only meeting chains/cycles/vertices incidentally
 inside a full placement run.
 
@@ -213,11 +213,14 @@ def colorize_with_alerts(map_of_squares):
 def set_link(map_of_squares, source, target):
     """Mark source as alert_chosen and link it to target; target is also marked
     alert_chosen (a linked-to item is, by construction, always alert_chosen too).
+    target's .links gets source appended too (see SquareItem.links),
+    the incoming-side record of this same pairing.
     """
     si, sj = source
     ti, tj = target
     map_of_squares[si, sj].alert_chosen = True
-    map_of_squares[si, sj].link = target
+    map_of_squares[ti, tj].links.append(source)
+    map_of_squares[si, sj].reverse_links.append(target)
     map_of_squares[ti, tj].alert_chosen = True
 
 
@@ -248,9 +251,11 @@ def build_vertex(map_of_squares, sources, target):
 
 
 def describe_links(map_of_squares):
-    """Return one line per alert_chosen item: its index, link target (or "terminal"
-    if it has none), patch_id, and centrality - the last two shown as "-" while
-    still unassigned (-1), since most hand-built scenarios start out that way.
+    """Return one line per alert_chosen item: its index, link target(s) (or
+    "terminal" if it has none), patch_id, and centrality - the last two shown as
+    "-" while still unassigned (-1), since most hand-built scenarios start out
+    that way. An item linked to more than one target (see SquareItem.reverse_links)
+    lists all of them, comma-separated.
     """
     rows, cols = map_of_squares.shape
     lines = []
@@ -259,7 +264,7 @@ def describe_links(map_of_squares):
             item = map_of_squares[i, j]
             if not item.alert_chosen:
                 continue
-            target = str(item.link) if item.link is not None else "terminal"
+            target = ", ".join(str(t) for t in item.reverse_links) if item.reverse_links else "terminal"
             patch_id = item.patch_id if item.patch_id != -1 else "-"
             centrality = item.centrality if item.centrality != -1 else "-"
             lines.append(f"({i}, {j}) -> {target}   patch_id={patch_id} centrality={centrality}")
@@ -268,8 +273,10 @@ def describe_links(map_of_squares):
 
 def display_links(map_of_squares, title=None):
     """Plot every alert_chosen item as a dot (bigger/darker for a terminal - an
-    item with no .link of its own) and draw an arrow from every linked item to its
-    target, so chains, cycles, and fan-in vertices are visible at a glance.
+    item with no .reverse_links of its own) and draw an arrow from every linked item to
+    each of its targets (see SquareItem.reverse_links), so chains, cycles, fan-in
+    vertices, and an item linked to several targets at once are all visible at a
+    glance.
     """
     rows, cols = map_of_squares.shape
     fig, ax = plt.subplots(figsize=(cols / 2 + 2, rows / 2 + 2))
@@ -279,7 +286,7 @@ def display_links(map_of_squares, title=None):
             item = map_of_squares[i, j]
             if not item.alert_chosen:
                 continue
-            is_terminal = item.link is None
+            is_terminal = not item.reverse_links
             ax.plot(j, i, 'o',
                     markersize=14 if is_terminal else 9,
                     color='black' if is_terminal else 'tab:blue',
@@ -295,8 +302,9 @@ def display_links(map_of_squares, title=None):
     for i in range(rows):
         for j in range(cols):
             item = map_of_squares[i, j]
-            if item.alert_chosen and item.link is not None:
-                ti, tj = item.link
+            if not item.alert_chosen:
+                continue
+            for ti, tj in item.reverse_links:
                 ax.annotate('', xy=(tj, ti), xytext=(j, i),
                             arrowprops=dict(arrowstyle='->', color='tab:blue',
                                              shrinkA=10, shrinkB=10,
