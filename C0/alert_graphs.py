@@ -12,11 +12,24 @@ QUADRANT_TRIPLES = [(7, 0, 1), (1, 2, 3), (3, 4, 5), (5, 6, 7)]
 
 
 def iter_alert_thirds(ring):
-    """Yield the ring index of the free corner completing each real "alert" 2x2 block
-    around the centre: two ring-adjacent blocked neighbours plus a still-free third
-    corner. A blocked ring-adjacent pair whose third corner is already blocked (or
-    chosen) is not an alert - blocking the centre there would not produce a
-    three-blocked-one-free block, so it is skipped.
+    """Yield the ring index of the free corner completing each real seat around the
+    centre - team term for what this module's own identifiers (alert_blocked,
+    alert_chosen, find_alerts) call an "alert": a 2x2 block with three corners
+    blocked and one free, the free one being the seat an alert_chosen item must
+    fill (see docs/rose_cascades_and_holes/README.md). Each QUADRANT_TRIPLE
+    (direct, corner, direct) is one such block; it becomes a seat once the centre
+    joins two already-blocked members of the triple, leaving the third free. Two of
+    the triple's three members already blocked can happen two ways:
+
+    - a ring-adjacent pair, direct+corner or corner+direct, blocked - leaving the
+      triple's other direct neighbour as the free third corner; or
+    - the triple's two direct neighbours both blocked, with the corner between them
+      (ring-non-adjacent to either) still free - leaving that corner as the free
+      third corner.
+
+    A blocked pair whose third corner is already blocked (or chosen) is not a
+    seat - blocking the centre there would not produce a three-blocked-one-free
+    block, so it is skipped.
     """
     for idx in range(8):
         if ring[idx].state != StateEnum.blocked or ring[(idx + 1) % 8].state != StateEnum.blocked:
@@ -26,9 +39,15 @@ def iter_alert_thirds(ring):
         if ring[third_idx].state == StateEnum.free:
             yield third_idx
 
+    for direct_a, corner, direct_b in QUADRANT_TRIPLES:
+        if (ring[direct_a].state == StateEnum.blocked
+                and ring[direct_b].state == StateEnum.blocked
+                and ring[corner].state == StateEnum.free):
+            yield corner
+
 
 def set_alert_blocked(item, ring):
-    """Raise alert_blocked on item if blocking it would risk an "alert" situation:
+    """Raise alert_blocked on item if blocking it would risk completing a seat:
     a 2x2 block with three items blocked and one (this item) free.
     """
     for _ in iter_alert_thirds(ring):
@@ -36,16 +55,54 @@ def set_alert_blocked(item, ring):
         break
 
 
-def set_alert_chosen(item, i, j, ring):
-    """For an item with alert_blocked set, blocking it would put some 2x2 block at
-    three-blocked-one-free - the "alert" situation. Find that block's remaining free
-    corner among ring, raise its alert_chosen flag, and point item.link at its index
-    so the alert_blocked item knows which item resolves its risk.
+def set_alert_chosen(i, j, ring):
+    """For a centre at (i, j) with alert_blocked set, blocking it would put some
+    2x2 block at three-blocked-one-free - a seat. Find that seat's remaining free
+    corner(s) among ring and raise their alert_chosen flag - so far, as before.
+
+    The link this creates is NOT between (i, j) and the corner. (i, j) itself is
+    never going to be *chosen* in this scenario - it's the item at risk of being
+    *blocked*, and .forces means "if this gets chosen, these must too" everywhere
+    else it's read (forced_closure, resolve_chosen_link); "if this gets blocked"
+    is a different event entirely, one (i, j) being chosen has nothing to do with.
+    What actually forces a corner is whichever of (i, j)'s own diagonal neighbours,
+    if chosen, would block (i, j) as a side effect - so it's each free diagonal
+    ring position (not (i, j) itself) that gets linked to the corner(s) it would
+    end up forcing. Any one of (i, j)'s four diagonal neighbours blocks it just the
+    same, regardless of which quadrant originally made (i, j) alert_blocked - so
+    every diagonal ring position that's currently free gets a link to every corner
+    found here, not only the one diagonal neighbour geometrically tied to one
+    specific quadrant. (This is also what makes a later, separate relay stage for
+    "any free item diagonal to an alert_blocked item" unnecessary - see
+    resolve_chosen_link/link_patches.) A diagonal ring position that happens to
+    itself be one of the corners found is excluded from its own link (no self-loop).
+
+    A single centre can have more than one corner (iter_alert_thirds can yield
+    several) - alert_chosen_local (one bool per ring position) collapses a corner
+    independently found twice (see test_do_closure_steps, where (6, 2)'s ring
+    index 1 completes two different triples at once) into a single entry, same
+    as before.
     """
+    alert_chosen_local = [False] * 8
     for third_idx in iter_alert_thirds(ring):
         ring[third_idx].alert_chosen = True
-        di, dj = RING_OFFSETS[third_idx]
-        item.link = (i + di, j + dj)
+        alert_chosen_local[third_idx] = True
+
+    corner_indices = [k for k in range(8) if alert_chosen_local[k]]
+
+    for d_idx in (0, 2, 4, 6):
+        diagonal_item = ring[d_idx]
+        if diagonal_item.state != StateEnum.free:
+            continue
+        di, dj = RING_OFFSETS[d_idx]
+        d_pos = (i + di, j + dj)
+        for c_idx in corner_indices:
+            if c_idx == d_idx:
+                continue
+            ci, cj = RING_OFFSETS[c_idx]
+            c_pos = (i + ci, j + cj)
+            diagonal_item.forces.append(c_pos)
+            ring[c_idx].forced_by.append(d_pos)
 
 
 # The four diagonal neighbours - the ones place_square_in_core blocks when an item is
@@ -53,54 +110,72 @@ def set_alert_chosen(item, i, j, ring):
 DIAGONAL_OFFSETS = [RING_OFFSETS[k] for k in (0, 2, 4, 6)]
 
 
-def link_chosen_items(item, i, j, map_of_squares):
-    """Choosing an alert_chosen item blocks its four diagonal neighbours. If one of
-    them is itself alert_blocked, it already has a link to the alert_chosen item that
-    would resolve its own risk - adopt that link here, so the two alert_chosen items
-    end up linked to each other: choosing one obliges choosing the other too.
+def resolve_chosen_link(i, j, map_of_squares):
+    """Choosing an alert_chosen item blocks its four diagonal neighbours. Every one
+    of them that is itself alert_blocked already has a link to the alert_chosen
+    item that would resolve its own risk - return all such forces (see
+    SquareItem.forces), so the alert_chosen items involved all end up linked to
+    (i, j): choosing it obliges choosing every one of them too.
+
+    Returns every qualifying link, in DIAGONAL_OFFSETS order, as a list (empty if
+    none qualify) - not just the last one found. An item can have as many as
+    four diagonal neighbours that separately qualify (see test_4links_situation,
+    where one item's diagonal neighbours are each alert_blocked with a different
+    link), and every one of those is a real, independent consequence of choosing
+    (i, j) - keeping only one and dropping the rest would silently lose the
+    others' obligations, exactly the "crowding out" .forces exists to avoid.
+
+    Only an individual link entry that points straight back at (i, j) is
+    skipped, not the whole neighbour: that particular entry just reflects a
+    mutual pairing this item and that neighbour already have straight out of
+    find_alerts (each is the other's alert-completing corner for that one
+    quadrant - see iter_alert_thirds), and including it here would only add
+    (i, j) itself, a self-loop that says nothing (choosing this item does not,
+    by itself, oblige choosing itself again). But an alert_blocked neighbour can
+    have more than one entry in its own .forces (it can be at risk from more than
+    one quadrant at once), and any OTHER entry is a genuine, separate obligation
+    that must still be picked up - checking only the neighbour's first link
+    would wrongly discard a real relay just because that neighbour's first
+    entry happens to be the self-loop (see
+    test_link_patches_relays_past_self_loop_candidate in test_representation.py:
+    (2, 7)'s forces are [(1, 6), (1, 8)] - the first is the self-loop back to
+    (1, 6), but the second, to (1, 8), is exactly the relay that must survive).
+
+    A pure read over map_of_squares - does not mutate anything. A diagonal
+    neighbour can itself be an alert_chosen item whose own .forces this same stage
+    is about to append to, so callers must resolve every item's new forces from
+    one consistent snapshot and only apply the results afterwards (see
+    link_patches) - otherwise the answer depends on which item happens to be
+    visited first.
     """
+    forces = []
     for di, dj in DIAGONAL_OFFSETS:
         neighbour = map_of_squares[i + di, j + dj]
-        if neighbour.alert_blocked and neighbour.link is not None:
-            item.link = neighbour.link
+        if not neighbour.alert_blocked:
+            continue
+        for candidate in neighbour.forces:
+            if candidate != (i, j) and candidate not in forces:
+                forces.append(candidate)
+    return forces
 
 
-def assign_graph_id(item, i, j, rows, map_of_squares):
-    """Give item a graph_id if it doesn't have one yet (using its flattened index
-    i * rows + j), then reconcile it with its linked item's graph_id: if the linked
-    item has none yet, it adopts item's id; if both already have one, the smaller of
-    the two wins and is assigned to both. This way a chain of linked alert_chosen
-    items converges on a single shared graph_id regardless of visit order.
-    """
-    if item.graph_id == -1:
-        item.graph_id = i * rows + j
-    if item.link is not None:
-        linked = map_of_squares[item.link]
-        if linked.graph_id == -1:
-            linked.graph_id = item.graph_id
-        else:
-            shared_id = min(item.graph_id, linked.graph_id)
-            item.graph_id = shared_id
-            linked.graph_id = shared_id
-
-
-def mark_graph_conflicts(item, i, j, map_of_squares):
+def mark_patch_conflicts(item, i, j, map_of_squares):
     """Choosing an alert_chosen item blocks its four diagonal neighbours. If one of
-    them is itself alert_chosen with a different graph_id, choosing either graph would
-    block a member of the other, so the two graphs exclude each other - record each
-    other's graph_id in .conflicts (skipping duplicates). If one of them shares this
-    item's own graph_id, the graph would end up blocking one of its own members, which
+    them is itself alert_chosen with a different patch_id, choosing either patch would
+    block a member of the other, so the two patches exclude each other - record each
+    other's patch_id in .conflicts (skipping duplicates). If one of them shares this
+    item's own patch_id, the patch would end up blocking one of its own members, which
     should never happen - raise InvalidTilingError.
     """
     for di, dj in DIAGONAL_OFFSETS:
         neighbour = map_of_squares[i + di, j + dj]
         if not neighbour.alert_chosen:
             continue
-        if neighbour.graph_id == item.graph_id:
+        if neighbour.patch_id == item.patch_id:
             raise InvalidTilingError(
-                f"graph {item.graph_id} is self-contradictory: item at "
+                f"patch {item.patch_id} is self-contradictory: item at "
                 f"({i}, {j}) would block its own member at ({i + di}, {j + dj})")
-        if neighbour.graph_id not in item.conflicts:
-            item.conflicts.append(neighbour.graph_id)
-        if item.graph_id not in neighbour.conflicts:
-            neighbour.conflicts.append(item.graph_id)
+        if neighbour.patch_id not in item.conflicts:
+            item.conflicts.append(neighbour.patch_id)
+        if item.patch_id not in neighbour.conflicts:
+            neighbour.conflicts.append(item.patch_id)

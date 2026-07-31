@@ -1,0 +1,211 @@
+"""Written by Rose (designer role - see .claude/agents/rose.md), for Andi and Ivo.
+
+Terminology note: "seat" = a 2x2 block with 3 corners blocked and 1 free (the free
+one is where an alert_chosen item must sit) - our team's name for what closure.py's
+own docstrings call "an alert" as a noun. The code identifiers themselves
+(alert_blocked/alert_chosen/find_alerts) are unchanged; this is just how we talk
+and write about it.
+
+Purpose: make the seat -> forces/forced_by cascade, and the "why holes can never
+happen" guarantee, visible - not to add new coverage of code paths nobody's hit yet.
+Every scenario here only varies its chosen/blocked *input* (built with
+representation.py's existing builders) and runs it through the existing
+find_alerts/link_patches/resolve_cycles_and_centrality/check_tiling_invariant
+pipeline - no production code changed, no quality/placement involved anywhere,
+matching how the team is scoping this problem right now (map of chosen items in,
+patches and conflicts out).
+
+Each test also renders the scenario to docs/rose_cascades_and_holes/ via
+representation.py's existing display functions, captured with plt.savefig instead
+of plt.show() (this repo has no test currently exercising InvalidTilingError, or any
+rendering output saved to disk - both new here, for the explainer doc these feed).
+
+Run directly with `python3 test_rose_cascades_and_holes.py` (no pytest currently
+installed in the sandbox this was written in) - every test_* function is a plain
+function with plain asserts, no pytest-specific API used, so it also runs fine under
+a real pytest once one's available.
+"""
+
+import os
+
+import matplotlib.pyplot as plt
+
+from map_of_squares import StateEnum, InvalidTilingError
+from representation import (build_map_of_squares,
+                             place_squares,
+                             build_cycle,
+                             describe_links,
+                             real_space_map,
+                             display_closure_step,
+                             display_links)
+from closure import find_alerts, link_patches, resolve_cycles_and_centrality, check_tiling_invariant
+
+IMG_DIR = os.path.join(os.path.dirname(__file__), "docs", "rose_cascades_and_holes")
+os.makedirs(IMG_DIR, exist_ok=True)
+
+
+def save(name):
+    """Save whatever figure display_closure_step/display_links just drew (they call
+    plt.show(), a no-op under the Agg backend, so the figure is still live) and close
+    it, so figures don't pile up across tests.
+    """
+    path = os.path.join(IMG_DIR, name)
+    plt.savefig(path, dpi=110, bbox_inches="tight")
+    plt.close("all")
+    return path
+
+
+def test_one_alert_is_born():
+    """Minimal case: two blocked cells are all it takes for a seat to start forming.
+
+    m[2,2] and m[3,2] blocked (e.g. as a side effect of two squares chosen
+    elsewhere) is enough to threaten the quads on *both* sides of that pair at
+    once: quad {(2,1),(2,2),(3,1),(3,2)} and quad {(2,2),(2,3),(3,2),(3,3)} each
+    now have 2 of their 4 corners blocked - one short of becoming a real seat
+    (3 blocked, 1 free). find_alerts catches both, symmetrically:
+    on the left, (2,1) becomes alert_blocked and promises (3,1) safe; on the right,
+    (2,3) becomes alert_blocked and promises (3,3) safe. Each pair also points back
+    at itself (find_alerts alone can produce these mutual "we're each other's
+    third corner" pairs - see set_alert_chosen's docstring; link_patches, stage 3,
+    is what later skips a link pointing straight back at its own source).
+    """
+    m = build_map_of_squares(7, 7)
+    m[2, 2].state = StateEnum.blocked
+    m[3, 2].state = StateEnum.blocked
+
+    find_alerts(m)
+
+    assert m[2, 1].alert_blocked and m[2, 1].forces == [(3, 1)]
+    assert m[3, 1].alert_chosen and m[3, 1].forced_by == [(2, 1)]
+    assert m[2, 3].alert_blocked and m[2, 3].forces == [(3, 3)]
+    assert m[3, 3].alert_chosen and m[3, 3].forced_by == [(2, 3)]
+
+    display_closure_step(m, "one alert is born - after find_alerts", show_links=True)
+    save("1_one_alert_is_born.png")
+
+
+def test_cascade_propagates_a_second_hop():
+    """The point of link_patches: a promise can chain into another promise.
+
+    Two *separate* blocked pairs are set up far apart, each with its own seat
+    forming: (2,2)+(3,2) (as above, making (3,3) alert_chosen, promised by (2,3))
+    and (5,4)+(5,5) (making (4,4) alert_blocked, promised to (4,5)). These look
+    unrelated - until you notice
+    (3,3) and (4,4) are diagonal neighbours of each other. That means choosing
+    either one would block the other - and each already has its own promise
+    pending. So the obligation doesn't stop where find_alerts left it: link_patches
+    *replaces* each one's forces with the one reaching past its diagonal neighbour
+    to that neighbour's own promise - (3,3) now points to (4,5), and symmetrically
+    (4,4) now points to (2,3) - see link_patches' docstring for exactly why
+    replace, not merge. Both cascade in the same pass (same snapshot-then-apply
+    discipline as everywhere else in closure.py), so neither sees the other's
+    updated forces mid-way. This is the propagation: a cascade is nothing more
+    than this same replacement happening at every item that turns out to be a
+    hidden diagonal neighbour of another pending promise.
+    """
+    m = build_map_of_squares(9, 9)
+    m[2, 2].state = StateEnum.blocked
+    m[3, 2].state = StateEnum.blocked
+    m[5, 4].state = StateEnum.blocked
+    m[5, 5].state = StateEnum.blocked
+
+    find_alerts(m)
+    assert m[3, 3].alert_chosen and m[3, 3].forces == [(2, 3)]   # stage-2 promise
+    assert m[4, 4].alert_blocked and m[4, 4].forces == [(4, 5)]  # its own, separate promise
+
+    display_closure_step(m, "before link_patches - two separate promises", show_links=True)
+    save("2a_before_link_patches.png")
+
+    link_patches(m)
+    # Both ends cascade at once (same snapshot-then-apply pass): (3,3) reaches past
+    # its diagonal neighbour (4,4) to (4,4)'s own promise, (4, 5) - and symmetrically,
+    # (4,4) reaches past (3,3) to (3,3)'s original promise, (2, 3).
+    assert m[3, 3].forces == [(4, 5)]
+    assert m[4, 4].forces == [(2, 3)]
+    assert (3, 3) in m[4, 5].forced_by
+    assert (4, 4) in m[2, 3].forced_by
+
+    display_closure_step(m, "after link_patches - the promise cascaded a hop further", show_links=True)
+    save("2b_after_link_patches.png")
+
+
+def test_a_ring_has_no_safe_end_until_one_is_cut():
+    """A patch with no terminal at all needs a different resolution.
+
+    A chain always bottoms out at a terminal (a forces=[] item) - that's the safe
+    place find_central_patch_items seeds a patch_id/centrality from. Link four
+    items in a closed loop instead (nobody's forces is ever []) and there's
+    nothing to seed from: this shape needs find_cycle_patches's separate
+    ring-leader election first, which finds the single largest flattened index on
+    the ring and cuts its forces there - turning the ring into an ordinary chain
+    with a terminal, that find_central_patch_items can then resolve normally.
+    """
+    m = build_map_of_squares(6, 6)
+    cycle_cells = [(1, 1), (1, 3), (3, 3), (3, 1)]
+    build_cycle(m, cycle_cells)
+
+    assert all(m[c].forces for c in cycle_cells)  # closed loop: nobody is a terminal yet
+
+    display_links(m, title="a ring, before resolution")
+    save("3a_ring_before.png")
+
+    resolve_cycles_and_centrality(m)
+
+    # (3,3) = 3*6+3 = 21 is the largest flattened index on this ring - it's the one
+    # that gets cut open into the patch's terminal.
+    assert m[3, 3].forces == [] and m[3, 3].centrality == 0
+    assert len({m[c].patch_id for c in cycle_cells}) == 1  # still one shared patch
+
+    display_links(m, title="the same ring, opened at its one cut point")
+    save("3b_ring_after.png")
+
+
+def test_what_a_hole_actually_looks_like():
+    """The negative case: what check_tiling_invariant exists to catch, and what it
+    costs in real space if it's ever allowed to happen.
+
+    Force all 4 corners of one seat blocked directly - including the seat itself,
+    which should never end up anything but occupied (bypassing find_alerts
+    entirely - this is deliberately the state the machinery exists to prevent ever
+    being reached; find_alerts run continuously would have promised the would-be
+    seat's occupant safe well before this point). check_tiling_invariant
+    catches it, as it should. But the more concrete cost: real_space_map stamps a
+    chosen anchor's real-space footprint from its own position and its 3
+    neighbours - real-space cell (3, 3) (the shared corner of this exact quad) can
+    only ever be stamped by one of these four specific anchors being chosen. With
+    all four permanently blocked, that one real-space pixel is now unreachable by
+    *anything*, forever - regardless of what gets chosen anywhere else on the
+    grid. That single stuck pixel is the actual, physical meaning of "a hole".
+    """
+    m = build_map_of_squares(6, 6)
+    for pos in [(2, 2), (2, 3), (3, 2), (3, 3)]:
+        m[pos].state = StateEnum.blocked
+
+    try:
+        check_tiling_invariant(m)
+        raised = False
+    except InvalidTilingError:
+        raised = True
+    assert raised, "check_tiling_invariant should have caught the all-blocked quad"
+
+    # Surround it with ordinary, legal placements elsewhere, to show the hole
+    # sitting inside an otherwise normally-tiled area, not just alone on a blank grid.
+    place_squares(m, [(0, 0), (0, 4), (4, 0), (4, 4)])
+
+    rs = real_space_map(m)
+    assert rs[3, 3] == 0  # the trapped pixel: provably unreachable, no matter what
+
+    display_closure_step(m, "a hole: real (3,3) can never be covered", show_real=True)
+    save("4_the_hole.png")
+
+
+if __name__ == "__main__":
+    test_one_alert_is_born()
+    print("test_one_alert_is_born passed")
+    test_cascade_propagates_a_second_hop()
+    print("test_cascade_propagates_a_second_hop passed")
+    test_a_ring_has_no_safe_end_until_one_is_cut()
+    print("test_a_ring_has_no_safe_end_until_one_is_cut passed")
+    test_what_a_hole_actually_looks_like()
+    print("test_what_a_hole_actually_looks_like passed")
+    print("\nall 4 scenarios passed, images written to docs/rose_cascades_and_holes/")

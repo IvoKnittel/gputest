@@ -1,0 +1,201 @@
+"""A catalogue of the algorithmically-distinct .forced_by/.forces shapes that
+can arise once alert_chosen items start pointing at each other - some derived
+from a real grid via find_alerts/link_patches, others hand-built directly with
+the "link library" in representation.py (set_link/build_cycle), so each shape
+can be examined in isolation.
+"""
+
+from representation import (build_map_of_squares,
+                             set_link,
+                             build_cycle,
+                             place_squares,
+                             map_of_squares_from_array,
+                             display_graph_map_and_real_space,
+                             display_closure_step)
+from closure import (find_alerts, 
+                      link_patches, 
+                      remove_blocked_links, 
+                      resolve_cycles_and_centrality)
+
+
+def test_line():
+    """A simple chain, no branching anywhere: every item has exactly one item
+    pointing at it and points at exactly one item itself, in a straight run
+    down to a single terminal - this one, unlike every other test in this
+    file, is derived from a real grid via find_alerts/link_patches rather
+    than hand-built with the link library, so the cascade below is genuinely
+    computed, not merely asserted.
+
+    place_squares's six chosen squares each block two diagonal neighbours;
+    those neighbours pair up three at a time into "2x2 minus one" quadrants:
+    (7, 2)+(8, 3) around (8, 2)/(7, 3), (5, 4)+(6, 5) around (6, 4)/(5, 5),
+    and (3, 6)+(4, 7) around (4, 6)/(3, 7). Each such quadrant is mutual -
+    both its free corners qualify as each other's alert (see
+    test_link_patches_relays_past_self_loop_candidate for the same pairing) -
+    so (8, 2), (6, 4), (4, 6) end up alert_blocked, and (7, 3), (5, 5), (3, 7)
+    become "a new alert_blocked" right back, each pair completing the next.
+    (9, 1) itself is not part of any such pair - it is simply diagonally
+    adjacent to (8, 2), and link_patches picks that up as a real (non-self-loop)
+    link straight to (7, 3), starting the cascade without needing an
+    alert_blocked of its own.
+
+    (Tracing past (3, 7) the same way loops back round through (4, 6), (6, 4),
+    (8, 2) and into (7, 3) again - the mutual pairing above means the cascade
+    does not stop dead at (3, 7), it is just where this test stops looking.)
+    """
+    m = build_map_of_squares(11, 10)
+    positions = [(6, 1), (9, 4), (4, 3), (7, 6), (2, 5), (5, 8)]
+    place_squares(m, positions)
+
+    find_alerts(m)
+    link_patches(m)
+
+    alert_chosen_positions_asserted = [(9, 1), (7, 3), (5, 5), (3, 7)]
+
+    chain = [alert_chosen_positions_asserted[0]]
+    while len(chain) < len(alert_chosen_positions_asserted):
+        chain.append(m[chain[-1]].forces[0])
+    assert chain == alert_chosen_positions_asserted
+
+    assert not m[9, 1].alert_blocked
+    for pos in alert_chosen_positions_asserted[1:]:
+        assert m[pos].alert_blocked
+
+    display_closure_step(m, 'line (simple chain): alert_blocked=blue, alert_chosen=yellow, both=green',
+                          show_links=True, show_real=True)
+
+
+def test_tree_fan_out():
+    """One item points at several others at once - the "several diagonal
+    neighbours qualify at once" shape test_4links_situation and
+    resolve_chosen_link's own docstring describe.
+    """
+    grid = [[0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+            [0, 0, 0, 0, 1, 0, 0, 0, 0, 0],
+            [0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+            [0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+            [0, 1, 0, 0, 0, 0, 0, 1, 0, 0],
+            [0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+            [0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+            [0, 0, 0, 0, 1, 0, 0, 0, 0, 0],
+            [0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+            [0, 0, 0, 0, 0, 0, 0, 0, 0, 0]]
+
+    m = map_of_squares_from_array(grid)
+    find_alerts(m)
+    link_patches(m)
+    remove_blocked_links(m)
+
+    assert m[4, 4].alert_chosen
+    assert set(m[4, 4].forces) == {(2, 2), (2, 6), (6, 2), (6, 6)}
+
+    resolve_cycles_and_centrality(m)
+    display_closure_step(m, 'tree (fan-out)', show_links=True, show_real=True)
+
+def test_reverse_tree_fan_in():
+    """Several items all point at the same one - the fan-in shape behind the
+    crowding bug on find_cycle_patches's max_id: several simultaneous
+    "candidates" arriving at one node in the same generation.
+    """
+
+    grid = [[0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+            [0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+            [0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+            [0, 0, 0, 1, 0, 0, 0, 0, 0, 0],
+            [0, 0, 0, 1, 0, 0, 0, 0, 0, 0],
+            [0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+            [0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+            [0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+            [0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+            [0, 0, 0, 0, 0, 0, 0, 0, 0, 0]]
+
+    m = map_of_squares_from_array(grid)
+    find_alerts(m)
+    link_patches(m)
+    remove_blocked_links(m)
+    resolve_cycles_and_centrality(m)
+
+    assert m[4, 5].alert_chosen
+    assert m[6, 4].alert_chosen and m[6, 4].forces == [(4, 5)]
+    assert m[6, 6].alert_chosen and m[6, 6].forces == [(4, 5)]
+    patch_id = m[4, 5].patch_id
+    assert m[6, 4].patch_id == patch_id and m[6, 6].patch_id == patch_id
+    rows, cols = m.shape
+    patch_members = {(i, j) for i in range(rows) for j in range(cols)
+                      if m[i, j].patch_id == patch_id}
+    assert patch_members == {(4, 5), (6, 4), (6, 6)}
+    assert m[4, 5].centrality == 0
+    assert m[6, 4].centrality == 1 and m[6, 6].centrality == 1
+
+    display_closure_step(m, 'reverse tree (fan-in)', show_links=True, show_real=True)
+
+
+def test_line_into_cycle():
+    """same as test_remove_blocked_links_disagreeing_removals
+    """
+    grid = [[0, 0, 0, 0, 0, 0, 1, 0, 0, 0],
+            [0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+            [0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+            [0, 0, 0, 0, 0, 0, 0, 1, 0, 0],
+            [0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+            [0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+            [0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+            [0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+            [0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+            [0, 0, 0, 0, 0, 0, 0, 0, 0, 0]]
+
+    m = map_of_squares_from_array(grid)
+    find_alerts(m)
+    link_patches(m)
+    remove_blocked_links(m)
+    assert m[1, 4].alert_chosen
+    assert m[1, 6].alert_chosen
+    assert m[1, 8].alert_chosen
+    assert m[1, 4].forced_by == []
+    assert m[1, 4].forces == [(1,6)]
+    assert m[1, 6].forces == [(1,8)]
+    assert (1, 6) in m[1, 8].forced_by
+    assert m[1, 4].patch_id == m[1, 6].patch_id
+    assert m[1, 6].patch_id == m[1, 8].patch_id
+    display_closure_step(m, 'line into cycle', show_links=True, show_real=True)
+
+
+def test_several_lines_into_cycle():
+    """Several separate tails feeding into the same cycle at once - this is
+    test_do_closure_steps's actual (2, 2) situation: (2, 4), (3, 3), (4, 2),
+    (4, 4) all pointing at (2, 2), with only (3, 3) genuinely on the ring. The
+    concrete shape that crowds find_cycle_patches's scalar max_id.
+    """
+    m = build_map_of_squares(8, 12)
+    build_cycle(m, [(3, 4), (3, 8)])
+    set_link(m, (1, 2), (3, 4))
+    set_link(m, (1, 6), (3, 4))
+    set_link(m, (5, 4), (3, 4))
+    set_link(m, (1, 10), (3, 8))
+    display_graph_map_and_real_space(m, title='several lines into cycle')
+
+
+def test_cycle_line_outwards():
+    """A cycle where one member *also* points outward at something beyond the
+    ring - the "link out of a cycle" shape currently our code fails here:
+    ring members and tails-feeding-in are the only
+    two shapes find_cycle_patches accounts for, and a node with both an
+    in-ring link and an outward one at once is neither.
+    """
+    m = build_map_of_squares(8, 10)
+    build_cycle(m, [(3, 4), (3, 7)])
+    set_link(m, (3, 4), (6, 4))
+    display_graph_map_and_real_space(m, title='cycle with a line outwards')
+
+
+def test_line_inwards_cycle_line_outwards():
+    """The fully general combination: one or more tails feeding into a cycle,
+    and a separate line leading back out of it - everything the two simpler
+    "line into cycle" and "cycle line outwards" cases show, at once.
+    """
+    m = build_map_of_squares(10, 12)
+    build_cycle(m, [(4, 5), (4, 8)])
+    set_link(m, (1, 2), (4, 5))
+    set_link(m, (2, 8), (4, 5))
+    set_link(m, (4, 8), (7, 8))
+    display_graph_map_and_real_space(m, title='line inwards - cycle - line outwards')
