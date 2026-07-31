@@ -67,8 +67,21 @@ def test_line():
 
 def test_tree_fan_out():
     """One item points at several others at once - the "several diagonal
-    neighbours qualify at once" shape test_4links_situation and
-    resolve_chosen_link's own docstring describe.
+    neighbours qualify at once" shape that motivated set_alert_chosen linking
+    every free diagonal neighbour of an alert_blocked centre, not just the one
+    geometrically tied to its own quadrant.
+
+    The four chosen squares each independently make one of (4,4)'s own four
+    diagonal ring neighbours - (3,3), (3,5), (5,3), (5,5) - alert_blocked, each
+    with its own separate corner: (2,2), (2,6), (6,2), (6,6) respectively.
+    (4,4) itself, being free and diagonal to all four, is directly linked to
+    all four corners by set_alert_chosen - not because (4,4) is itself promised
+    (nothing obligates *it* to be chosen; forced_by is empty), but because
+    *choosing* it would, as a side effect, block all four alert_blocked
+    neighbours at once. .alert_chosen and .forces are independent facts now:
+    (4,4) genuinely has real forces without being alert_chosen itself - a
+    conditional "if I'm ever chosen, these four follow" available for whoever
+    might place it, not a promise that it will be.
     """
     grid = [[0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
             [0, 0, 0, 0, 1, 0, 0, 0, 0, 0],
@@ -86,8 +99,10 @@ def test_tree_fan_out():
     link_patches(m)
     remove_blocked_links(m)
 
-    assert m[4, 4].alert_chosen
+    assert not m[4, 4].alert_chosen and m[4, 4].forced_by == []
     assert set(m[4, 4].forces) == {(2, 2), (2, 6), (6, 2), (6, 6)}
+    for corner in [(2, 2), (2, 6), (6, 2), (6, 6)]:
+        assert m[corner].alert_chosen and (4, 4) in m[corner].forced_by
 
     resolve_cycles_and_centrality(m)
     display_closure_step(m, 'tree (fan-out)', show_links=True, show_real=True)
@@ -96,23 +111,19 @@ def test_reverse_tree_fan_in():
     """Several items all point at the same one - the fan-in shape behind the
     crowding bug on find_cycle_patches's max_id: several simultaneous
     "candidates" arriving at one node in the same generation.
+
+    Hand-built with the link library (set_link), not derived from a real grid:
+    under the corrected set_alert_chosen, a cell diagonal to several independent
+    alert_blocked centres becomes a *forces* source for each of them without
+    ever being promised (alert_chosen) itself - see test_tree_fan_out, the exact
+    same shape from the opposite side - so a grid input no longer naturally
+    produces a genuine alert_chosen fan-in this way. set_link states the shape
+    directly instead, same as this file's other hand-built scenarios.
     """
+    m = build_map_of_squares(10, 10)
+    set_link(m, (6, 4), (4, 5))
+    set_link(m, (6, 6), (4, 5))
 
-    grid = [[0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
-            [0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
-            [0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
-            [0, 0, 0, 1, 0, 0, 0, 0, 0, 0],
-            [0, 0, 0, 1, 0, 0, 0, 0, 0, 0],
-            [0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
-            [0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
-            [0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
-            [0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
-            [0, 0, 0, 0, 0, 0, 0, 0, 0, 0]]
-
-    m = map_of_squares_from_array(grid)
-    find_alerts(m)
-    link_patches(m)
-    remove_blocked_links(m)
     resolve_cycles_and_centrality(m)
 
     assert m[4, 5].alert_chosen
@@ -132,6 +143,12 @@ def test_reverse_tree_fan_in():
 
 def test_line_into_cycle():
     """same as test_remove_blocked_links_disagreeing_removals
+
+    (1, 4) is a pure diagonal linker into (1, 6) - like (4, 4) in
+    test_tree_fan_out, it has real forces without being alert_chosen itself,
+    since nothing ever flags it as anyone's own corner. (1, 6) and (1, 8), at
+    the far end, are a genuine mutual pair - each is alert_chosen and forces
+    the other - the 2-cycle "into" which this line feeds.
     """
     grid = [[0, 0, 0, 0, 0, 0, 1, 0, 0, 0],
             [0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
@@ -148,7 +165,7 @@ def test_line_into_cycle():
     find_alerts(m)
     link_patches(m)
     remove_blocked_links(m)
-    assert m[1, 4].alert_chosen
+    assert not m[1, 4].alert_chosen
     assert m[1, 6].alert_chosen
     assert m[1, 8].alert_chosen
     assert m[1, 4].forced_by == []

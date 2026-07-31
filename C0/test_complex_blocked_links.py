@@ -2,7 +2,8 @@ import copy
 
 import matplotlib.pyplot as plt
 
-from representation import map_of_squares_from_array, display_closure_step
+from map_of_squares import StateEnum
+from representation import build_map_of_squares, map_of_squares_from_array, display_closure_step
 from closure import find_alerts, link_patches, remove_blocked_links, promote_isolated_free_cells
 from test_representation import resolve_cycles_and_centrality
 
@@ -67,45 +68,42 @@ def test_remove_blocked_links_disagreeing_removals():
     plt.show()
 
 
-def test_link_patches_relays_past_self_loop_candidate():
-    """(1, 6) in this grid ends up with two qualifying diagonal neighbours once
-    find_alerts has run: (2, 7), alert_blocked and linked to a genuinely
-    different item (1, 8); and (2, 5), alert_blocked but linked right back to
-    (1, 6) itself (they're a mutual pair straight out of find_alerts - see the
-    (3, 4)/(4, 4) pair in test_do_closure_steps for the same shape of pairing -
-    that also happen to be diagonal neighbours of each other, which (3, 4)/(4, 4)
-    are not).
+def test_self_loop_excluded_at_the_source():
+    """A centre's own diagonal ring neighbour can, geometrically, also be one of
+    its own corners - e.g. here P=(5,5) has both (4,5) and (5,4) (its ring
+    positions 1 and 7, the two direct neighbours flanking ring position 0)
+    blocked, completing triple (7,0,1) with (4,4) - ring position 0 - as the
+    free corner. But (4,4) is *also* one of P's own four diagonal ring
+    neighbours: the exact same cell plays both roles for the same centre at
+    once. Without excluding that case, set_alert_chosen would link (4,4) to
+    itself - a self-loop that says nothing (choosing (4,4) does not, by itself,
+    oblige choosing itself again).
 
-    Choosing (1, 6) blocks (2, 7); since (2, 7) is alert_blocked, that block
-    would itself create a real alert unless (1, 8) is chosen too - so (1, 6)
-    being alert_chosen genuinely forces (1, 8) to be chosen alongside it, and
-    resolve_chosen_link must link (1, 6) to (1, 8) to record that. The other
-    diagonal neighbour, (2, 5), does not add any such obligation - it only
-    reflects the mutual pairing (1, 6) and (2, 5) already have from find_alerts,
-    so resolve_chosen_link skips it as a self-loop candidate rather than letting
-    it crowd out the real relay to (1, 8).
+    set_alert_chosen's `if c_idx == d_idx: continue` guard excludes only that
+    one entry, not the whole cell: (4,4) still ends up alert_chosen (it is
+    genuinely the seat's occupant), and every one of P's *other* three free
+    diagonal neighbours - (4,6), (6,6), (6,4) - still gets linked to (4,4) as
+    normal, since none of them collide with their own corner. Only (4,4)'s
+    forces, specifically, comes out empty here - not because it has nothing
+    forcing it (three real forced_by entries prove otherwise), but because the
+    one thing it would otherwise force is itself.
     """
-    grid = [[0, 0, 0, 0, 0, 0, 1, 0, 0, 0],
-            [0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
-            [0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
-            [0, 0, 0, 0, 0, 0, 0, 1, 0, 0],
-            [0, 0, 1, 0, 0, 0, 0, 0, 0, 0],
-            [0, 0, 0, 0, 1, 0, 0, 0, 0, 0],
-            [0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
-            [0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
-            [0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
-            [0, 0, 0, 0, 0, 0, 0, 0, 0, 0]]
+    m = build_map_of_squares(9, 9)
+    P = (5, 5)
+    m[4, 5].state = StateEnum.blocked  # P's ring position 1 (direct)
+    m[5, 4].state = StateEnum.blocked  # P's ring position 7 (direct)
 
-    m = map_of_squares_from_array(grid)
-    promote_isolated_free_cells(m)
     find_alerts(m)
 
-    assert m[2, 5].forces == [(1, 6)]
-    assert m[2, 7].forces == [(1, 6), (1, 8)]
+    assert m[P].alert_blocked
+    assert m[4, 4].alert_chosen and m[4, 4].forces == []
+    assert set(m[4, 4].forced_by) == {(4, 6), (6, 6), (6, 4)}
+    assert m[4, 6].forces == [(4, 4)]
+    assert m[6, 6].forces == [(4, 4)]
+    assert m[6, 4].forces == [(4, 4)]
 
     link_patches(m)
+    assert m[4, 4].forces == []  # unchanged - link_patches no longer does anything
 
-    assert m[1, 6].forces == [(1, 8)]
-
-    display_closure_step(m, 'link_patches: (1,6) relays past the (2,5) self-loop to (1,8)',
-                          show_links=True)
+    display_closure_step(m, 'self-loop excluded: (4,4) is linked to by its diagonal '
+                             'neighbours, never by itself', show_links=True)

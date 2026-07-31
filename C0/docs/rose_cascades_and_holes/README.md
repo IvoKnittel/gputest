@@ -39,20 +39,22 @@ formed.
 
 ## 2. How that guarantee cascades
 
-![before link_patches](2a_before_link_patches.png)
-![after link_patches](2b_after_link_patches.png)
+![after find_alerts - already fully cascaded](2a_before_link_patches.png)
+![after link_patches - unchanged](2b_after_link_patches.png)
 
 Two of these seats-in-waiting, built far apart, turn out to sit diagonally next to
 each other. That's the trigger for a second hop: choosing either alert_blocked cell
 would block the *other* one - and that other one already has its own guarantee
-pending, protecting a seat of its own. So each promise gets extended, in the same
-pass, to reach past its neighbour to that neighbour's own promise. Look at the
-arrows before and after: before, two short, separate pairs; after, one continuous
-path threading through the middle. **A cascade is just this same step happening
-wherever it turns out to apply** - nothing more exotic than "does my blocking also
-threaten someone who already made a promise of their own?", asked everywhere at
-once, on a consistent snapshot of the board so it doesn't matter which cell gets
-checked first.
+pending, protecting a seat of its own. So each promise reaches past its neighbour
+to that neighbour's own promise - not as a follow-up correction, but directly:
+set_alert_chosen links every free diagonal neighbour of an alert_blocked cell
+straight to that cell's own seat, in the same single pass that discovers the cell
+is alert_blocked at all, so the two images above are pixel-for-pixel identical -
+there's nothing left for a second stage to add. **A cascade is just this same
+link happening wherever it turns out to apply** - nothing more exotic than "does my
+blocking also threaten someone who already made a promise of their own?", asked
+everywhere at once, on a consistent snapshot of the board so it doesn't matter
+which cell gets checked first.
 
 This is also why closure has to run after every placement round rather than only
 at the end: an unresolved seat-in-waiting sitting on the board is a cascade waiting

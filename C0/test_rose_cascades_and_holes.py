@@ -63,11 +63,17 @@ def test_one_alert_is_born():
     once: quad {(2,1),(2,2),(3,1),(3,2)} and quad {(2,2),(2,3),(3,2),(3,3)} each
     now have 2 of their 4 corners blocked - one short of becoming a real seat
     (3 blocked, 1 free). find_alerts catches both, symmetrically:
-    on the left, (2,1) becomes alert_blocked and promises (3,1) safe; on the right,
-    (2,3) becomes alert_blocked and promises (3,3) safe. Each pair also points back
-    at itself (find_alerts alone can produce these mutual "we're each other's
-    third corner" pairs - see set_alert_chosen's docstring; link_patches, stage 3,
-    is what later skips a link pointing straight back at its own source).
+    on the left, (2,1) becomes alert_blocked, with (3,1) the seat that would
+    need filling; on the right, (2,3) becomes alert_blocked, with (3,3) the
+    seat. Each pair also points back at itself - (2,1) and (3,1) are a genuine
+    mutual pair, each alert_blocked in its own right with the other as its own
+    corner (same for (2,3)/(3,3)) - but the *link* this produces is never
+    (2,1)->(3,1) itself: (2,1) is the item at risk of being *blocked*, not a
+    candidate to be *chosen*, so set_alert_chosen links (2,1)'s own free
+    diagonal neighbours - (1,0), (1,2), (3,0) - to (3,1) directly, not (2,1)
+    (see set_alert_chosen's docstring for why). (2,1) ends up with forces == []
+    itself: nothing forces *it*, since none of its own diagonal neighbours
+    happen to be alert_blocked centres of their own.
     """
     m = build_map_of_squares(7, 7)
     m[2, 2].state = StateEnum.blocked
@@ -75,33 +81,41 @@ def test_one_alert_is_born():
 
     find_alerts(m)
 
-    assert m[2, 1].alert_blocked and m[2, 1].forces == [(3, 1)]
-    assert m[3, 1].alert_chosen and m[3, 1].forced_by == [(2, 1)]
-    assert m[2, 3].alert_blocked and m[2, 3].forces == [(3, 3)]
-    assert m[3, 3].alert_chosen and m[3, 3].forced_by == [(2, 3)]
+    assert m[2, 1].alert_blocked and m[2, 1].forces == []
+    assert m[3, 1].alert_chosen and set(m[3, 1].forced_by) == {(1, 0), (1, 2), (3, 0)}
+    assert m[1, 0].forces == [(3, 1)] and m[1, 2].forces == [(3, 1), (3, 3)] and m[3, 0].forces == [(3, 1)]
+
+    assert m[2, 3].alert_blocked and m[2, 3].forces == []
+    assert m[3, 3].alert_chosen and set(m[3, 3].forced_by) == {(1, 2), (1, 4), (3, 4)}
+    assert m[1, 4].forces == [(3, 3)] and m[3, 4].forces == [(3, 3)]
 
     display_closure_step(m, "one alert is born - after find_alerts", show_links=True)
     save("1_one_alert_is_born.png")
 
 
 def test_cascade_propagates_a_second_hop():
-    """The point of link_patches: a promise can chain into another promise.
+    """A cascade that used to need link_patches now happens in a single pass of
+    find_alerts alone - and link_patches, run afterward, is provably a no-op.
 
-    Two *separate* blocked pairs are set up far apart, each with its own seat
-    forming: (2,2)+(3,2) (as above, making (3,3) alert_chosen, promised by (2,3))
-    and (5,4)+(5,5) (making (4,4) alert_blocked, promised to (4,5)). These look
-    unrelated - until you notice
-    (3,3) and (4,4) are diagonal neighbours of each other. That means choosing
-    either one would block the other - and each already has its own promise
-    pending. So the obligation doesn't stop where find_alerts left it: link_patches
-    *replaces* each one's forces with the one reaching past its diagonal neighbour
-    to that neighbour's own promise - (3,3) now points to (4,5), and symmetrically
-    (4,4) now points to (2,3) - see link_patches' docstring for exactly why
-    replace, not merge. Both cascade in the same pass (same snapshot-then-apply
-    discipline as everywhere else in closure.py), so neither sees the other's
-    updated forces mid-way. This is the propagation: a cascade is nothing more
-    than this same replacement happening at every item that turns out to be a
-    hidden diagonal neighbour of another pending promise.
+    Two *separate* blocked pairs are set up far apart, each threatening its own
+    seat: (2,2)+(3,2) (as in test_one_alert_is_born, threatening a seat at
+    (3,3)/(2,3)) and (5,4)+(5,5) (threatening one at (4,4)/(4,5)). These look
+    unrelated - until you notice (3,3) and (4,4) are diagonal neighbours of each
+    other. set_alert_chosen already accounts for this directly: when (2,2)+(3,2)
+    are processed and (2,3) comes out alert_blocked with corner (3,3), every
+    free diagonal neighbour of (2,3) - including (4,4) - gets linked straight to
+    (3,3); and symmetrically, when (5,4)+(5,5) make (4,4) alert_blocked with
+    corner (4,5), every free diagonal neighbour of *that* - including (3,3) -
+    gets linked straight to (4,5). So (3,3).forces == [(4,5)] and
+    (4,4).forces == [(2,3)] are both already true the instant find_alerts
+    returns - no relay stage needed, no "replace, not merge" required (each
+    only ever gets written once).
+
+    link_patches, called afterward, changes nothing at all - not just for these
+    two cells, every alert_blocked/alert_chosen/.forces/.forced_by value on the
+    whole board is bit-for-bit identical before and after, which is exactly
+    what "link_patches is now a guaranteed no-op" (see resolve_chosen_link's
+    docstring) predicts.
     """
     m = build_map_of_squares(9, 9)
     m[2, 2].state = StateEnum.blocked
@@ -110,22 +124,24 @@ def test_cascade_propagates_a_second_hop():
     m[5, 5].state = StateEnum.blocked
 
     find_alerts(m)
-    assert m[3, 3].alert_chosen and m[3, 3].forces == [(2, 3)]   # stage-2 promise
-    assert m[4, 4].alert_blocked and m[4, 4].forces == [(4, 5)]  # its own, separate promise
-
-    display_closure_step(m, "before link_patches - two separate promises", show_links=True)
-    save("2a_before_link_patches.png")
-
-    link_patches(m)
-    # Both ends cascade at once (same snapshot-then-apply pass): (3,3) reaches past
-    # its diagonal neighbour (4,4) to (4,4)'s own promise, (4, 5) - and symmetrically,
-    # (4,4) reaches past (3,3) to (3,3)'s original promise, (2, 3).
-    assert m[3, 3].forces == [(4, 5)]
-    assert m[4, 4].forces == [(2, 3)]
+    assert m[3, 3].alert_chosen and m[3, 3].forces == [(4, 5)]
+    assert m[4, 4].alert_chosen and m[4, 4].forces == [(2, 3)]
     assert (3, 3) in m[4, 5].forced_by
     assert (4, 4) in m[2, 3].forced_by
 
-    display_closure_step(m, "after link_patches - the promise cascaded a hop further", show_links=True)
+    display_closure_step(m, "after find_alerts - already fully cascaded", show_links=True)
+    save("2a_before_link_patches.png")
+
+    before = {(i, j): (m[i, j].alert_blocked, m[i, j].alert_chosen,
+                        list(m[i, j].forces), list(m[i, j].forced_by))
+              for i in range(9) for j in range(9)}
+    link_patches(m)
+    after = {(i, j): (m[i, j].alert_blocked, m[i, j].alert_chosen,
+                       list(m[i, j].forces), list(m[i, j].forced_by))
+             for i in range(9) for j in range(9)}
+    assert before == after  # link_patches: a guaranteed no-op now, board-wide
+
+    display_closure_step(m, "after link_patches - unchanged, board-wide", show_links=True)
     save("2b_after_link_patches.png")
 
 

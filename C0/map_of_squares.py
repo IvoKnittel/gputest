@@ -22,27 +22,30 @@ class SquareItem:
     alert_chosen:  raised by a neighbouring tile's placement pass instead of writing
                    .state directly; resolved into real state by do_closure().
     alert_blocked: same as alert_chosen, for the blocked outcome.
-    forces:     every (row, col) index this item forces - i.e. an alert_blocked
-                item's .forces holds the alert_chosen item(s) that would resolve
-                its risk - in the order each pairing was made; empty means this
-                item forces nothing (a "terminal" item, in patch terms). A list
-                rather than a single value because one item can legitimately
-                force more than one other at once (resolve_chosen_link finding
-                several qualifying diagonal neighbours - see test_4links_situation,
-                where one item has four) and none of them should be silently
-                discarded in favour of another. A cut (find_central_patch_items,
+    forces:     every (row, col) index this item forces - i.e. what must also be
+                chosen if this item is chosen - in the order each link was made;
+                empty means this item forces nothing (a "terminal" item, in patch
+                terms). Set by alert_graphs.set_alert_chosen: for an alert_blocked
+                centre P, every one of P's own free diagonal neighbours (not P
+                itself - P is the item at risk of being *blocked*, never the one
+                being chosen here) gets P's corner(s) appended to its own .forces.
+                A list rather than a single value because one item can legitimately
+                force more than one other at once - it can be a free diagonal
+                neighbour of several different alert_blocked centres at once (see
+                test_complex_graphs.test_tree_fan_out), or a single centre can have
+                more than one corner of its own - and none of them should be
+                silently discarded in favour of another. A cut (find_central_patch_items,
                 find_cycle_patches) clears this back to [], severing the pairing
                 entirely.
     forced_by:  every (row, col) index that has ever forced this item - i.e. the
                 other side of the same relationship .forces records, filled
                 alongside it wherever a .forces entry is created (set_alert_chosen,
-                link_patches, copy_map_reverse, representation.set_link) so it's
-                always available without needing a separate reversed copy of the
-                map to look it up. link_patches retracts the old entries here
-                when it replaces an item's .forces, so a .forced_by entry
-                stays live rather than describing a forcing relationship that no
-                longer holds (see link_patches and remove_blocked_links, which
-                depends on that). A .forces cut (find_central_patch_items,
+                copy_map_reverse, representation.set_link) so it's always available
+                without needing a separate reversed copy of the map to look it up.
+                remove_blocked_links retracts an entry here when it prunes the
+                matching .forces link it turns out to be doomed, so a .forced_by
+                entry stays live rather than describing a forcing relationship
+                that no longer holds. A .forces cut (find_central_patch_items,
                 find_cycle_patches) does not retract, though - a stale entry can
                 still be left behind that way.
     conflicts:  patch_ids of other patches that exclude this item's patch - i.e.

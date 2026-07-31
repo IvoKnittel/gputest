@@ -111,52 +111,36 @@ DIAGONAL_OFFSETS = [RING_OFFSETS[k] for k in (0, 2, 4, 6)]
 
 
 def resolve_chosen_link(i, j, map_of_squares):
-    """Choosing an alert_chosen item blocks its four diagonal neighbours. Every one
-    of them that is itself alert_blocked already has a link to the alert_chosen
-    item that would resolve its own risk - return all such forces (see
-    SquareItem.forces), so the alert_chosen items involved all end up linked to
-    (i, j): choosing it obliges choosing every one of them too.
+    """Formerly stage 3's relay: for every diagonal neighbour of (i, j) that is
+    alert_blocked, read its .forces to find what choosing (i, j) - which blocks
+    that neighbour - would additionally oblige.
 
-    Returns every qualifying link, in DIAGONAL_OFFSETS order, as a list (empty if
-    none qualify) - not just the last one found. An item can have as many as
-    four diagonal neighbours that separately qualify (see test_4links_situation,
-    where one item's diagonal neighbours are each alert_blocked with a different
-    link), and every one of those is a real, independent consequence of choosing
-    (i, j) - keeping only one and dropping the rest would silently lose the
-    others' obligations, exactly the "crowding out" .forces exists to avoid.
+    That premise no longer holds now that set_alert_chosen links every free
+    diagonal neighbour of an alert_blocked centre directly, not the centre
+    itself (see its docstring): an alert_blocked neighbour's own .forces no
+    longer describes "what to do if I get blocked" - it describes whatever
+    *that neighbour* separately forces as someone else's diagonal linker, which
+    has nothing to do with (i, j)'s own risk. Reading it here doesn't find a
+    deeper relay anymore, it finds an unrelated value and wrongly overwrites
+    (i, j)'s own already-correct forces with it (verified directly: in the
+    (3,3)/(4,4) cascade from test_rose_cascades_and_holes.py, set_alert_chosen
+    alone already gives (3,3).forces == [(4,5)] - correct - and the old version
+    of this function replaced it with [(2,3)], which (3,3) has no actual path
+    to).
 
-    Only an individual link entry that points straight back at (i, j) is
-    skipped, not the whole neighbour: that particular entry just reflects a
-    mutual pairing this item and that neighbour already have straight out of
-    find_alerts (each is the other's alert-completing corner for that one
-    quadrant - see iter_alert_thirds), and including it here would only add
-    (i, j) itself, a self-loop that says nothing (choosing this item does not,
-    by itself, oblige choosing itself again). But an alert_blocked neighbour can
-    have more than one entry in its own .forces (it can be at risk from more than
-    one quadrant at once), and any OTHER entry is a genuine, separate obligation
-    that must still be picked up - checking only the neighbour's first link
-    would wrongly discard a real relay just because that neighbour's first
-    entry happens to be the self-loop (see
-    test_link_patches_relays_past_self_loop_candidate in test_representation.py:
-    (2, 7)'s forces are [(1, 6), (1, 8)] - the first is the self-loop back to
-    (1, 6), but the second, to (1, 8), is exactly the relay that must survive).
+    Whatever this function used to contribute - including the exact case it was
+    built for (test_4links_situation: an item with several alert_blocked
+    diagonal neighbours, none of which happens to be the literal corner of any
+    one of their own quadrants) - set_alert_chosen now establishes directly and
+    correctly in a single pass, and closure.forced_closure already provides the
+    transitive, multi-hop walk over that corrected data - a relay stage on top
+    of it is not just unneeded, it actively corrupts correct values wherever it
+    used to fire. So there is nothing left for this stage to find.
 
-    A pure read over map_of_squares - does not mutate anything. A diagonal
-    neighbour can itself be an alert_chosen item whose own .forces this same stage
-    is about to append to, so callers must resolve every item's new forces from
-    one consistent snapshot and only apply the results afterwards (see
-    link_patches) - otherwise the answer depends on which item happens to be
-    visited first.
+    Kept as a named no-op, rather than deleted, so link_patches and every
+    caller of it keep working unchanged - it is now guaranteed to return [].
     """
-    forces = []
-    for di, dj in DIAGONAL_OFFSETS:
-        neighbour = map_of_squares[i + di, j + dj]
-        if not neighbour.alert_blocked:
-            continue
-        for candidate in neighbour.forces:
-            if candidate != (i, j) and candidate not in forces:
-                forces.append(candidate)
-    return forces
+    return []
 
 
 def mark_patch_conflicts(item, i, j, map_of_squares):

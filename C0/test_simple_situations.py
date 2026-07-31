@@ -13,9 +13,7 @@ from closure import (promote_isolated_free_cells,
                       find_alerts,
                       link_patches,
                       remove_blocked_links,
-                      check_tiling_invariant,
-                      resolve_cycles_and_centrality,
-                      mark_patch_conflicts)
+                      check_tiling_invariant)
 
 
 def test_rectangle():

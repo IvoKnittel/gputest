@@ -62,58 +62,16 @@ def find_alerts(map_of_squares):
 
 
 def link_patches(map_of_squares):
-    """find_patches stage 3 (resolve_chosen_link): choosing an item blocks its 4
-    diagonal neighbours (DIAGONAL_OFFSETS). Every one of those diagonal neighbours
-    that is itself alert_blocked (and already has a link from stage 2) is adopted:
-    item.forces is *replaced* with all of them (see SquareItem.forces - every one
-    is kept, not just one, but this stage's finding as a whole supersedes
-    whatever forces stage 2 gave the item, not merges with it - see below). Each
-    is a direct link between two alert_chosen items. Meaning: choosing one of
-    them blocks their shared alert_blocked neighbour, which by construction
-    would immediately complete a seat at the *other* linked item - so linked
-    alert_chosen items must eventually be chosen together.
-
-    Replacing rather than appending matters for an item that is itself
-    alert_blocked (stage 2 gave it its own forces there): those forces describe
-    what would need to be chosen *if this item ended up blocked* - a hypothetical
-    that this stage's finding makes moot, because a qualifying diagonal neighbour
-    means this item is (or is becoming) alert_chosen, i.e. slated to be *chosen*,
-    not blocked. Once that's true, the only forces worth keeping are the forward
-    ones this stage computes - what choosing this item drags in - not the
-    stage-2 ones describing an outcome that's no longer on the table. An item
-    resolve_chosen_link finds nothing for keeps whatever stage 2 gave it
-    untouched.
-
-    This is checked for every free item, not only ones find_alerts already
-    marked alert_chosen - see the "Why closure looks past find_alerts's own
-    alert_chosen items" note on do_closure. An item can have an alert_blocked
-    diagonal neighbour without find_alerts ever having flagged it itself (it
-    doesn't have to be the specific free corner *of that neighbour's own*
-    quadrant - any diagonal neighbour's choice blocks it just the same, see
-    test_4links_situation), and if it does, choosing it is exactly as
-    consequential as choosing an item find_alerts already flagged: it forces the
-    same downstream alert_chosen item(s) to be chosen too. resolve_chosen_link
-    finding at least one link is what makes an item alert_chosen here - not the
-    other way around.
-
-    A diagonal neighbour can itself be an alert_chosen item whose own .forces this
-    same stage is about to replace - so every item's new forces are resolved from
-    the map as it stood at the start of this stage, and only applied once every
-    free item has been resolved (same snapshot-then-apply discipline as
-    find_central_patch_items and find_cycle_patches), keeping the result
-    independent of which item happens to be visited first.
-
-    Each new link also appends the item's own position to that target's
-    .forced_by (see SquareItem.forced_by) - the other side of the same
-    relationship .forces records. Because .forces is
-    *replaced* here, not merged, the item's *old* forces (from stage 2, or from an
-    earlier call) are retracted first: this item's position is removed from each
-    old target's .forced_by before the new forces - and their .forced_by
-    entries - are installed. Without that retraction, a .forced_by entry can
-    go stale the moment the item it points from gets new forces here, still
-    naming a "forcing" relationship that no longer holds - see
-    remove_blocked_links, which assumes every .forced_by entry it reads is
-    live, not stale.
+    """find_patches stage 3 - was: adopt, for every free item, whatever
+    resolve_chosen_link's diagonal-neighbour relay found, replacing that item's
+    forces with it. resolve_chosen_link is now a guaranteed no-op (see its
+    docstring: set_alert_chosen already links every free diagonal neighbour of
+    an alert_blocked centre directly, so there is nothing left for a relay stage
+    to find - the relay this function used to perform is not merely redundant,
+    it actively overwrote correct stage-2 forces with wrong ones wherever it
+    used to fire). So this function no longer changes anything either; it is
+    kept, rather than removed, purely so every existing caller (find_patches,
+    every test's pipeline) keeps working unchanged.
     """
     rows, cols = map_of_squares.shape
     updates = []
@@ -720,20 +678,22 @@ def do_closure(map_of_squares):
     triggered mid-avalanche could reach outside the tile a sweep is allowed to
     touch).
 
-    -- Why link_patches looks past find_alerts's own alert_chosen items --
-    find_alerts only marks an item alert_chosen if it happens to be the literal free
-    corner of one specific 2x2 block. But *any* free item diagonal to an alert_blocked
-    item is an equally real trigger: choosing it blocks that neighbour exactly the same
-    way, regardless of which quadrant originally made the neighbour alert_blocked (see
-    test_4links_situation: an item with four alert_blocked diagonal neighbours, none of
-    which find_alerts ever paired with *it* specifically - so find_alerts alone leaves
-    it looking perfectly free, when choosing it would actually complete four separate,
-    widely-separated seats at once). Left undetected, a cell like that is precisely
-    the metastable trap described above. So link_patches (see its docstring)
-    checks every free item, not only ones already flagged alert_chosen - an item
-    with at least one qualifying alert_blocked diagonal neighbour is promoted to
-    alert_chosen right here, in the same pass that discovers the hazard, so its
-    full consequences are captured immediately rather than left to detonate later.
+    -- Every free item diagonal to an alert_blocked item is a real trigger --
+    *Any* free item diagonal to an alert_blocked item is a real trigger, not only
+    the literal free corner of the one specific 2x2 block that made that item
+    alert_blocked in the first place: choosing it blocks that neighbour exactly the
+    same way, regardless of which quadrant originally made the neighbour
+    alert_blocked (see test_4links_situation: an item with four alert_blocked
+    diagonal neighbours, none of which happens to be the literal corner of any one
+    of their own quadrants). Left undetected, a cell like that is precisely the
+    metastable trap described above. set_alert_chosen (see its docstring) is what
+    catches this - every free diagonal neighbour of an alert_blocked centre is
+    linked directly, in the same single pass that discovers the centre is
+    alert_blocked, so a cell's full consequences are captured immediately rather
+    than left to detonate later. (This used to be link_patches's job, checking
+    every free item after the fact for a diagonal alert_blocked neighbour it had
+    missed - now unnecessary, since set_alert_chosen no longer misses it in the
+    first place; see resolve_chosen_link's docstring.)
 
     -- Open question: do pivots ever miss a *shorter* branch's conflicts? --
     find_central_patch_items propagates .conflicts strictly from lower centrality to
