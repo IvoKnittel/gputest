@@ -1,11 +1,12 @@
 # Cascades, and why holes can't happen
 
-Written by Rose, for Andi and Ivo. Companion to `test_rose_cascades_and_holes.py`
-(repo root) - run it with `python3 test_rose_cascades_and_holes.py` to regenerate
-these images and re-check every claim below against the actual code. All four
-scenarios build a chosen/blocked map directly (no quality, no placement pipeline
-involved) and run it through the existing `find_alerts` / `link_patches` /
-`resolve_cycles_and_centrality` / `check_tiling_invariant` functions in closure.py.
+Written by Rose (and Wolfgang for section 5), for Andi and Ivo. Companion to
+`test_rose_cascades_and_holes.py` and `test_rose_wolfgang_hole_motivation.py`
+(repo root) - run either with plain `python3` to regenerate these images and
+re-check every claim below against the actual code. Sections 1-4 build a
+chosen/blocked map directly and run it through `find_alerts` / `link_patches` /
+`resolve_cycles_and_centrality` / `check_tiling_invariant`; section 5 also uses
+`forced_closure` / `reset_alert_bookkeeping`, both new tonight.
 
 ## The vocabulary, in pictures
 
@@ -132,17 +133,42 @@ correctly written down and then quietly broken by the very next placement.
 
 That's the real shape of what the seat mechanism needs in order to actually work:
 not just *detecting* a seat and promising its occupant, but something that also
-*protects* that promise against every placement that comes after it - which is
-exactly what closure.py's still-unimplemented `place_closure`/
-`resolve_square_closure` would need to do. Recording a promise and enforcing it
-are two different things, and right now only the first one exists.
+*protects* that promise against every placement that comes after it. **Update,
+same night:** this motivated `closure.forced_closure` - after each manual
+placement, walk that item's own `.forces` chain (transitively) and place
+everything it reaches too, right then, instead of leaving it as a passive record.
+Re-running this exact scenario with `forced_closure` wired in: by the time `(5,6)`
+would be placed, it *already* carries `.forces == {(3,5), (5,5)}` from the
+previous round's closure pass - chasing that chain places `(5,5)` (and `(3,5)`) as
+genuinely `chosen`, on the spot, before the danger ever completes. The would-be
+fourth placement, `(6,6)`, is then rejected outright by `place_squares`'s own
+diagonal-overlap check, because `(5,5)` is no longer merely promised - it's
+already a real chosen square. Recording and enforcing used to be two different
+things where only the first existed; now the second exists too, for this
+scenario. See `test_rose_wolfgang_hole_motivation.py` for the full run.
+
+![round 3: (5,6) placed, its forces chased, (5,5) chosen on the spot](7_round_3.png)
+![round 4: (6,6) rejected outright - (5,5) is no longer just promised](7_round_4_rejected.png)
+
+Not a general guarantee, though, and the test's own docstring says so directly:
+which square gets placed in what order is still an external choice, made by
+whatever calls `place_squares` - a *different* order could still let some
+unrelated placement block a promise before that promise's own `.forces` chain
+ever gets a turn to fire. What's shown here is narrower but real: for this
+scenario, the step that was missing - actually acting on what closure already
+knew - would have caught the problem before it happened, not after. Whether that
+holds for *every* order, on *every* board, is Wolfgang's now more precisely
+scoped open question (3b in his notes), not something this page settles.
 
 ## One honest caveat
 
-The hole example here is hand-forced - it skips the placement process entirely to
-show the forbidden end-state directly. It does *not* by itself prove the real
-incremental algorithm (placement rounds interleaved with closure) can never reach
-this state on its own; that's Wolfgang's open question (see his notes: does
-completeness - no permanent holes - actually hold for every input, not just the
-ones tried so far). What this page shows is the *mechanism* the code uses to try to
-prevent it, and exactly how it's supposed to work when it does.
+Section 4's hole example is hand-forced - it skips the placement process entirely
+to show the forbidden end-state directly. Section 5 is not hand-forced, and even
+with `forced_closure` now acting on recorded promises, it does *not* by itself
+prove the real incremental algorithm can never reach a hole on its own for *every*
+placement order - only that it didn't for this one, once enforcement was added.
+That's Wolfgang's open question now (3a: can two recorded promises ever
+contradict each other; 3b: does enforcement hold for every order, not just the
+one tried here - see his notes). What this page shows is the *mechanism* the code
+uses to try to prevent a hole, and exactly how much further it reaches tonight
+than it did this morning.

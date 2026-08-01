@@ -101,8 +101,8 @@ def set_alert_chosen(i, j, ring):
                 continue
             ci, cj = RING_OFFSETS[c_idx]
             c_pos = (i + ci, j + cj)
-            diagonal_item.forces.append(c_pos)
-            ring[c_idx].forced_by.append(d_pos)
+            diagonal_item.forces.add(c_pos)
+            ring[c_idx].forced_by.add(d_pos)
 
 
 # The four diagonal neighbours - the ones place_square_in_core blocks when an item is
@@ -124,8 +124,8 @@ def resolve_chosen_link(i, j, map_of_squares):
     deeper relay anymore, it finds an unrelated value and wrongly overwrites
     (i, j)'s own already-correct forces with it (verified directly: in the
     (3,3)/(4,4) cascade from test_rose_cascades_and_holes.py, set_alert_chosen
-    alone already gives (3,3).forces == [(4,5)] - correct - and the old version
-    of this function replaced it with [(2,3)], which (3,3) has no actual path
+    alone already gives (3,3).forces == {(4,5)} - correct - and the old version
+    of this function replaced it with {(2,3)}, which (3,3) has no actual path
     to).
 
     Whatever this function used to contribute - including the exact case it was
@@ -138,9 +138,10 @@ def resolve_chosen_link(i, j, map_of_squares):
     used to fire. So there is nothing left for this stage to find.
 
     Kept as a named no-op, rather than deleted, so link_patches and every
-    caller of it keep working unchanged - it is now guaranteed to return [].
+    caller of it keep working unchanged - it is now guaranteed to return an
+    empty set.
     """
-    return []
+    return set()
 
 
 def mark_patch_conflicts(item, i, j, map_of_squares):
@@ -159,7 +160,5 @@ def mark_patch_conflicts(item, i, j, map_of_squares):
             raise InvalidTilingError(
                 f"patch {item.patch_id} is self-contradictory: item at "
                 f"({i}, {j}) would block its own member at ({i + di}, {j + dj})")
-        if neighbour.patch_id not in item.conflicts:
-            item.conflicts.append(neighbour.patch_id)
-        if item.patch_id not in neighbour.conflicts:
-            neighbour.conflicts.append(item.patch_id)
+        item.conflicts.add(neighbour.patch_id)
+        neighbour.conflicts.add(item.patch_id)

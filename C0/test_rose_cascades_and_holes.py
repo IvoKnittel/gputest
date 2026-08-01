@@ -71,7 +71,7 @@ def test_one_alert_is_born():
     (2,1)->(3,1) itself: (2,1) is the item at risk of being *blocked*, not a
     candidate to be *chosen*, so set_alert_chosen links (2,1)'s own free
     diagonal neighbours - (1,0), (1,2), (3,0) - to (3,1) directly, not (2,1)
-    (see set_alert_chosen's docstring for why). (2,1) ends up with forces == []
+    (see set_alert_chosen's docstring for why). (2,1) ends up with forces == set()
     itself: nothing forces *it*, since none of its own diagonal neighbours
     happen to be alert_blocked centres of their own.
     """
@@ -81,13 +81,13 @@ def test_one_alert_is_born():
 
     find_alerts(m)
 
-    assert m[2, 1].alert_blocked and m[2, 1].forces == []
-    assert m[3, 1].alert_chosen and set(m[3, 1].forced_by) == {(1, 0), (1, 2), (3, 0)}
-    assert m[1, 0].forces == [(3, 1)] and m[1, 2].forces == [(3, 1), (3, 3)] and m[3, 0].forces == [(3, 1)]
+    assert m[2, 1].alert_blocked and m[2, 1].forces == set()
+    assert m[3, 1].alert_chosen and m[3, 1].forced_by == {(1, 0), (1, 2), (3, 0)}
+    assert m[1, 0].forces == {(3, 1)} and m[1, 2].forces == {(3, 1), (3, 3)} and m[3, 0].forces == {(3, 1)}
 
-    assert m[2, 3].alert_blocked and m[2, 3].forces == []
-    assert m[3, 3].alert_chosen and set(m[3, 3].forced_by) == {(1, 2), (1, 4), (3, 4)}
-    assert m[1, 4].forces == [(3, 3)] and m[3, 4].forces == [(3, 3)]
+    assert m[2, 3].alert_blocked and m[2, 3].forces == set()
+    assert m[3, 3].alert_chosen and m[3, 3].forced_by == {(1, 2), (1, 4), (3, 4)}
+    assert m[1, 4].forces == {(3, 3)} and m[3, 4].forces == {(3, 3)}
 
     display_closure_step(m, "one alert is born - after find_alerts", show_links=True)
     save("1_one_alert_is_born.png")
@@ -106,8 +106,8 @@ def test_cascade_propagates_a_second_hop():
     free diagonal neighbour of (2,3) - including (4,4) - gets linked straight to
     (3,3); and symmetrically, when (5,4)+(5,5) make (4,4) alert_blocked with
     corner (4,5), every free diagonal neighbour of *that* - including (3,3) -
-    gets linked straight to (4,5). So (3,3).forces == [(4,5)] and
-    (4,4).forces == [(2,3)] are both already true the instant find_alerts
+    gets linked straight to (4,5). So (3,3).forces == {(4,5)} and
+    (4,4).forces == {(2,3)} are both already true the instant find_alerts
     returns - no relay stage needed, no "replace, not merge" required (each
     only ever gets written once).
 
@@ -124,20 +124,24 @@ def test_cascade_propagates_a_second_hop():
     m[5, 5].state = StateEnum.blocked
 
     find_alerts(m)
-    assert m[3, 3].alert_chosen and m[3, 3].forces == [(4, 5)]
-    assert m[4, 4].alert_chosen and m[4, 4].forces == [(2, 3)]
+    assert m[3, 3].alert_chosen and m[3, 3].forces == {(4, 5)}
+    assert m[4, 4].alert_chosen and m[4, 4].forces == {(2, 3)}
     assert (3, 3) in m[4, 5].forced_by
     assert (4, 4) in m[2, 3].forced_by
 
     display_closure_step(m, "after find_alerts - already fully cascaded", show_links=True)
     save("2a_before_link_patches.png")
 
+    # Snapshot .forces/.forced_by as fresh set copies, not just references - both
+    # fields get replaced (never mutated in place) wherever link_patches touches them,
+    # but a copy here is what actually makes before/after a real before/after
+    # comparison rather than two views of the same live object.
     before = {(i, j): (m[i, j].alert_blocked, m[i, j].alert_chosen,
-                        list(m[i, j].forces), list(m[i, j].forced_by))
+                        set(m[i, j].forces), set(m[i, j].forced_by))
               for i in range(9) for j in range(9)}
     link_patches(m)
     after = {(i, j): (m[i, j].alert_blocked, m[i, j].alert_chosen,
-                       list(m[i, j].forces), list(m[i, j].forced_by))
+                       set(m[i, j].forces), set(m[i, j].forced_by))
              for i in range(9) for j in range(9)}
     assert before == after  # link_patches: a guaranteed no-op now, board-wide
 
@@ -148,9 +152,9 @@ def test_cascade_propagates_a_second_hop():
 def test_a_ring_has_no_safe_end_until_one_is_cut():
     """A patch with no terminal at all needs a different resolution.
 
-    A chain always bottoms out at a terminal (a forces=[] item) - that's the safe
+    A chain always bottoms out at a terminal (a forces=set() item) - that's the safe
     place find_central_patch_items seeds a patch_id/centrality from. Link four
-    items in a closed loop instead (nobody's forces is ever []) and there's
+    items in a closed loop instead (nobody's forces is ever empty) and there's
     nothing to seed from: this shape needs find_cycle_patches's separate
     ring-leader election first, which finds the single largest flattened index on
     the ring and cuts its forces there - turning the ring into an ordinary chain
@@ -169,7 +173,7 @@ def test_a_ring_has_no_safe_end_until_one_is_cut():
 
     # (3,3) = 3*6+3 = 21 is the largest flattened index on this ring - it's the one
     # that gets cut open into the patch's terminal.
-    assert m[3, 3].forces == [] and m[3, 3].centrality == 0
+    assert m[3, 3].forces == set() and m[3, 3].centrality == 0
     assert len({m[c].patch_id for c in cycle_cells}) == 1  # still one shared patch
 
     display_links(m, title="the same ring, opened at its one cut point")

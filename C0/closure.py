@@ -12,11 +12,10 @@ from alert_graphs import (RING_OFFSETS,
                            mark_patch_conflicts as mark_item_patch_conflicts)
 
 
-def promote_isolated_free_cells(map_of_squares):
-    """find_patches stage 1: promote any free cell whose 4 direct (orthogonal)
-    neighbours are all blocked to chosen. Such a cell can never overlap a chosen
-    square, so placing it is always safe - and it is the only way it will ever get
-    covered, since no future core sweep would treat it as reachable.
+def fill_isolated_free_cells_once(map_of_squares):
+    """set state of isolated free items:
+    isolated item : none of the 4 direct (orthogonal) neighbours are all none are free.
+    set item chosen except if two neighbors are chosen.
     """
     rows, cols = map_of_squares.shape
     for i in range(1, rows - 1):
@@ -26,30 +25,28 @@ def promote_isolated_free_cells(map_of_squares):
                 continue
             neighbours = (map_of_squares[i - 1, j], map_of_squares[i + 1, j],
                           map_of_squares[i, j - 1], map_of_squares[i, j + 1])
-            if all(n.state == StateEnum.blocked for n in neighbours):
+            if all(n.state != StateEnum.free for n in neighbours):
+                found_chosen_once=False
                 item.state = StateEnum.chosen
-
-
-def block_isolated_free_cells(map_of_squares):
-    """find_patches stage 1: block any free cell between 2 chosen items
-    """
-    rows, cols = map_of_squares.shape
-    for i in range(1, rows - 1):
-        for j in range(1, cols - 1):
-            item = map_of_squares[i, j]
-            if item.state != StateEnum.free:
-                continue
-            neighbours_horizontal = (map_of_squares[i - 1, j], map_of_squares[i + 1, j])
-            neighbours_vertical = (map_of_squares[i, j - 1], map_of_squares[i, j + 1])
-            if all(n.state == StateEnum.chosen  for n in neighbours_horizontal):
-                item.state = StateEnum.blocked
-            if all(n.state == StateEnum.chosen  for n in neighbours_vertical):
-                item.state = StateEnum.blocked
+                for n in neighbours:
+                    if n.state == StateEnum.chosen:
+                        if found_chosen_once:
+                           item.state = StateEnum.blocked
+                           for forced_item_idx in item.forces:
+                               map_of_squares[forced_item_idx].forced_by.discard((i, j))
+                           item.forces = set()
+                        found_chosen_once=True
 
 def fill_isolated_free_cells(map_of_squares):
-    promote_isolated_free_cells(map_of_squares)
-    block_isolated_free_cells(map_of_squares)
- 
+    """set state of isolated free items:
+    isolated item : none of the 4 direct (orthogonal) neighbours are all none are free.
+    set item chosen except if two neighbors are chosen.
+
+    function must be re-run because condition "two neighbors are chosen" may apply on other items.
+    """
+    fill_isolated_free_cells_once(map_of_squares)
+    fill_isolated_free_cells_once(map_of_squares)
+
 
 def find_alerts(map_of_squares):
     """find_patches stage 2 (set_alert_blocked, set_alert_chosen, iter_alert_thirds):
@@ -67,7 +64,7 @@ def find_alerts(map_of_squares):
     corner between them, though not ring-adjacent to either, as the free third).
     When that happens: set_alert_blocked raises .alert_blocked on the item under
     consideration, and set_alert_chosen raises .alert_chosen on the free completing
-    corner, recording the pairing by appending the alert_chosen item's index to the
+    corner, recording the pairing by adding the alert_chosen item's index to the
     alert_blocked item's .forces.
     """
     rows, cols = map_of_squares.shape
@@ -108,11 +105,10 @@ def link_patches(map_of_squares):
         item.alert_chosen = True
         for old_target in item.forces:
             old_target_item = map_of_squares[old_target]
-            if (i, j) in old_target_item.forced_by:
-                old_target_item.forced_by.remove((i, j))
+            old_target_item.forced_by.discard((i, j))
         item.forces = new_forces
         for target_pos in new_forces:
-            map_of_squares[target_pos].forced_by.append((i, j))
+            map_of_squares[target_pos].forced_by.add((i, j))
 
 
 def remove_blocked_links(map_of_squares):
@@ -121,7 +117,7 @@ def remove_blocked_links(map_of_squares):
     link_patches itself doesn't catch, since it only ever looks at an item's own
     diagonal neighbours, never at what its own .forced_by already commit it to.
 
-    Concretely (see test_do_closure_steps): (6, 4).forces == [(6, 3)], asserting
+    Concretely (see test_do_closure_steps): (6, 4).forces == {(6, 3)}, asserting
     that choosing (6, 4) also requires choosing (6, 3). But (7, 2) is in
     (6, 4).forced_by - (7, 2).forces contains (6, 4), so (7, 2) is itself
     guaranteed to be chosen alongside (6, 4) (that's exactly what a forced_by
@@ -162,23 +158,22 @@ def remove_blocked_links(map_of_squares):
         if target in item.forces:
             item.forces.remove(target)
             target_item = map_of_squares[target]
-            if (i, j) in target_item.forced_by:
-                target_item.forced_by.remove((i, j))
+            target_item.forced_by.discard((i, j))
 
 
 def forced_closure(map_of_squares, position):
     """Every position transitively forced by position's own .forces (see
     SquareItem.forces), not including position itself: position's direct forces,
     plus whatever those force in turn, and so on, until every chain reaches a
-    terminal (forces == []) or loops back onto something already collected.
+    terminal (forces == set()) or loops back onto something already collected.
 
     This is the "actually commit to it" counterpart to link_patches/
     remove_blocked_links, which only ever *record* what choosing an item would
     oblige - nothing before this walks the recorded chain to say which positions
     that obligation actually reaches. Follows every entry in .forces, not just
-    the first: an item can force more than one other at once (see .forces'
-    docstring), and only following forces[0] (as compute_blue_arrows does, for a
-    single display arrow) would silently drop a real obligation. Makes no
+    one: an item can force more than one other at once (see .forces'
+    docstring), and only following a single arbitrary entry (as compute_blue_arrows
+    does, for a single display arrow) would silently drop a real obligation. Makes no
     assumption that find_cycle_patches has already run - a forces chain can
     still loop back on itself at this stage - so each position is only ever
     visited once.
@@ -188,6 +183,7 @@ def forced_closure(map_of_squares, position):
     """
     to_visit = list(map_of_squares[position].forces)
     forced = set()
+    forced.add(position)
     while to_visit:
         pos = to_visit.pop()
         if pos in forced:
@@ -199,7 +195,7 @@ def forced_closure(map_of_squares, position):
 
 def reset_alert_bookkeeping(map_of_squares):
     """Clear every cell's .alert_blocked, .alert_chosen, .forces, and .forced_by
-    back to their defaults (False, False, [], []), map-wide, regardless of
+    back to their defaults (False, False, set(), set()), map-wide, regardless of
     .state - so find_alerts/link_patches/remove_blocked_links can be re-run from
     a clean slate instead of layering new flags on top of whatever an earlier
     round left behind.
@@ -228,8 +224,8 @@ def reset_alert_bookkeeping(map_of_squares):
             item = map_of_squares[i, j]
             item.alert_blocked = False
             item.alert_chosen = False
-            item.forces = []
-            item.forced_by = []
+            item.forces = set()
+            item.forced_by = set()
 
 
 def copy_map_reverse(map_of_squares):
@@ -256,7 +252,7 @@ def copy_map_reverse(map_of_squares):
 
     Every other field (.state, .alert_chosen, .alert_blocked, .quality,
     .centrality, .patch_id, .max_id) is copied as-is; .conflicts is copied as a
-    new list (not the same list object) so mutating one copy's .conflicts - e.g.
+    new set (not the same set object) so mutating one copy's .conflicts - e.g.
     during find_central_patch_items - can never leak into the other's. .forces
     and .forced_by are rebuilt from scratch, reversed relative to the
     original (see SquareItem.forced_by) - each of the copy's own .forces
@@ -269,13 +265,13 @@ def copy_map_reverse(map_of_squares):
         for j in range(cols):
             item = map_of_squares[i, j]
             reversed_map[i, j] = dataclasses.replace(
-                item, forces=[], forced_by=[], conflicts=list(item.conflicts))
+                item, forces=set(), forced_by=set(), conflicts=set(item.conflicts))
 
     for i in range(rows):
         for j in range(cols):
             for ti, tj in map_of_squares[i, j].forces:
-                reversed_map[ti, tj].forces.append((i, j))
-                reversed_map[i, j].forced_by.append((ti, tj))
+                reversed_map[ti, tj].forces.add((i, j))
+                reversed_map[i, j].forced_by.add((ti, tj))
 
     return reversed_map
 
@@ -314,7 +310,7 @@ def find_patches(map_of_squares):
       .alert_blocked  see stage 2 below.
       .alert_chosen   see stage 2 below.
       .forces  (row, col) index(es) of other item(s) this one is paired
-                      with, or [] - see stages 2 and 3.
+                      with, or set() - see stages 2 and 3.
     Padding cells start out permanently StateEnum.blocked (quality < 0), so they can
     never be selected and the loops below only need a 1-cell margin of safety.
 
@@ -350,12 +346,12 @@ def find_patches(map_of_squares):
        either, as the free third). When that happens: set_alert_blocked raises
        .alert_blocked on the item under consideration, and set_alert_chosen raises
        .alert_chosen on the free completing corner, recording the pairing by
-       appending the alert_chosen item's index to the alert_blocked item's .forces.
+       adding the alert_chosen item's index to the alert_blocked item's .forces.
 
     3. resolve_chosen_link: choosing an item blocks its 4 diagonal neighbours
        (DIAGONAL_OFFSETS). For every free item, every diagonal neighbour that is
        itself alert_blocked (and already has a link from stage 2) is adopted: its
-       link(s) are appended to item.forces - not just for items stage 2 already
+       link(s) are added to item.forces - not just for items stage 2 already
        flagged alert_chosen, but for *any* free item with a qualifying diagonal
        neighbour, which this stage itself then marks alert_chosen (see the "Why
        link_patches looks past find_alerts's own alert_chosen items" note on
@@ -456,7 +452,7 @@ def find_central_patch_items(map_of_squares, gen):
       - if it already has the *same* one, this item has already been reached by this
         patch once before - the only way that happens is by looping back around a
         cycle - so instead of reassigning, the current item's own .forces is cut
-        (cleared to []) to stop the patch from being retraced forever - retracting
+        (cleared to set()) to stop the patch from being retraced forever - retracting
         this item's own position from each old link's .forced_by first (see
         SquareItem.forced_by), so nothing downstream keeps listing it as a
         forcer it no longer is.
@@ -506,11 +502,12 @@ def find_central_patch_items(map_of_squares, gen):
             item = map_of_squares[i, j]
             if not (item.alert_chosen and item.forces):
                 continue
-            linked = map_of_squares[item.forces[0]]
+            target_pos = next(iter(item.forces))
+            linked = map_of_squares[target_pos]
             if gen == 0:
                 if not linked.forces:
                     linked.centrality = 0
-                    li, lj = item.forces[0]
+                    li, lj = target_pos
                     linked.patch_id = li * rows + lj
                     found = True
             elif linked.centrality == gen - 1:
@@ -526,9 +523,8 @@ def find_central_patch_items(map_of_squares, gen):
                 else:
                     for old_force in item.forces:
                         old_force_item = map_of_squares[old_force]
-                        if (i, j) in old_force_item.forced_by:
-                            old_force_item.forced_by.remove((i, j))
-                    item.forces = []
+                        old_force_item.forced_by.discard((i, j))
+                    item.forces = set()
 
     corrections = []
     conflict_updates = []
@@ -537,12 +533,12 @@ def find_central_patch_items(map_of_squares, gen):
             item = map_of_squares[i, j]
             if not (item.alert_chosen and item.forces):
                 continue
-            linked = map_of_squares[item.forces[0]]
+            linked = map_of_squares[next(iter(item.forces))]
 
             if item.patch_id != -1 and linked.patch_id > item.patch_id:
                 corrections.append((item, linked.patch_id))
 
-            new_conflicts = [c for c in linked.conflicts if c not in item.conflicts]
+            new_conflicts = linked.conflicts - item.conflicts
             if new_conflicts:
                 conflict_updates.append((item, new_conflicts))
 
@@ -552,8 +548,7 @@ def find_central_patch_items(map_of_squares, gen):
         found = True
 
     for target, new_conflicts in conflict_updates:
-        for c in new_conflicts:
-            target.conflicts.append(c)
+        target.conflicts.update(new_conflicts)
     if conflict_updates:
         found = True
 
@@ -570,9 +565,10 @@ def find_cycle_patches(map_of_squares, gen):
     uses to seed a terminal's patch_id.
 
     -- Known gap: fan-in candidates can still crowd each other out --
-    More than one item can point at the same target via .forces[0] - fan-in, the
-    same shape link_patches's own .forces exists to support (see
-    test_4links_situation) - so more than one candidate id can arrive at the same
+    More than one item can point at the same target via the (arbitrary) .forces
+    entry this function reads - fan-in, the same shape link_patches's own .forces
+    exists to support (see test_4links_situation) - so more than one candidate id
+    can arrive at the same
     node in the same generation (test_do_closure_steps: (2, 2) receives a
     candidate from each of (2, 4), (3, 3), (4, 2), and (4, 4) at once, but only
     (3, 3) is actually on (2, 2)'s ring - the other three are tail branches that
@@ -592,7 +588,8 @@ def find_cycle_patches(map_of_squares, gen):
     edge per call, regardless of iteration order.
 
     For the current item A (a = A's unique_id, at position (i, j)) and its linked
-    item B (B = map_of_squares[A.forces[0]]):
+    item B (B = map_of_squares[next(iter(A.forces))], an arbitrary but - for the
+    duration of one call - stable pick since .forces isn't mutated mid-call):
 
     - If either A or B already has a real centrality, this pair isn't part of a
       pure ring (it's on a tree or a tadpole's tail) - max_id has no meaning there,
@@ -632,7 +629,7 @@ def find_cycle_patches(map_of_squares, gen):
             A = map_of_squares[i, j]
             if not (A.alert_chosen and A.forces):
                 continue
-            B = map_of_squares[A.forces[0]]
+            B = map_of_squares[next(iter(A.forces))]
 
             if A.centrality != -1 or B.centrality != -1:
                 if A.max_id != -1:
@@ -665,9 +662,8 @@ def find_cycle_patches(map_of_squares, gen):
     for i, j, target in cuts:
         for old_force in target.forces:
             old_force_item = map_of_squares[old_force]
-            if (i, j) in old_force_item.forced_by:
-                old_force_item.forced_by.remove((i, j))
-        target.forces = []
+            old_force_item.forced_by.discard((i, j))
+        target.forces = set()
     for target, value in propagations:
         target.max_id = value
 
@@ -821,9 +817,7 @@ def map_patches_to_pivots(map_of_squares, sz_border, sz_core):
         for peer_i, peer_j in candidates:
             if (peer_i, peer_j) == (pivot_i, pivot_j):
                 continue
-            for c in map_of_squares[peer_i, peer_j].conflicts:
-                if c not in pivot_item.conflicts:
-                    pivot_item.conflicts.append(c)
+            pivot_item.conflicts.update(map_of_squares[peer_i, peer_j].conflicts)
 
         if pivot_item.conflicts:
             continue  # conflicting patch - put aside for later
@@ -849,17 +843,15 @@ def build_core_map(map_of_squares, sz_border, sz_core, num_tiles_v, num_tiles_h)
             col0 = sz_border + J * sz_core
 
             local_patch_ids = set()
-            merged_conflicts = []
+            merged_conflicts = set()
             for di in range(sz_core):
                 for dj in range(sz_core):
                     item = map_of_squares[row0 + di, col0 + dj]
                     if item.patch_id != -1:
                         local_patch_ids.add(item.patch_id)
-                    for c in item.conflicts:
-                        if c not in merged_conflicts:
-                            merged_conflicts.append(c)
+                    merged_conflicts.update(item.conflicts)
 
             core_item = CoreItem()
-            core_item.conflicts = [c for c in merged_conflicts if c not in local_patch_ids]
+            core_item.conflicts = list(merged_conflicts - local_patch_ids)
             core_map[I, J] = core_item
     return core_map

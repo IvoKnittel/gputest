@@ -54,7 +54,7 @@ def test_line():
 
     chain = [alert_chosen_positions_asserted[0]]
     while len(chain) < len(alert_chosen_positions_asserted):
-        chain.append(m[chain[-1]].forces[0])
+        chain.append(next(iter(m[chain[-1]].forces)))
     assert chain == alert_chosen_positions_asserted
 
     assert not m[9, 1].alert_blocked
@@ -99,8 +99,8 @@ def test_tree_fan_out():
     link_patches(m)
     remove_blocked_links(m)
 
-    assert not m[4, 4].alert_chosen and m[4, 4].forced_by == []
-    assert set(m[4, 4].forces) == {(2, 2), (2, 6), (6, 2), (6, 6)}
+    assert not m[4, 4].alert_chosen and m[4, 4].forced_by == set()
+    assert m[4, 4].forces == {(2, 2), (2, 6), (6, 2), (6, 6)}
     for corner in [(2, 2), (2, 6), (6, 2), (6, 6)]:
         assert m[corner].alert_chosen and (4, 4) in m[corner].forced_by
 
@@ -127,8 +127,8 @@ def test_reverse_tree_fan_in():
     resolve_cycles_and_centrality(m)
 
     assert m[4, 5].alert_chosen
-    assert m[6, 4].alert_chosen and m[6, 4].forces == [(4, 5)]
-    assert m[6, 6].alert_chosen and m[6, 6].forces == [(4, 5)]
+    assert m[6, 4].alert_chosen and m[6, 4].forces == {(4, 5)}
+    assert m[6, 6].alert_chosen and m[6, 6].forces == {(4, 5)}
     patch_id = m[4, 5].patch_id
     assert m[6, 4].patch_id == patch_id and m[6, 6].patch_id == patch_id
     rows, cols = m.shape
@@ -168,9 +168,9 @@ def test_line_into_cycle():
     assert not m[1, 4].alert_chosen
     assert m[1, 6].alert_chosen
     assert m[1, 8].alert_chosen
-    assert m[1, 4].forced_by == []
-    assert m[1, 4].forces == [(1,6)]
-    assert m[1, 6].forces == [(1,8)]
+    assert m[1, 4].forced_by == set()
+    assert m[1, 4].forces == {(1,6)}
+    assert m[1, 6].forces == {(1,8)}
     assert (1, 6) in m[1, 8].forced_by
     assert m[1, 4].patch_id == m[1, 6].patch_id
     assert m[1, 6].patch_id == m[1, 8].patch_id

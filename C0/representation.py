@@ -288,7 +288,7 @@ def compute_blue_arrows(m):
     Every alert_chosen item with no .forces of its own is a terminal by
     definition (nothing further is forced) - centrality 0, assigned directly
     here, with no generational propagation needed. Every other alert_chosen
-    item's own arrow is then found by walking its .forces[0] chain forward, one
+    item's own arrow is then found by walking one .forces entry at a time forward, one
     hop at a time, until it reaches such a terminal - and the arrow is drawn
     from that starting item straight to the terminal, not just from whichever
     item happens to be furthest along the chain. A chain that loops back on
@@ -315,7 +315,7 @@ def compute_blue_arrows(m):
             pos = (i, j)
             seen = {pos}
             while m[pos].forces:
-                pos = m[pos].forces[0]
+                pos = next(iter(m[pos].forces))
                 if pos in seen:
                     pos = None
                     break
@@ -452,14 +452,14 @@ def display_closure_step(m, title, show_links=False, show_pivots=False, show_rea
 def set_link(map_of_squares, source, target):
     """Mark source as alert_chosen and link it to target; target is also marked
     alert_chosen (a linked-to item is, by construction, always alert_chosen too).
-    target's .forced_by gets source appended too (see SquareItem.forced_by),
+    target's .forced_by gets source added too (see SquareItem.forced_by),
     the incoming-side record of this same pairing.
     """
     si, sj = source
     ti, tj = target
     map_of_squares[si, sj].alert_chosen = True
-    map_of_squares[ti, tj].forced_by.append(source)
-    map_of_squares[si, sj].forces.append(target)
+    map_of_squares[ti, tj].forced_by.add(source)
+    map_of_squares[si, sj].forces.add(target)
     map_of_squares[ti, tj].alert_chosen = True
 
 
