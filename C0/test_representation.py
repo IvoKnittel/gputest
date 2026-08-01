@@ -6,7 +6,8 @@ from representation import (map_of_squares_from_array,
 from closure import (find_alerts,
                       link_patches,
                       remove_blocked_links,
-                      resolve_cycles_and_centrality)
+                      resolve_cycles_and_centrality, 
+                      fill_isolated_free_cells)
 
 
 def test_map_input_display():
@@ -82,9 +83,6 @@ def test_do_closure_steps():
     m = map_of_squares_from_array(grid)
     display_closure_step(m, '0: initial state')
 
- #   promote_isolated_free_cells(m)
- #   display_closure_step(m, '1: promote_isolated_free_cells')
-
     find_alerts(m)
     display_closure_step(m, '2: find_alerts  (alert_blocked=blue, alert_chosen=yellow, both=green)')
 
@@ -94,10 +92,10 @@ def test_do_closure_steps():
     remove_blocked_links(m)
     display_closure_step(m, '3b: remove_blocked_links', show_links=True)
 
- #   check_tiling_invariant(m)
- #   display_closure_step(m, '4: check_tiling_invariant  (invariant held - no state change)')
-
     resolve_cycles_and_centrality(m)
+
+    fill_isolated_free_cells(m)
+
 
     display_closure_step(m, '5 forward: find_cycle_patches + find_central_patch_items (pivots in blue)',
                           show_links=True, show_pivots=False, show_real=True)

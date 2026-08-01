@@ -30,6 +30,27 @@ def promote_isolated_free_cells(map_of_squares):
                 item.state = StateEnum.chosen
 
 
+def block_isolated_free_cells(map_of_squares):
+    """find_patches stage 1: block any free cell between 2 chosen items
+    """
+    rows, cols = map_of_squares.shape
+    for i in range(1, rows - 1):
+        for j in range(1, cols - 1):
+            item = map_of_squares[i, j]
+            if item.state != StateEnum.free:
+                continue
+            neighbours_horizontal = (map_of_squares[i - 1, j], map_of_squares[i + 1, j])
+            neighbours_vertical = (map_of_squares[i, j - 1], map_of_squares[i, j + 1])
+            if all(n.state == StateEnum.chosen  for n in neighbours_horizontal):
+                item.state = StateEnum.blocked
+            if all(n.state == StateEnum.chosen  for n in neighbours_vertical):
+                item.state = StateEnum.blocked
+
+def fill_isolated_free_cells(map_of_squares):
+    promote_isolated_free_cells(map_of_squares)
+    block_isolated_free_cells(map_of_squares)
+ 
+
 def find_alerts(map_of_squares):
     """find_patches stage 2 (set_alert_blocked, set_alert_chosen, iter_alert_thirds):
     a seat (team term - see docs/rose_cascades_and_holes/README.md - for what this
@@ -313,10 +334,7 @@ def find_patches(map_of_squares):
     find_patches runs sequentially over the whole map to resolve that, in four stages,
     still written with that parallel/sequential split in mind:
 
-    1. Promote any free cell whose 4 direct (orthogonal) neighbours are all blocked to
-       chosen. Such a cell can never overlap a chosen square, so placing it is always
-       safe - and it is the only way it will ever get covered, since no future core
-       sweep would treat it as reachable.
+    1. Promote or block isolated free cells.
 
     2. alert_blocked / alert_chosen (set_alert_blocked, set_alert_chosen,
        iter_alert_thirds): a seat is a 2x2 block with three items blocked and one
@@ -351,7 +369,9 @@ def find_patches(map_of_squares):
        and find_cycle_patches), since a diagonal neighbour can itself be an
        alert_chosen item whose own .forces this same stage appends to.
 
-    4. Invariant check: a fully-blocked 2x2 block must never occur - stage 2/3's
+    4. Promote or block isolated free cells.
+       
+    5. Invariant check: a fully-blocked 2x2 block must never occur - stage 2/3's
        alert_blocked/alert_chosen/link bookkeeping exists specifically to prevent it.
        If it happens anyway, raise InvalidTilingError: that signals a bug upstream,
        not a recoverable case.
@@ -383,9 +403,10 @@ def find_patches(map_of_squares):
     collect the patches that form under repeated closure and look at
     max_graph_extension / max_num_nodes - before attempting an actual proof.
     """
-    promote_isolated_free_cells(map_of_squares)
+    fill_isolated_free_cells(map_of_squares)
     find_alerts(map_of_squares)
     link_patches(map_of_squares)
+    fill_isolated_free_cells(map_of_squares)
     check_tiling_invariant(map_of_squares)
 
 

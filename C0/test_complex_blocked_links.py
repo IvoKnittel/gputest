@@ -4,7 +4,7 @@ import matplotlib.pyplot as plt
 
 from map_of_squares import StateEnum
 from representation import build_map_of_squares, map_of_squares_from_array, display_closure_step
-from closure import find_alerts, link_patches, remove_blocked_links, promote_isolated_free_cells
+from closure import find_alerts, link_patches, remove_blocked_links, fill_isolated_free_cells
 from test_representation import resolve_cycles_and_centrality
 
 
@@ -51,6 +51,7 @@ def test_remove_blocked_links_disagreeing_removals():
     # A deep copy, resolved independently, so the "before" panel's pivots don't
     # leave stale centrality/patch_id sitting around for the "after" panel to
     # (incorrectly) inherit once remove_blocked_links has changed the forces.
+    fill_isolated_free_cells(m)
     m_before = copy.deepcopy(m)
     resolve_cycles_and_centrality(m_before)
 
@@ -63,6 +64,7 @@ def test_remove_blocked_links_disagreeing_removals():
     assert m[4, 4].forces == [(5, 6)]
 
     resolve_cycles_and_centrality(m)
+    fill_isolated_free_cells(m)
     display_closure_step(m, 'after remove_blocked_links', show_links=True, show_pivots=True, ax=ax_after)
     plt.tight_layout()
     plt.show()
