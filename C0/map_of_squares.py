@@ -85,6 +85,13 @@ class SquareItem:
                 .forces at once (see .forces above and test_do_closure_steps)
                 can still have one candidate crowd out another here - see the
                 "Known gap" note on find_cycle_patches.
+    delete:     marks this item for the deletion cascade closure.remove_blocked_links
+                runs once patch_id has converged: True for an item found to
+                diagonally block another alert_chosen item of its own patch_id
+                (a self-blocking patch - see closure.mark_self_blocking_same_patch),
+                or for an item whose .forced_by emptied out as a consequence of
+                that (see closure.propagate_deletions_once). False once the
+                cascade has actually processed the item.
     """
     quality: float = -1.0
     state: StateEnum = StateEnum.free
@@ -96,6 +103,7 @@ class SquareItem:
     centrality: int = -1
     patch_id: int = -1
     max_id: int = -1
+    delete: bool = False
 
 
 @dataclass

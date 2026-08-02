@@ -1,13 +1,13 @@
 import matplotlib.pyplot as plt
 
+from map_of_squares import StateEnum
 from representation import (map_of_squares_from_array,
                              display_real_space_and_map,
                              display_closure_step)
 from closure import (find_alerts,
                       link_patches,
                       remove_blocked_links,
-                      resolve_cycles_and_centrality, 
-                      fill_isolated_free_cells)
+                      resolve_cycles_and_centrality)
 
 
 def test_map_input_display():
@@ -89,13 +89,33 @@ def test_do_closure_steps():
     link_patches(m)
     display_closure_step(m, '3: link_patches', show_links=True)
 
-    remove_blocked_links(m)
-    display_closure_step(m, '3b: remove_blocked_links', show_links=True)
-
     resolve_cycles_and_centrality(m)
-
-    fill_isolated_free_cells(m)
-
 
     display_closure_step(m, '5 forward: find_cycle_patches + find_central_patch_items (pivots in blue)',
                           show_links=True, show_pivots=False, show_real=True)
+
+    remove_blocked_links(m)
+    display_closure_step(m, '3b: remove_blocked_links', show_links=True)
+
+
+def test_find_alerts_link_patches_forces_and_free_cells():
+
+    grid = [[0, 0, 0, 0, 0, 0, 1, 0, 0, 0],
+            [0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+            [0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+            [0, 0, 0, 0, 0, 0, 0, 1, 0, 0],
+            [0, 0, 1, 0, 0, 0, 0, 0, 0, 0],
+            [0, 0, 0, 0, 1, 0, 0, 0, 0, 0],
+            [0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+            [0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+            [0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+            [0, 0, 0, 0, 0, 0, 0, 0, 0, 0]]
+
+    m = map_of_squares_from_array(grid)
+    find_alerts(m)
+    link_patches(m)
+    assert m[3, 5].forces == {(3, 4)}
+    assert m[3, 5].forced_by == {(2, 5), (2, 7), (4, 7)}
+    assert m[1, 6].state == StateEnum.free
+    assert m[2, 5].state == StateEnum.free
+    assert m[2, 7].state == StateEnum.free

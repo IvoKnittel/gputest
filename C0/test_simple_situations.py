@@ -9,10 +9,10 @@ look at what the smallest possible inputs produce, one stage at a time.
 """
 
 from representation import build_map_of_squares, place_blocked_squares, display_closure_step
-from closure import (fill_isolated_free_cells,
-                      find_alerts,
+from closure import (find_alerts,
                       link_patches,
                       remove_blocked_links,
+                      resolve_cycles_and_centrality,
                       check_tiling_invariant)
 
 
@@ -23,11 +23,10 @@ def test_rectangle():
     """
     m = build_map_of_squares(7, 7)
     place_blocked_squares(m, [(2, 3), (3, 3)])
-    fill_isolated_free_cells(m)
     find_alerts(m)
     link_patches(m)
+    resolve_cycles_and_centrality(m)
     remove_blocked_links(m)
-    fill_isolated_free_cells(m)
     check_tiling_invariant(m)
     display_closure_step(m, '4: check_tiling_invariant  (invariant held - no state change)', show_links=True)
 

@@ -97,6 +97,7 @@ def test_tree_fan_out():
     m = map_of_squares_from_array(grid)
     find_alerts(m)
     link_patches(m)
+    resolve_cycles_and_centrality(m)
     remove_blocked_links(m)
 
     assert not m[4, 4].alert_chosen and m[4, 4].forced_by == set()
@@ -104,7 +105,6 @@ def test_tree_fan_out():
     for corner in [(2, 2), (2, 6), (6, 2), (6, 6)]:
         assert m[corner].alert_chosen and (4, 4) in m[corner].forced_by
 
-    resolve_cycles_and_centrality(m)
     display_closure_step(m, 'tree (fan-out)', show_links=True, show_real=True)
 
 def test_reverse_tree_fan_in():
@@ -164,6 +164,7 @@ def test_line_into_cycle():
     m = map_of_squares_from_array(grid)
     find_alerts(m)
     link_patches(m)
+    resolve_cycles_and_centrality(m)
     remove_blocked_links(m)
     assert not m[1, 4].alert_chosen
     assert m[1, 6].alert_chosen
@@ -172,7 +173,10 @@ def test_line_into_cycle():
     assert m[1, 4].forces == {(1,6)}
     assert m[1, 6].forces == {(1,8)}
     assert (1, 6) in m[1, 8].forced_by
-    assert m[1, 4].patch_id == m[1, 6].patch_id
+    # (1, 4) is a pure linker, never itself alert_chosen (see the docstring
+    # above) - patch_id is only ever assigned to alert_chosen items, so unlike
+    # (1, 6)/(1, 8) it never gets one.
+    assert m[1, 4].patch_id == -1
     assert m[1, 6].patch_id == m[1, 8].patch_id
     display_closure_step(m, 'line into cycle', show_links=True, show_real=True)
 

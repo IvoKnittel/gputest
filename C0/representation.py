@@ -113,8 +113,7 @@ def real_space_map(map_of_squares):
 
             for di, dj in NEIGHBOUR_DIAGONAL_OFFSETS:
                 ni, nj = i + di, j + dj
-                if (0 <= ni < rows and 0 <= nj < cols
-                        and map_of_squares[ni, nj].state == StateEnum.chosen):
+                if (0 <= ni < rows and 0 <= nj < cols and map_of_squares[ni, nj].state == StateEnum.chosen):
                     raise InvalidTilingError(
                         f"squares at ({i}, {j}) and ({ni}, {nj}) are diagonal "
                         f"neighbours - their footprints only share one real-space "
@@ -144,7 +143,7 @@ def place_squares(map_of_squares, positions):
     """
     for i, j in positions:
         map_of_squares[i, j].state = StateEnum.chosen
-    real_space_map(map_of_squares)
+    # real_space_map(map_of_squares)
 
     rows, cols = map_of_squares.shape
     for i, j in positions:

@@ -23,8 +23,8 @@ chosen/blocked state, independent of how it got that way.
 Rough theorem split to work from (treat as a starting hypothesis, not settled):
 
 1. **Termination.** Free-cell count is a strictly-decreasing variant each round
-   (place_square_in_core fills at least one free cell per active core, or closure's
-   isolated-cell promotion does) - finite grid + strict decrease bounds the number of
+   (place_square_in_core fills at least one free cell per active core) 
+   - finite grid + strict decrease bounds the number of
    rounds. Likely provable as-is, quality-independent.
 
 2. **Local safety - no diagonal conflicts.** Choosing a cell blocks its diagonal

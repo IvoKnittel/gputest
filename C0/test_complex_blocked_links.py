@@ -1,71 +1,62 @@
-import copy
-
 import matplotlib.pyplot as plt
 
 from map_of_squares import StateEnum
-from representation import build_map_of_squares, map_of_squares_from_array, display_closure_step
-from closure import find_alerts, link_patches, remove_blocked_links, fill_isolated_free_cells
-from test_representation import resolve_cycles_and_centrality
+from representation import build_map_of_squares, set_link, display_closure_step
+from closure import find_alerts, link_patches, remove_blocked_links, resolve_cycles_and_centrality
 
 
-def test_remove_blocked_links_disagreeing_removals():
-    """remove_blocked_links must not require every forced_by entry to agree
-    before removing a doomed target - a single genuine (live) blocker is enough,
-    even when other forcers don't block the same target. This grid
-    (the same one as test_link_patches_relays_past_self_loop_candidate) has two
-    such disagreeing cases once find_alerts and link_patches have run:
+def test_remove_blocked_links_deletes_self_blocking_same_patch():
+    """A patch that turns out to be self-blocking - one of its own members
+    diagonally blocks another member of the same patch, so the patch can never
+    actually be chosen - gets unwound by remove_blocked_links (see
+    closure.mark_self_blocking_same_patch / closure.propagate_deletions_once),
+    not merely have one offending link quietly pruned the way the old,
+    forced_by-diagonal-based remove_blocked_links used to.
 
-    (3, 5).forces == {(3, 4)}, forced_by == {(2, 5), (2, 7), (4, 7)}. Only
-    (2, 5) blocks (3, 4) - it's one of (2, 5)'s own diagonal neighbours; (2, 7)
-    and (4, 7) don't touch it at all. (2, 5) alone is enough: it's a live,
-    direct forcer of (3, 5) (same patch, a real .forces edge), so if that patch
-    is ever placed, (2, 5) is chosen and (3, 4) is blocked regardless of what
-    (2, 7)/(4, 7) do. (3, 5).forces must end up empty, not merely unchanged
-    because two out of three forcers raised no objection.
-
-    (4, 4).forces == {(3, 6), (5, 6)}, forced_by == {(2, 3), (2, 5)}. (2, 5)
-    blocks only (3, 6); neither (2, 3) nor (2, 5) blocks (5, 6). Each target is
-    judged independently - (3, 6) is removed, but (5, 6), which has no blocker
-    at all among either forcer, must survive.
+    Hand-built with the link library (set_link), the same shape as the
+    (8,7)/(6,6)/(7,5) situation found in test_impossible.py::test_try_3x3_hole3
+    round 9: (8, 7) forces both (6, 6) and (7, 5) - but (6, 6) and (7, 5) are
+    diagonal neighbours of each other (offset (1, -1)), so choosing either one
+    blocks the other outright. Once patch_id converges, (8, 7)/(6, 6)/(7, 5) all
+    end up sharing one patch_id (closure.propagate_patch_id_from_roots, since
+    (8, 7) is the root here - nothing forces it) - exactly the self-blocking
+    shape remove_blocked_links exists to catch.
     """
-    grid = [[0, 0, 0, 0, 0, 0, 1, 0, 0, 0],
-            [0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
-            [0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
-            [0, 0, 0, 0, 0, 0, 0, 1, 0, 0],
-            [0, 0, 1, 0, 0, 0, 0, 0, 0, 0],
-            [0, 0, 0, 0, 1, 0, 0, 0, 0, 0],
-            [0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
-            [0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
-            [0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
-            [0, 0, 0, 0, 0, 0, 0, 0, 0, 0]]
+    m = build_map_of_squares(12, 12)
+    set_link(m, (8, 7), (6, 6))
+    set_link(m, (8, 7), (7, 5))
 
-    m = map_of_squares_from_array(grid)
-    find_alerts(m)
-    link_patches(m)
+    resolve_cycles_and_centrality(m)
 
-    assert m[3, 5].forces == {(3, 4)}
-    assert m[3, 5].forced_by == {(2, 5), (2, 7), (4, 7)}
-    assert m[4, 4].forces == {(3, 6), (5, 6)}
-    assert m[4, 4].forced_by == {(2, 3), (2, 5)}
-
-    # A deep copy, resolved independently, so the "before" panel's pivots don't
-    # leave stale centrality/patch_id sitting around for the "after" panel to
-    # (incorrectly) inherit once remove_blocked_links has changed the forces.
-    fill_isolated_free_cells(m)
-    m_before = copy.deepcopy(m)
-    resolve_cycles_and_centrality(m_before)
+    patch_id = m[8, 7].patch_id
+    assert patch_id != -1
+    assert m[6, 6].patch_id == patch_id
+    assert m[7, 5].patch_id == patch_id
 
     fig, (ax_before, ax_after) = plt.subplots(1, 2, figsize=(10, 5))
-    display_closure_step(m_before, 'before remove_blocked_links', show_links=True, show_pivots=True, ax=ax_before)
+    display_closure_step(m, 'before remove_blocked_links', show_links=True, show_pivots=True, show_real=True, ax=ax_before)
 
     remove_blocked_links(m)
 
-    assert m[3, 5].forces == set()
-    assert m[4, 4].forces == {(5, 6)}
+    # (6, 6) and (7, 5) - the self-blocking pair - are fully unwound: back to
+    # plain free items, no longer forcing or forced by anything.
+    for pos in [(6, 6), (7, 5)]:
+        item = m[pos]
+        assert item.state == StateEnum.free
+        assert item.patch_id == -1
+        assert item.forces == set()
+        assert item.forced_by == set()
+        assert not item.delete
 
-    resolve_cycles_and_centrality(m)
-    fill_isolated_free_cells(m)
-    display_closure_step(m, 'after remove_blocked_links', show_links=True, show_pivots=True, ax=ax_after)
+    # (8, 7) survives - it never itself diagonally blocked anything - but both
+    # of its links to the deleted pair are gone; its own .patch_id is left
+    # stale (remove_blocked_links only resets a deleted item's own patch_id,
+    # never a surviving forcer's - see propagate_deletions_once's docstring).
+    assert m[8, 7].alert_chosen
+    assert m[8, 7].forces == set()
+    assert m[8, 7].patch_id == patch_id
+
+    display_closure_step(m, 'after remove_blocked_links', show_links=True, show_pivots=True, show_real=True, ax=ax_after)
     plt.tight_layout()
     plt.show()
 

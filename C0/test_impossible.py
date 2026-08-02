@@ -45,7 +45,7 @@ def test_other_full_2x2():
     m = build_map_of_squares(9, 9)
     place_and_chase(m, (3, 3), "round 1: (3,3) placed")
     place_and_chase(m, (4, 3), "round 2: (4,3) placed")
-    place_and_chase(m, (5, 6), "round 1: (3,3) placed")
+    place_and_chase(m, (5, 6), "round 3: (5,6) placed")
     try:
         place_and_chase(m, (6, 6), "round 4: (6,6) placed anyway")
         raised = False
@@ -54,8 +54,6 @@ def test_other_full_2x2():
         display_closure_step(m, f"round 4: place_squares rejected (6,6) - {e}",
                               show_links=True, show_real=False)
     assert raised, "(6,6) should be rejected outright now that (5,5) is already chosen"
-
-    display_closure_step(m, '0: initial state', show_links=True, show_real=True)
 
 def test_try_3x3_hole1():
     m = build_map_of_squares(12, 12)
@@ -88,7 +86,7 @@ def test_try_3x3_hole3():
 
     place_and_chase(m, (5, 2), "round 5: (5,2) placed", False)   
     place_and_chase(m, (3, 6), "round 6: (3,6) placed", False)
-    place_and_chase(m, (9, 4), "round 7: (9,4) placed", False)   
+    place_and_chase(m, (9, 4), "round 7: (9,4) placed")   
     place_and_chase(m, (6, 8), "round 8: (6,8) placed") 
 
     #place_and_chase(m, (8, 7), "round 9: (8,7) placed") 
