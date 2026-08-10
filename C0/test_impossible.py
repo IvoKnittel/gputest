@@ -1,10 +1,13 @@
 """Try to construct forbidden shapes to see if it is prevented and how.
 """
+import numpy as np
+
 from map_of_squares import InvalidTilingError
-from representation import build_map_of_squares, place_squares, display_closure_step
+from representation import build_map_of_squares, display_closure_step
 from closure import (find_alerts,
                       link_patches,
-                      remove_blocked_links)
+                      remove_blocked_links,
+                      place_squares)
 from test_utils import place_and_chase 
 
 def test_pinwheel():
@@ -23,8 +26,9 @@ def test_pinwheel():
         raised = False
     except InvalidTilingError as e:
         raised = True
+        colormap = np.zeros((*m.shape, 3))
         display_closure_step(m, f"round 4: placing_square at (5,2) rejected - {e}",
-                              show_links=True, show_real=False)
+                              show_links=True, show_real=False, colormap=colormap)
     assert raised, "(5,2) should be rejected outright now"
 
 
@@ -33,11 +37,13 @@ def test_show_other_full_2x2():
     """
     m = build_map_of_squares(9, 9)
     place_squares(m, [(3, 3), (4, 3), (5, 6), (6, 6)])
-    display_closure_step(m, '0: initial state', show_links=True, show_real=True)
+    colormap = np.zeros((*m.shape, 3))
+    display_closure_step(m, '0: initial state', show_links=True, show_real=True, colormap=colormap)
     find_alerts(m)
     link_patches(m)
     remove_blocked_links(m)
-    display_closure_step(m, '0: next state', show_links=True, show_real=True)
+    colormap = np.zeros((*m.shape, 3))
+    display_closure_step(m, '0: next state', show_links=True, show_real=True, colormap=colormap)
 
 
 def test_other_full_2x2():
@@ -51,8 +57,9 @@ def test_other_full_2x2():
         raised = False
     except InvalidTilingError as e:
         raised = True
+        colormap = np.zeros((*m.shape, 3))
         display_closure_step(m, f"round 4: place_squares rejected (6,6) - {e}",
-                              show_links=True, show_real=False)
+                              show_links=True, show_real=False, colormap=colormap)
     assert raised, "(6,6) should be rejected outright now that (5,5) is already chosen"
 
 def test_try_3x3_hole1():
@@ -91,3 +98,12 @@ def test_try_3x3_hole3():
 
     #place_and_chase(m, (8, 7), "round 9: (8,7) placed") 
     place_and_chase(m, (7, 5), "round 9: (7,5) placed") 
+
+
+def test_free_cell_with_4_direct_blocked_neighbors():
+    """ build a free cell with 4 direct blocked neighbors. """
+    m = build_map_of_squares(12, 12)
+    place_and_chase(m, (2, 2), "round 1: (2,2) placed", True)
+    place_and_chase(m, (3, 5), "round 2: (3,5) placed", True)
+    place_and_chase(m, (5, 1), "round 3: (5,1) placed", True) 
+    place_and_chase(m, (6, 4), "round 4: (6,4) placed", True)   

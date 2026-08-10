@@ -8,6 +8,8 @@ which assert on specific link/patch/conflict outcomes - the point here is just t
 look at what the smallest possible inputs produce, one stage at a time.
 """
 
+import numpy as np
+
 from representation import build_map_of_squares, place_blocked_squares, display_closure_step
 from closure import (find_alerts,
                       link_patches,
@@ -28,7 +30,8 @@ def test_rectangle():
     resolve_cycles_and_centrality(m)
     remove_blocked_links(m)
     check_tiling_invariant(m)
-    display_closure_step(m, '4: check_tiling_invariant  (invariant held - no state change)', show_links=True)
+    colormap = np.zeros((*m.shape, 3))
+    display_closure_step(m, '4: check_tiling_invariant  (invariant held - no state change)', show_links=True, colormap=colormap)
 
 if __name__ == "__main__":
     test_rectangle()

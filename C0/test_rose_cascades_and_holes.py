@@ -28,17 +28,18 @@ a real pytest once one's available.
 
 import os
 
+import numpy as np
 import matplotlib.pyplot as plt
 
 from map_of_squares import StateEnum, InvalidTilingError
 from representation import (build_map_of_squares,
-                             place_squares,
                              build_cycle,
                              describe_links,
                              real_space_map,
                              display_closure_step,
                              display_links)
-from closure import find_alerts, link_patches, resolve_cycles_and_centrality, check_tiling_invariant
+from closure import (find_alerts, link_patches, resolve_cycles_and_centrality,
+                      check_tiling_invariant, place_squares)
 
 IMG_DIR = os.path.join(os.path.dirname(__file__), "docs", "rose_cascades_and_holes")
 os.makedirs(IMG_DIR, exist_ok=True)
@@ -89,7 +90,8 @@ def test_one_alert_is_born():
     assert m[3, 3].alert_chosen and m[3, 3].forced_by == {(1, 2), (1, 4), (3, 4)}
     assert m[1, 4].forces == {(3, 3)} and m[3, 4].forces == {(3, 3)}
 
-    display_closure_step(m, "one alert is born - after find_alerts", show_links=True)
+    colormap = np.zeros((*m.shape, 3))
+    display_closure_step(m, "one alert is born - after find_alerts", show_links=True, colormap=colormap)
     save("1_one_alert_is_born.png")
 
 
@@ -114,8 +116,7 @@ def test_cascade_propagates_a_second_hop():
     link_patches, called afterward, changes nothing at all - not just for these
     two cells, every alert_blocked/alert_chosen/.forces/.forced_by value on the
     whole board is bit-for-bit identical before and after, which is exactly
-    what "link_patches is now a guaranteed no-op" (see resolve_chosen_link's
-    docstring) predicts.
+    what link_patches's own docstring ("now a guaranteed no-op") predicts.
     """
     m = build_map_of_squares(9, 9)
     m[2, 2].state = StateEnum.blocked
@@ -129,7 +130,8 @@ def test_cascade_propagates_a_second_hop():
     assert (3, 3) in m[4, 5].forced_by
     assert (4, 4) in m[2, 3].forced_by
 
-    display_closure_step(m, "after find_alerts - already fully cascaded", show_links=True)
+    colormap = np.zeros((*m.shape, 3))
+    display_closure_step(m, "after find_alerts - already fully cascaded", show_links=True, colormap=colormap)
     save("2a_before_link_patches.png")
 
     # Snapshot .forces/.forced_by as fresh set copies, not just references - both
@@ -145,7 +147,8 @@ def test_cascade_propagates_a_second_hop():
              for i in range(9) for j in range(9)}
     assert before == after  # link_patches: a guaranteed no-op now, board-wide
 
-    display_closure_step(m, "after link_patches - unchanged, board-wide", show_links=True)
+    colormap = np.zeros((*m.shape, 3))
+    display_closure_step(m, "after link_patches - unchanged, board-wide", show_links=True, colormap=colormap)
     save("2b_after_link_patches.png")
 
 
@@ -215,7 +218,8 @@ def test_what_a_hole_actually_looks_like():
     rs = real_space_map(m)
     assert rs[3, 3] == 0  # the trapped pixel: provably unreachable, no matter what
 
-    display_closure_step(m, "a hole: real (3,3) can never be covered", show_real=True)
+    colormap = np.zeros((*m.shape, 3))
+    display_closure_step(m, "a hole: real (3,3) can never be covered", show_real=True, colormap=colormap)
     save("4_the_hole.png")
 
 

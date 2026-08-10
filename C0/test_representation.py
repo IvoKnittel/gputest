@@ -1,8 +1,7 @@
-import matplotlib.pyplot as plt
+import numpy as np
 
 from map_of_squares import StateEnum
 from representation import (map_of_squares_from_array,
-                             display_real_space_and_map,
                              display_closure_step)
 from closure import (find_alerts,
                       link_patches,
@@ -23,14 +22,11 @@ def test_map_input_display():
             [0, 0, 0, 0, 0, 0, 0, 0, 0, 0]]
 
     m = map_of_squares_from_array(grid)
-
-    fig, (ax_real, ax_map) = plt.subplots(1, 2, figsize=(10, 5))
-    display_real_space_and_map(m, ax_real, ax_map)
-    plt.tight_layout()
-    plt.show()
+    colormap = np.zeros((*m.shape, 3))
+    display_closure_step(m, 'map input display', show_real=True, colormap=colormap)
 
 def test_do_closure_steps():
-    """Run do_closure's stages one at a time on the directed-graph review grid from
+    """Run the closure pipeline's stages one at a time on the directed-graph review grid from
     test_map_input_display, displaying the map after each so alert_blocked/
     alert_chosen items (and their overlap) are visible as they appear.
         grid = [[0, 0, 0, 0, 0, 0, 1, 0, 0, 0],
@@ -81,21 +77,26 @@ def test_do_closure_steps():
             [0, 0, 0, 0, 0, 0, 0, 0, 0, 0]]
     
     m = map_of_squares_from_array(grid)
-    display_closure_step(m, '0: initial state')
+    colormap = np.zeros((*m.shape, 3))
+    display_closure_step(m, '0: initial state', colormap=colormap)
 
     find_alerts(m)
-    display_closure_step(m, '2: find_alerts  (alert_blocked=blue, alert_chosen=yellow, both=green)')
+    colormap = np.zeros((*m.shape, 3))
+    display_closure_step(m, '2: find_alerts  (alert_blocked=blue, alert_chosen=yellow, both=green)', colormap=colormap)
 
     link_patches(m)
-    display_closure_step(m, '3: link_patches', show_links=True)
+    colormap = np.zeros((*m.shape, 3))
+    display_closure_step(m, '3: link_patches', show_links=True, colormap=colormap)
 
     resolve_cycles_and_centrality(m)
 
+    colormap = np.zeros((*m.shape, 3))
     display_closure_step(m, '5 forward: find_cycle_patches + find_central_patch_items (pivots in blue)',
-                          show_links=True, show_pivots=False, show_real=True)
+                          show_links=True, show_pivots=False, show_real=True, colormap=colormap)
 
     remove_blocked_links(m)
-    display_closure_step(m, '3b: remove_blocked_links', show_links=True)
+    colormap = np.zeros((*m.shape, 3))
+    display_closure_step(m, '3b: remove_blocked_links', show_links=True, colormap=colormap)
 
 
 def test_find_alerts_link_patches_forces_and_free_cells():

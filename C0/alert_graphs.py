@@ -1,4 +1,4 @@
-from map_of_squares import StateEnum, InvalidTilingError
+from map_of_squares import StateEnum
 
 # The 8 neighbours of a cell (direct and diagonal), in ring order so that RING[k-1]
 # and RING[k+1] (mod 8) are the two neighbours geometrically adjacent to RING[k].
@@ -63,7 +63,7 @@ def set_alert_chosen(i, j, ring):
     The link this creates is NOT between (i, j) and the corner. (i, j) itself is
     never going to be *chosen* in this scenario - it's the item at risk of being
     *blocked*, and .forces means "if this gets chosen, these must too" everywhere
-    else it's read (forced_closure, resolve_chosen_link); "if this gets blocked"
+    else it's read (forced_closure); "if this gets blocked"
     is a different event entirely, one (i, j) being chosen has nothing to do with.
     What actually forces a corner is whichever of (i, j)'s own diagonal neighbours,
     if chosen, would block (i, j) as a side effect - so it's each free diagonal
@@ -74,7 +74,7 @@ def set_alert_chosen(i, j, ring):
     found here, not only the one diagonal neighbour geometrically tied to one
     specific quadrant. (This is also what makes a later, separate relay stage for
     "any free item diagonal to an alert_blocked item" unnecessary - see
-    resolve_chosen_link/link_patches.) A diagonal ring position that happens to
+    closure.link_patches.) A diagonal ring position that happens to
     itself be one of the corners found is excluded from its own link (no self-loop).
 
     A single centre can have more than one corner (iter_alert_thirds can yield
@@ -105,60 +105,8 @@ def set_alert_chosen(i, j, ring):
             ring[c_idx].forced_by.add(d_pos)
 
 
-# The four diagonal neighbours - the ones place_square_in_core blocks when an item is
-# chosen - as a subset of RING_OFFSETS (ring indices 0, 2, 4, 6).
+# The four diagonal neighbours - the ones a chosen item blocks (see closure.place_squares)
+# - as a subset of RING_OFFSETS (ring indices 0, 2, 4, 6).
 DIAGONAL_OFFSETS = [RING_OFFSETS[k] for k in (0, 2, 4, 6)]
 
 
-def resolve_chosen_link(i, j, map_of_squares):
-    """Formerly stage 3's relay: for every diagonal neighbour of (i, j) that is
-    alert_blocked, read its .forces to find what choosing (i, j) - which blocks
-    that neighbour - would additionally oblige.
-
-    That premise no longer holds now that set_alert_chosen links every free
-    diagonal neighbour of an alert_blocked centre directly, not the centre
-    itself (see its docstring): an alert_blocked neighbour's own .forces no
-    longer describes "what to do if I get blocked" - it describes whatever
-    *that neighbour* separately forces as someone else's diagonal linker, which
-    has nothing to do with (i, j)'s own risk. Reading it here doesn't find a
-    deeper relay anymore, it finds an unrelated value and wrongly overwrites
-    (i, j)'s own already-correct forces with it (verified directly: in the
-    (3,3)/(4,4) cascade from test_rose_cascades_and_holes.py, set_alert_chosen
-    alone already gives (3,3).forces == {(4,5)} - correct - and the old version
-    of this function replaced it with {(2,3)}, which (3,3) has no actual path
-    to).
-
-    Whatever this function used to contribute - including the exact case it was
-    built for (test_4links_situation: an item with several alert_blocked
-    diagonal neighbours, none of which happens to be the literal corner of any
-    one of their own quadrants) - set_alert_chosen now establishes directly and
-    correctly in a single pass, and closure.forced_closure already provides the
-    transitive, multi-hop walk over that corrected data - a relay stage on top
-    of it is not just unneeded, it actively corrupts correct values wherever it
-    used to fire. So there is nothing left for this stage to find.
-
-    Kept as a named no-op, rather than deleted, so link_patches and every
-    caller of it keep working unchanged - it is now guaranteed to return an
-    empty set.
-    """
-    return set()
-
-
-def mark_patch_conflicts(item, i, j, map_of_squares):
-    """Choosing an alert_chosen item blocks its four diagonal neighbours. If one of
-    them is itself alert_chosen with a different patch_id, choosing either patch would
-    block a member of the other, so the two patches exclude each other - record each
-    other's patch_id in .conflicts (skipping duplicates). If one of them shares this
-    item's own patch_id, the patch would end up blocking one of its own members, which
-    should never happen - raise InvalidTilingError.
-    """
-    for di, dj in DIAGONAL_OFFSETS:
-        neighbour = map_of_squares[i + di, j + dj]
-        if not neighbour.alert_chosen:
-            continue
-        if neighbour.patch_id == item.patch_id:
-            raise InvalidTilingError(
-                f"patch {item.patch_id} is self-contradictory: item at "
-                f"({i}, {j}) would block its own member at ({i + di}, {j + dj})")
-        item.conflicts.add(neighbour.patch_id)
-        neighbour.conflicts.add(item.patch_id)

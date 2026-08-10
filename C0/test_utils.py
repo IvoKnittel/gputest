@@ -1,15 +1,13 @@
-from representation import place_squares, display_closure_step
-from closure import (find_alerts, link_patches, remove_blocked_links, forced_closure,
-                      reset_alert_bookkeeping, resolve_cycles_and_centrality)
+import numpy as np
+
+from representation import display_closure_step
+from closure import redo_closure, reset_alert_bookkeeping, forced_closure, place_squares
 
 def place_and_chase(m, pos, title, show=True):
     forced = forced_closure(m, pos)
     place_squares(m, list(forced))
     reset_alert_bookkeeping(m)
-    find_alerts(m); link_patches(m)
-    resolve_cycles_and_centrality(m)
+    redo_closure(m, title, show=False)
     if show:
-        display_closure_step(m, title, show_links=True, show_real=True)
-    remove_blocked_links(m)
-    if show:
-        display_closure_step(m, title, show_links=True, show_real=True)
+        colormap = np.zeros((*m.shape, 3))
+        display_closure_step(m, title, show_links=True, show_real=True, colormap=colormap)

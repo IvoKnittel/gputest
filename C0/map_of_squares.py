@@ -20,7 +20,8 @@ class SquareItem:
     quality:    score used to rank candidate placements.
     state:      current placement state (free / chosen / blocked).
     alert_chosen:  raised by a neighbouring tile's placement pass instead of writing
-                   .state directly; resolved into real state by do_closure().
+                   .state directly; resolved into real state via forced_closure +
+                   place_squares (see test_utils.place_and_chase).
     alert_blocked: same as alert_chosen, for the blocked outcome.
     forces:     every (row, col) index this item forces - i.e. what must also be
                 chosen if this item is chosen; empty means this item forces
@@ -46,19 +47,11 @@ class SquareItem:
     forced_by:  every (row, col) index that has ever forced this item - i.e. the
                 other side of the same relationship .forces records, filled
                 alongside it wherever a .forces entry is created (set_alert_chosen,
-                copy_map_reverse, representation.set_link) so it's always available
-                without needing a separate reversed copy of the map to look it up.
-                Also a set, for the same reason .forces is. remove_blocked_links
-                retracts an entry here when it prunes the matching .forces link it
-                turns out to be doomed, so a .forced_by entry stays live rather than
-                describing a forcing relationship that no longer holds. A .forces cut
+                representation.set_link) so it's always available without
+                needing a separate reversed copy of the map to look it up.
+                Also a set, for the same reason .forces is. A .forces cut
                 (find_central_patch_items, find_cycle_patches) does not retract,
                 though - a stale entry can still be left behind that way.
-    conflicts:  patch_ids of other patches that exclude this item's patch - i.e.
-                choosing a member of this patch would block a member of theirs. A
-                set: which patch_ids conflict is all that matters, never how many
-                times or in what order a given one was recorded. Populated by
-                do_closure once patch_id has settled; empty until then.
     centrality: distance, in .forces hops, from this item's chain to the closest
                 terminal (no-.forces) item of its patch; assigned by
                 closure.find_central_patch_items one generation at a time, -1
@@ -85,13 +78,14 @@ class SquareItem:
                 .forces at once (see .forces above and test_do_closure_steps)
                 can still have one candidate crowd out another here - see the
                 "Known gap" note on find_cycle_patches.
-    delete:     marks this item for the deletion cascade closure.remove_blocked_links
-                runs once patch_id has converged: True for an item found to
-                diagonally block another alert_chosen item of its own patch_id
-                (a self-blocking patch - see closure.mark_self_blocking_same_patch),
-                or for an item whose .forced_by emptied out as a consequence of
-                that (see closure.propagate_deletions_once). False once the
-                cascade has actually processed the item.
+    rectangle:  (row, col) index of the direct neighbour this item has been
+                paired with into a domino, or (-1, -1) while unpaired. Set by
+                set_square_chosen: when an item is chosen, the first direct
+                neighbour found that is itself already chosen and still
+                unpaired becomes its partner, both ways. Deliberately
+                first-come: a chosen neighbour that already has a partner is
+                skipped rather than repaired, so pairing one more chosen item
+                onto either end of an existing domino later never disturbs it.
     """
     quality: float = -1.0
     state: StateEnum = StateEnum.free
@@ -99,27 +93,47 @@ class SquareItem:
     alert_blocked: bool = False
     forces: set = field(default_factory=set)
     forced_by: set = field(default_factory=set)
-    conflicts: set = field(default_factory=set)
     centrality: int = -1
     patch_id: int = -1
     max_id: int = -1
-    delete: bool = False
+    rectangle: tuple = (-1, -1)
 
 
-@dataclass
-class CoreItem:
-    """Summary of one 3x3 tile-core, for exchanging conflict information between
-    cores rather than between individual items (see closure.build_core_map).
+# The four direct (orthogonal) neighbours - as opposed to a diagonal one -
+# checked by set_square_chosen when pairing a newly-chosen item into a domino.
+DIRECT_OFFSETS = ((-1, 0), (1, 0), (0, -1), (0, 1))
 
-    conflicts: patch_ids that conflict with some patch represented in this core -
-               the union of every item's .conflicts within the core, with any
-               patch_id that is *also* one of this core's own items' .patch_id
-               discarded: an intra-core conflict can never actually matter, since
-               only one patch is ever chosen per core in the first place. Built by
-               closure.build_core_map; see closure.map_patches_to_pivots for the
-               matching per-patch side of this scheme.
+
+def set_square_chosen(map_of_squares, pos):
+    """Wrapper around setting map_of_squares[pos].state to StateEnum.chosen,
+    that also pairs it into a rectangle (domino) with a direct neighbour, if
+    one qualifies. Lives here, not in closure.py/representation.py, so both
+    (representation.py can't import from closure.py without a cycle) can call
+    it as the one place .state ever becomes StateEnum.chosen.
+
+    Checks all four direct neighbours of pos: the first one found that is
+    itself already chosen *and* still unpaired (.rectangle == (-1, -1)) is
+    paired with pos - each one's .rectangle records the other's index. A
+    chosen neighbour that already has a partner is skipped, not repaired -
+    once two adjacent chosen items are paired, a further chosen item showing
+    up next to either of them later, to their other side, must not disturb
+    that existing pairing.
     """
-    conflicts: list = field(default_factory=list)
+    item = map_of_squares[pos]
+    item.state = StateEnum.chosen
+
+    rows, cols = map_of_squares.shape
+    i, j = pos
+    for di, dj in DIRECT_OFFSETS:
+        ni, nj = i + di, j + dj
+        if not (0 <= ni < rows and 0 <= nj < cols):
+            continue
+        neighbour = map_of_squares[ni, nj]
+        if neighbour.state == StateEnum.chosen and neighbour.rectangle == (-1, -1):
+            neighbour.rectangle = pos
+            item.rectangle = (ni, nj)
+            break
+
 
 class InvalidTilingError(RuntimeError):
     """Raised when a closure invariant over map_of_squares is violated."""
