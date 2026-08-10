@@ -116,10 +116,8 @@ def test_tree_fan_out():
     colormap = np.zeros((*m.shape, 3))
     display_closure_step(m, 'tree (fan-out)', show_links=True, show_real=True, colormap=colormap)
 
-def test_reverse_tree_fan_in():
-    """Several items all point at the same one - the fan-in shape behind the
-    crowding bug on find_cycle_patches's max_id: several simultaneous
-    "candidates" arriving at one node in the same generation."""
+def test_tree_fan_in():
+    """Several items all point at one node in the same generation."""
     pass
 
 def test_line_into_cycle():

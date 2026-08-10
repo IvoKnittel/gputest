@@ -9,10 +9,13 @@ directly, then displayed, to explore what happens before trying to prove anythin
 about the general case.
 """
 
+import colorsys
+import random
+
 import numpy as np
 import matplotlib.pyplot as plt
 
-from map_of_squares import SquareItem, StateEnum, InvalidTilingError
+from map_of_squares import SquareItem, StateEnum, InvalidTilingError, set_square_chosen, DIRECT_OFFSETS
 
 # create maps from user input
 
@@ -25,7 +28,7 @@ def build_map_of_squares(rows, cols):
     return m
 
 
-# The four diagonal offsets place_square_in_core blocks when an item is chosen.
+# The four diagonal offsets a chosen item blocks (see closure.place_squares).
 DIAGONAL_OFFSETS = ((-1, -1), (-1, 1), (1, -1), (1, 1))
 
 
@@ -34,10 +37,10 @@ def map_of_squares_from_array(state_grid):
     or a numpy array): 0 = free, 1 = chosen.
 
     Every diagonal neighbour of a chosen cell is set to blocked, matching the
-    invariant place_square_in_core enforces elsewhere (choosing an item blocks its
-    four diagonal neighbours) - an already-chosen cell is never overwritten to
-    blocked, and diagonal neighbours that fall outside the grid are simply skipped,
-    since this builder doesn't assume any padding margin around it.
+    invariant closure.place_squares enforces elsewhere (choosing an item blocks
+    its four diagonal neighbours) - an already-chosen cell is never overwritten
+    to blocked, and diagonal neighbours that fall outside the grid are simply
+    skipped, since this builder doesn't assume any padding margin around it.
     """
     grid = np.asarray(state_grid)
     rows, cols = grid.shape
@@ -46,7 +49,7 @@ def map_of_squares_from_array(state_grid):
     for i in range(rows):
         for j in range(cols):
             if grid[i, j]:
-                m[i, j].state = StateEnum.chosen
+                set_square_chosen(m, (i, j))
 
     for i in range(rows):
         for j in range(cols):
@@ -122,36 +125,13 @@ def real_space_map(map_of_squares):
     return real_space
 
 
-def place_squares(map_of_squares, positions):
-    """Set every (i, j) in positions to StateEnum.chosen on map_of_squares, in
-    place. positions is expected to start out entirely free - e.g. a fresh
-    map from build_map_of_squares - so no diagonal-neighbour pair among them
-    can already be blocked as a side effect of some earlier placement.
-
-    Checks for the same forbidden overlap real_space_map itself rejects: two
-    placed squares that are diagonal neighbours only share a single
-    real-space corner cell, not a valid overlap (see real_space_map's
-    docstring) - raise InvalidTilingError if any placed pair violates it, by
-    simply calling real_space_map and discarding its result, rather than
-    duplicating its check here.
-
-    Then blocks every diagonal neighbour of a placed square that is still
-    free, matching the invariant place_square_in_core/map_of_squares_from_array
-    enforce elsewhere (choosing an item blocks its four diagonal neighbours) -
-    so a placed square's blocked neighbours show up on display_map_of_squares_3States
-    too, not just the chosen square itself.
+def is_realmap_cover_complete(map_of_squares):
+    """True once real_space_map(map_of_squares) has no cell left at its
+    initial value (0, free) - every real-space cell is covered by some
+    chosen square. False if at least one real-space cell is still 0.
     """
-    for i, j in positions:
-        map_of_squares[i, j].state = StateEnum.chosen
-    # real_space_map(map_of_squares)
-
-    rows, cols = map_of_squares.shape
-    for i, j in positions:
-        for di, dj in DIAGONAL_OFFSETS:
-            ni, nj = i + di, j + dj
-            if (0 <= ni < rows and 0 <= nj < cols
-                    and map_of_squares[ni, nj].state == StateEnum.free):
-                map_of_squares[ni, nj].state = StateEnum.blocked
+    real_space = real_space_map(map_of_squares)
+    return bool((real_space != 0).all())
 
 
 def place_blocked_squares(map_of_squares, positions):
@@ -200,6 +180,88 @@ MARGIN_COLOR = (0.9, 0.9, 0.9)
 ALERT_BLOCKED_COLOR = (0, 0, 1)
 ALERT_CHOSEN_COLOR = (1, 1, 0)
 ALERT_BOTH_COLOR = (0, 1, 0)
+
+# get_random_shade_of_cyan varies CHOSEN_COLOR's hue within +/- this fraction
+# of the hue wheel, in NUM_CYAN_SHADES evenly-spaced steps - "slight" meaning
+# every shade still reads as cyan at a glance, just distinguishable from
+# CHOSEN_COLOR and from each other (e.g. one colour per placed rectangle).
+CYAN_HUE_SPREAD = 0.1
+NUM_CYAN_SHADES = 16
+_CHOSEN_HUE, _CHOSEN_SATURATION, _CHOSEN_VALUE = colorsys.rgb_to_hsv(*CHOSEN_COLOR)
+_CYAN_SHADE_HUES = [
+    _CHOSEN_HUE + (k / (NUM_CYAN_SHADES - 1) - 0.5) * 2 * CYAN_HUE_SPREAD
+    for k in range(NUM_CYAN_SHADES)
+]
+
+
+def get_random_shade_of_cyan():
+    """A random (r, g, b) triple: CHOSEN_COLOR with its hue nudged slightly,
+    saturation and value unchanged (still fully-saturated, full-brightness) -
+    one of NUM_CYAN_SHADES evenly-spaced hues within +/- CYAN_HUE_SPREAD of
+    CHOSEN_COLOR's own hue.
+    """
+    hue = _CYAN_SHADE_HUES[random.randrange(NUM_CYAN_SHADES)] % 1.0
+    return colorsys.hsv_to_rgb(hue, _CHOSEN_SATURATION, _CHOSEN_VALUE)
+
+
+def get_shade_of_cyan(pos, m, colormap):
+    """The colour to draw the chosen item at pos in, memoised in colormap so
+    every cell (and its rectangle partner, if any) keeps the same shade
+    across repeated lookups instead of re-rolling one each time.
+
+    colormap[pos] still at its init value (black - see the colormap
+    docstring/callers of display_closure_step) means this cell hasn't been
+    coloured yet: pick a fresh get_random_shade_of_cyan(), store it at
+    colormap[pos], and - if m[pos].rectangle has been assigned - store the
+    same colour at the partner's position too, so querying the partner
+    later finds colormap already set and returns this same shade rather than
+    rolling an independent one; a domino should read as one colour, not two.
+    Otherwise, colormap[pos] was set already (by an earlier call on pos
+    itself or by its rectangle partner) - just return it as-is.
+    """
+    i, j = pos
+    if not colormap[i, j].any():
+        c = get_random_shade_of_cyan()
+        colormap[i, j] = c
+        rectangle = m[i, j].rectangle
+        if rectangle != (-1, -1):
+            ri, rj = rectangle
+            colormap[ri, rj] = c
+    else:
+        c = colormap[i, j]
+    return c
+
+
+def get_overwritten_hue_position(pos, m):
+    """For an unpaired item A at pos, find a direct neighbour B that is
+    itself paired into a rectangle - i.e. a neighbour whose own colour is
+    already settled, unlike A's - so a caller can look up/reuse B's hue
+    rather than one A would otherwise roll independently.
+
+    A itself must still be unpaired (A.rectangle == (-1, -1)); if it's
+    already paired, its own colour is already settled via its own rectangle
+    partner, so there's nothing to look up here regardless of its
+    neighbours - see the default return below.
+
+    Returns (found, B's position): found=True and the first direct
+    neighbour B found with B.rectangle assigned (!= (-1, -1)); found=False
+    and (-1, -1) otherwise - A already paired, or every unpaired direct
+    neighbour is itself unpaired.
+    """
+    i, j = pos
+    item = m[i, j]
+    if item.rectangle == (-1, -1):
+        rows, cols = m.shape
+        for di, dj in DIRECT_OFFSETS:
+            ni, nj = i + di, j + dj
+            if not (0 <= ni < rows and 0 <= nj < cols):
+                continue
+            neighbour = m[ni, nj]
+            if neighbour.rectangle != (-1, -1):
+                found = True
+                return found, (ni, nj)
+    found = False
+    return found, (-1, -1)
 
 
 def display_map_of_squares_alerts(map_of_squares):
@@ -280,9 +342,9 @@ def compute_blue_arrows(m):
     find_cycle_patches (see its "Known gap" note) can leave stuck indefinitely
     - and which only ever drew one arrow per patch, from its single furthest
     ("pivot") item, even when several other items link directly to the same
-    terminal (see test_remove_blocked_links_disagreeing_removals: (6, 4) forces
-    straight to (5, 6) just as directly as the patch's actual pivot, (2, 3),
-    does, but only (2, 3) got an arrow under the old computation).
+    terminal (e.g. an item like (6, 4) that forces straight to a terminal
+    (5, 6) just as directly as the patch's actual pivot, (2, 3), does, but only
+    (2, 3) got an arrow under the old computation).
 
     Every alert_chosen item with no .forces of its own is a terminal by
     definition (nothing further is forced) - centrality 0, assigned directly
@@ -324,27 +386,27 @@ def compute_blue_arrows(m):
     return arrows
 
 
-def display_closure_step(m, title, show_links=False, show_pivots=False, show_real=False, ax=None):
+def display_closure_step(m, title, show_links=False, show_pivots=False, show_real=False, ax=None, colormap=None):
     """Show a single map_of_squares panel coloured via colorize_with_alerts, so
     alert_blocked (blue), alert_chosen (yellow), and both-at-once (green) are
     visible on top of the plain free/chosen/blocked colours - see
     test_representation.test_do_closure_steps, which calls this after each
-    do_closure stage in turn.
+    closure stage in turn.
 
     show_links=True additionally draws a black arrow into every alert_chosen
     item from each item in its .forced_by (see SquareItem.forced_by) -
     drawn from that source, not read off the target's own .forces, so the arrow
     points the way the causal flow actually runs: source is what gets chosen
     (or blocked) first, and that is what forces this item, not the other way
-    around. An item can have more than one, e.g. test_4links_situation), drawn
+    around. An item can have more than one, drawn
     directly on top of the image - the same (row, col) -> (x, y) = (col, row)
     mapping imshow already uses for the image itself, so no coordinate
     translation is needed. A self-loop (a source equal to (i, j) itself) has no
     direction to draw an arrow along, so it's circled in red instead -
-    resolve_chosen_link (alert_graphs.py) skips self-loop candidates when it
-    can, so this should only ever show up in a hand-built scenario, not one
-    produced by find_alerts/link_patches - see
-    test_link_patches_relays_past_self_loop_candidate in test_representation.py.
+    alert_graphs.set_alert_chosen already excludes a diagonal ring position
+    from its own link (`if c_idx == d_idx: continue`), so this should only
+    ever show up in a hand-built scenario, not one produced by
+    find_alerts/link_patches.
 
     show_pivots=True additionally draws a blue arrow, source to terminal, for
     every (source, terminal) pair compute_blue_arrows finds - source to
@@ -352,15 +414,14 @@ def display_closure_step(m, title, show_links=False, show_pivots=False, show_rea
     black .forces/.forced_by arrows point in: a terminal is what every item
     upstream of it, transitively, forces. Unlike drawing only from each patch's
     single furthest ("pivot") item, this draws one arrow per item that resolves
-    to a terminal at all - see compute_blue_arrows for why, and
-    test_complex_blocked_links.test_remove_blocked_links_disagreeing_removals,
-    where an intermediate item like (6, 4) - not just the patch's deepest item
-    - gets its own arrow too.
+    to a terminal at all - see compute_blue_arrows for why: an intermediate
+    item like (6, 4) - not just the patch's deepest item - gets its own arrow
+    too.
 
     show_real=True additionally draws the real-space map (real_space_map) in a
     second panel to the right, so a placement's actual physical footprint is
     visible alongside its alert/link overlay - e.g. the last, most-resolved
-    step of a do_closure walkthrough (see test_do_closure_steps). Draws its
+    step of a closure walkthrough (see test_do_closure_steps). Draws its
     own two-panel figure regardless of ax, since a fresh pair of axes is
     needed either way - pass ax=None (the default) whenever show_real=True.
 
@@ -368,7 +429,23 @@ def display_closure_step(m, title, show_links=False, show_pivots=False, show_rea
     panel is drawn, as a standalone display. Pass an existing ax to draw into it
     instead, without creating a figure or calling plt.show() - e.g. to place two
     of these panels side by side in one figure, see
-    test_representation.test_do_closure_steps_reverse_check.
+    test_complex_blocked_links.test_two_forced_cells_block_each_other.
+
+    colormap: per-cell RGB array, same (rows, cols, 3) shape as m, that
+    get_shade_of_cyan memoises into - every chosen cell is drawn in its own
+    slight shade of cyan (get_shade_of_cyan) instead of the flat CHOSEN_COLOR
+    colorize_with_alerts would otherwise give it, so two chosen cells paired
+    into a rectangle (.rectangle) read as one colour, distinct from any other
+    chosen cell/rectangle on the same panel. Free/blocked cells, and the alert
+    overlay colours, are unaffected - only StateEnum.chosen cells are
+    overridden, and alert flags are never raised on a chosen cell to begin
+    with (find_alerts skips any cell that isn't StateEnum.free), so there's
+    nothing here for that override to clobber. show_real=True's real-space
+    panel uses the same per-cell shades, stamped onto each chosen square's own
+    2x2 real-space footprint - two *unpaired* chosen squares that happen to
+    share a real-space edge still get different colours, so whichever is
+    stamped last wins that shared strip; only an actual .rectangle pairing
+    guarantees a seamless colour across it.
     """
     rows, cols = m.shape
     if show_real:
@@ -379,7 +456,12 @@ def display_closure_step(m, title, show_links=False, show_pivots=False, show_rea
         if standalone:
             fig, ax = plt.subplots(figsize=(5, 5))
     ax.set_facecolor(MARGIN_COLOR)
-    ax.imshow(colorize_with_alerts(m))
+    rgb = colorize_with_alerts(m)
+    for i in range(rows):
+        for j in range(cols):
+            if m[i, j].state == StateEnum.chosen:
+                rgb[i, j] = CHOSEN_COLOR
+    ax.imshow(rgb)
     ax.set_title(title)
     ax.axis('on')
     grid_on(ax, rows, cols)
@@ -435,7 +517,21 @@ def display_closure_step(m, title, show_links=False, show_pivots=False, show_rea
 
     if show_real:
         real_display = real_space_map(m)
-        ax_real.imshow(colorize(real_display, {0: FREE_COLOR, 1: CHOSEN_COLOR}))
+        real_rgb = colorize(real_display, {0: FREE_COLOR})
+        for i in range(rows):
+            for j in range(cols):
+                if m[i, j].state == StateEnum.chosen:
+                    real_rgb[i:i + 2, j:j + 2] = get_shade_of_cyan((i, j), m, colormap)
+        for i in range(rows):
+            for j in range(cols):
+                if m[i, j].state == StateEnum.chosen:
+                    found, pos_overwritten = get_overwritten_hue_position((i,j), m)
+                    if found:
+                       i1 = pos_overwritten[0]
+                       j1 = pos_overwritten[1]
+                       real_rgb[i1:i1 + 2, j1:j1 + 2] = get_shade_of_cyan((i1, j1), m, colormap) 
+
+        ax_real.imshow(real_rgb)
         ax_real.set_title('real space')
         ax_real.axis('on')
         grid_on(ax_real, *real_display.shape)
@@ -564,8 +660,10 @@ def display_real_space_and_map(map_of_squares, ax_real, ax_map):
     within the very same frame - one cell-width smaller and centred on all
     sides, since map_of_squares has one fewer row and column than real_space.
 
-    Shared by test_map_input_display/test_4links_situation and by
-    display_graph_map_and_real_space's own "real space"/"map_of_squares" panels.
+    Used by display_graph_map_and_real_space's own "real space"/
+    "map_of_squares" panels, alongside its third (graph) panel - unlike
+    display_closure_step's show_real=True, which always draws its own fresh
+    two-panel figure, so it can't slot into a pre-existing three-panel layout.
     """
     real_display = real_space_map(map_of_squares)
     ax_real.imshow(colorize(real_display, {0: FREE_COLOR, 1: CHOSEN_COLOR}))
