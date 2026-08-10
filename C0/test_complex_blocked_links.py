@@ -43,9 +43,11 @@ def test_two_forced_cells_block_each_other():
     fig, (ax_before, ax_after) = plt.subplots(1, 2, figsize=(10, 5))
     colormap = np.zeros((*m.shape, 3))
     display_closure_step(m, 'after remove_blocked_links', show_links=True, show_pivots=True, show_real=True, ax=ax_before, colormap=colormap)
+    reset_alert_bookkeeping(m, keep_patch_id_for_blocked=True)
 
-    redo_closure(m, 'closure redone but before remove blocked links', show=True)
-
+    find_alerts(m); link_patches(m)
+    resolve_cycles_and_centrality(m)
+    
     fig, (ax_before, ax_after) = plt.subplots(1, 2, figsize=(10, 5))
     colormap = np.zeros((*m.shape, 3))
     display_closure_step(m, 'closure redone', show_links=True, show_pivots=True, show_real=True, ax=ax_before, colormap=colormap)

@@ -27,6 +27,14 @@ def build_map_of_squares(rows, cols):
             m[i, j] = SquareItem()
     return m
 
+def build_margin_free_map(n):
+    """(n+2) x (n+2) map: a 1-cell blocked margin around an n x n free interior."""
+    size = n + 2
+    m = build_map_of_squares(size, size)
+    border = [(i, j) for i in range(size) for j in range(size)
+              if i in (0, size - 1) or j in (0, size - 1)]
+    place_blocked_squares(m, border)
+    return m
 
 # The four diagonal offsets a chosen item blocks (see closure.place_squares).
 DIAGONAL_OFFSETS = ((-1, -1), (-1, 1), (1, -1), (1, 1))

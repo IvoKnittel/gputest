@@ -194,9 +194,6 @@ def remove_blocked_links(map_of_squares, title=None, show=False):
         display_closure_step(map_of_squares, title or 'remove_blocked_links',
                               show_links=True, show_real=True, colormap=colormap)
 
-    reset_alert_bookkeeping(map_of_squares, keep_patch_id_for_blocked=True)
-
-
 def forced_closure(map_of_squares, position):
     """Every position transitively forced by position's own .forces (see
     SquareItem.forces), not including position itself: position's direct forces,
@@ -688,3 +685,6 @@ def redo_closure(m, title, show=False):
         colormap = np.zeros((*m.shape, 3))
         display_closure_step(m, title, show_links=True, show_real=True, colormap=colormap)
     remove_blocked_links(m)
+    reset_alert_bookkeeping(m)
+    find_alerts(m); link_patches(m)
+    resolve_cycles_and_centrality(m)

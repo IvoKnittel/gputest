@@ -11,10 +11,7 @@ look at what the smallest possible inputs produce, one stage at a time.
 import numpy as np
 
 from representation import build_map_of_squares, place_blocked_squares, display_closure_step
-from closure import (find_alerts,
-                      link_patches,
-                      remove_blocked_links,
-                      resolve_cycles_and_centrality,
+from closure import (redo_closure,
                       check_tiling_invariant)
 
 
@@ -25,10 +22,7 @@ def test_rectangle():
     """
     m = build_map_of_squares(7, 7)
     place_blocked_squares(m, [(2, 3), (3, 3)])
-    find_alerts(m)
-    link_patches(m)
-    resolve_cycles_and_centrality(m)
-    remove_blocked_links(m)
+    redo_closure(m,'')
     check_tiling_invariant(m)
     colormap = np.zeros((*m.shape, 3))
     display_closure_step(m, '4: check_tiling_invariant  (invariant held - no state change)', show_links=True, colormap=colormap)

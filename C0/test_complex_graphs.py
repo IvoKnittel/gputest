@@ -15,8 +15,7 @@ from representation import (build_map_of_squares,
                              display_closure_step)
 from closure import (find_alerts,
                       link_patches,
-                      remove_blocked_links,
-                      resolve_cycles_and_centrality,
+                      redo_closure,
                       place_squares)
 
 
@@ -97,16 +96,7 @@ def test_tree_fan_out():
             [0, 0, 0, 0, 0, 0, 0, 0, 0, 0]]
 
     m = map_of_squares_from_array(grid)
-    find_alerts(m)
-    link_patches(m)
-    resolve_cycles_and_centrality(m)
-    remove_blocked_links(m)
-
-    # remove_blocked_links now resets alert bookkeeping as its last step (see
-    # its docstring) - rebuild it to check the fan-out survived untouched, since
-    # nothing here is a self-blocking pair.
-    find_alerts(m)
-    link_patches(m)
+    redo_closure(m, "")
 
     assert not m[4, 4].alert_chosen and m[4, 4].forced_by == set()
     assert m[4, 4].forces == {(2, 2), (2, 6), (6, 2), (6, 6)}
@@ -118,7 +108,22 @@ def test_tree_fan_out():
 
 def test_tree_fan_in():
     """Several items all point at one node in the same generation."""
-    pass
+    grid = [[0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+            [0, 0, 0, 1, 1, 0, 0, 0, 0, 0],
+            [0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+            [0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+            [0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+            [0, 0, 0, 0, 0, 0, 0, 1, 0, 0],
+            [0, 0, 0, 0, 0, 0, 0, 1, 0, 0],
+            [0, 0, 0, 0, 0, 0, 0, 1, 0, 0],
+            [0, 0, 0, 0, 0, 0, 0, 1, 0, 0],
+            [0, 0, 0, 0, 0, 0, 0, 0, 0, 0]]
+
+    m = map_of_squares_from_array(grid)
+    redo_closure(m,'')
+    colormap = np.zeros((*m.shape, 3))
+    display_closure_step(m, 'line into cycle', show_links=True, show_real=True, colormap=colormap)
+
 
 def test_line_into_cycle():
     """(1, 4) is a pure diagonal linker into (1, 6) - like (4, 4) in
@@ -139,17 +144,7 @@ def test_line_into_cycle():
             [0, 0, 0, 0, 0, 0, 0, 0, 0, 0]]
 
     m = map_of_squares_from_array(grid)
-    find_alerts(m)
-    link_patches(m)
-    resolve_cycles_and_centrality(m)
-    remove_blocked_links(m)
-
-    # remove_blocked_links now resets alert bookkeeping as its last step (see
-    # its docstring) - rebuild it before checking the line-into-cycle shape
-    # survived untouched, since nothing here is a self-blocking pair.
-    find_alerts(m)
-    link_patches(m)
-    resolve_cycles_and_centrality(m)
+    redo_closure(m, "")
 
     assert not m[1, 4].alert_chosen
     assert m[1, 6].alert_chosen

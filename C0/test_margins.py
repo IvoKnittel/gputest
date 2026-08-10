@@ -30,29 +30,17 @@ import random
 import numpy as np
 
 from map_of_squares import StateEnum
-from representation import (build_map_of_squares, place_blocked_squares,
+from representation import (build_margin_free_map,
                              display_closure_step, is_realmap_cover_complete)
 from closure import (find_alerts,
                       link_patches,
                       resolve_cycles_and_centrality,
-                      remove_blocked_links,
                       redo_closure,
                       forced_closure,
                       place_squares,
                       reset_alert_bookkeeping)
 
 MAX_RANDOM_PLACEMENTS = 8
-
-
-def build_margin_free_map(n):
-    """(n+2) x (n+2) map: a 1-cell blocked margin around an n x n free interior."""
-    size = n + 2
-    m = build_map_of_squares(size, size)
-    border = [(i, j) for i in range(size) for j in range(size)
-              if i in (0, size - 1) or j in (0, size - 1)]
-    place_blocked_squares(m, border)
-    return m
-
 
 def place_random_free_cell(m, size):
     """Place one square at a random still-free cell, chasing whatever it
@@ -98,8 +86,6 @@ def run_margin_free_case(n):
         display_closure_step(m, f'margin {n}x{n}: after placing patch {patch_ids[0]} '
                                  f'(chased from {target})',
                               show_links=True, show_pivots=True, show_real=True, colormap=colormap)
-
-    remove_blocked_links(m)
 
     for k in range(MAX_RANDOM_PLACEMENTS):
         if not place_random_free_cell(m, size):
