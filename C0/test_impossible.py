@@ -81,18 +81,18 @@ def test_try_3x3_hole2():
 
 def test_try_3x3_hole3():
     m = build_map_of_squares(12, 12)
-    place_and_chase(m, (3, 5), "round 1: (3,5) placed", False)
-    place_and_chase(m, (6, 2), "round 2: (6,2) placed", False)
-    place_and_chase(m, (5, 8), "round 3: (5,8) placed", False) 
-    place_and_chase(m, (9, 5), "round 4: (9,5) placed", False)   
+    place_and_chase(m, (3, 5), "round 1: (3,5) placed", False, show_roots_terminals=True)
+    place_and_chase(m, (6, 2), "round 2: (6,2) placed", False, show_roots_terminals=True)
+    place_and_chase(m, (5, 8), "round 3: (5,8) placed", False, show_roots_terminals=True)
+    place_and_chase(m, (9, 5), "round 4: (9,5) placed", False, show_roots_terminals=True)
 
-    place_and_chase(m, (5, 2), "round 5: (5,2) placed", False)   
-    place_and_chase(m, (3, 6), "round 6: (3,6) placed", False)
-    place_and_chase(m, (9, 4), "round 7: (9,4) placed")   
-    place_and_chase(m, (6, 8), "round 8: (6,8) placed") 
+    place_and_chase(m, (5, 2), "round 5: (5,2) placed", False, show_roots_terminals=True)
+    place_and_chase(m, (3, 6), "round 6: (3,6) placed", False, show_roots_terminals=True)
+    place_and_chase(m, (9, 4), "round 7: (9,4) placed", show_roots_terminals=True)
+    place_and_chase(m, (6, 8), "round 8: (6,8) placed", show_roots_terminals=True)
 
-    #place_and_chase(m, (8, 7), "round 9: (8,7) placed") 
-    place_and_chase(m, (7, 5), "round 9: (7,5) placed") 
+    #place_and_chase(m, (8, 7), "round 9: (8,7) placed")
+    place_and_chase(m, (7, 5), "round 9: (7,5) placed", show_roots_terminals=True)
 
 
 def test_free_cell_with_4_direct_blocked_neighbors():

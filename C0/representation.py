@@ -394,7 +394,8 @@ def compute_blue_arrows(m):
     return arrows
 
 
-def display_closure_step(m, title, show_links=False, show_pivots=False, show_real=False, ax=None, colormap=None):
+def display_closure_step(m, title, show_links=False, show_pivots=False, show_real=False,
+                          show_roots_terminals=False, ax=None, colormap=None):
     """Show a single map_of_squares panel coloured via colorize_with_alerts, so
     alert_blocked (blue), alert_chosen (yellow), and both-at-once (green) are
     visible on top of the plain free/chosen/blocked colours - see
@@ -425,6 +426,19 @@ def display_closure_step(m, title, show_links=False, show_pivots=False, show_rea
     to a terminal at all - see compute_blue_arrows for why: an intermediate
     item like (6, 4) - not just the patch's deepest item - gets its own arrow
     too.
+
+    show_roots_terminals=True additionally draws a filled dot on every cell
+    that is a terminal or a root: blue for a terminal (item.alert_chosen and
+    not item.forces - nothing left for it to force, the same condition
+    find_central_patch_items uses to seed its walk, evaluated directly on
+    every cell here rather than only on cells reached via someone else's
+    .forces) and red for a root (item.forces and not item.forced_by -
+    nothing forces this item, but it forces something onward - evaluated on
+    every cell regardless of .alert_chosen, since that flag is a separate
+    bookkeeping detail, not a property of the link structure itself). The two
+    conditions can't both hold for the same item - a terminal has no .forces,
+    a root requires some - so there's no overlap to resolve between the two
+    colours.
 
     show_real=True additionally draws the real-space map (real_space_map) in a
     second panel to the right, so a placement's actual physical footprint is
@@ -522,6 +536,15 @@ def display_closure_step(m, title, show_links=False, show_pivots=False, show_rea
                                          linewidth=2, shrinkA=10, shrinkB=10,
                                          connectionstyle='arc3,rad=0.0'),
                         zorder=6)
+
+    if show_roots_terminals:
+        for i in range(rows):
+            for j in range(cols):
+                item = m[i, j]
+                if item.alert_chosen and not item.forces:
+                    ax.plot(j, i, 'o', markersize=10, color='blue', zorder=5)
+                elif item.forces and not item.forced_by:
+                    ax.plot(j, i, 'o', markersize=10, color='red', zorder=5)
 
     if show_real:
         real_display = real_space_map(m)
