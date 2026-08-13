@@ -154,10 +154,10 @@ def test_line_into_cycle():
     assert m[1, 6].forces == {(1,8)}
     assert (1, 6) in m[1, 8].forced_by
     # (1, 4) is a pure linker, never itself alert_chosen (see the docstring
-    # above) - patch_id is only ever assigned to alert_chosen items, so unlike
+    # above) - path_id is only ever assigned to alert_chosen items, so unlike
     # (1, 6)/(1, 8) it never gets one.
-    assert m[1, 4].patch_id == -1
-    assert m[1, 6].patch_id == m[1, 8].patch_id
+    assert m[1, 4].path_id == set()
+    assert m[1, 6].path_id == m[1, 8].path_id
     colormap = np.zeros((*m.shape, 3))
     display_closure_step(m, 'line into cycle', show_links=True, show_real=True, colormap=colormap)
 

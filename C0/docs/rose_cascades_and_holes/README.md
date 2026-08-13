@@ -76,7 +76,7 @@ cell on the ring proposes its own index, the largest one always wins by the time
 travels all the way around, and *that* cell has its promise cut - manufacturing a
 terminal artificially, at exactly one point on the ring, chosen the same way no
 matter which cell happens to get processed first. After that cut, the ring is just
-an ordinary chain again, and gets the same centrality/patch_id treatment everything
+an ordinary chain again, and gets the same centrality/path_id treatment everything
 else does (see the "p=21 c=..." labels - one shared patch, distance-from-terminal
 counted outward from the cut).
 

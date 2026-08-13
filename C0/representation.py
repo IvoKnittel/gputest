@@ -344,7 +344,7 @@ def grid_on(ax, rows, cols, offset=-0.5):
 
 
 def compute_blue_arrows(m):
-    """Simplified stand-in for the patch_id/max-centrality computation
+    """Simplified stand-in for the path_id/max-centrality computation
     show_pivots used to depend on, which needed find_central_patch_items to
     have fully converged - something the fan-in crowding gap on
     find_cycle_patches (see its "Known gap" note) can leave stuck indefinitely
@@ -577,10 +577,12 @@ def build_cycle(map_of_squares, cells):
 
 def describe_links(map_of_squares):
     """Return one line per alert_chosen item: its index, link target(s) (or
-    "terminal" if it has none), patch_id, and centrality - the last two shown as
-    "-" while still unassigned (-1), since most hand-built scenarios start out
-    that way. An item linked to more than one target (see SquareItem.forces)
-    lists all of them, comma-separated.
+    "terminal" if it has none), path_id, and centrality - shown as "-" while
+    still unassigned (empty set() for path_id, -1 for centrality), since most
+    hand-built scenarios start out that way. An item linked to more than one
+    target (see SquareItem.forces) lists all of them, comma-separated - and an
+    item belonging to more than one patch at once (see SquareItem.path_id)
+    lists all of those ids too.
     """
     rows, cols = map_of_squares.shape
     lines = []
@@ -590,9 +592,9 @@ def describe_links(map_of_squares):
             if not item.alert_chosen:
                 continue
             target = ", ".join(str(t) for t in item.forces) if item.forces else "terminal"
-            patch_id = item.patch_id if item.patch_id != -1 else "-"
+            path_id = ", ".join(str(x) for x in sorted(item.path_id)) if item.path_id else "-"
             centrality = item.centrality if item.centrality != -1 else "-"
-            lines.append(f"({i}, {j}) -> {target}   patch_id={patch_id} centrality={centrality}")
+            lines.append(f"({i}, {j}) -> {target}   path_id={path_id} centrality={centrality}")
     return lines
 
 
@@ -625,8 +627,8 @@ def display_links(map_of_squares, title=None, ax=None):
                     color='black' if is_terminal else 'tab:blue',
                     zorder=3)
             label = f"({i},{j})"
-            if item.patch_id != -1:
-                label += f"\np={item.patch_id}"
+            if item.path_id:
+                label += f"\np={sorted(item.path_id)}"
             if item.centrality != -1:
                 label += f" c={item.centrality}"
             ax.annotate(label, (j, i), textcoords="offset points",

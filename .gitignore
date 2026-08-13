@@ -2,7 +2,7 @@
 .venv/
 out/
 requirements.txt
-
+C0/.claude/
 .idea/
 .ipynb_checkpoints/
 __pycache__/

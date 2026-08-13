@@ -56,19 +56,21 @@ class SquareItem:
                 terminal (no-.forces) item of its patch; assigned by
                 closure.find_central_patch_items one generation at a time, -1
                 while unassigned.
-    patch_id:   id of the patch this item belongs to. A "patch" is a connected
+    path_id:    ids of every patch this item belongs to. A "patch" is a connected
                 group of alert_chosen items linked together - our actual
                 building block once seats start linking squares together, as
-                opposed to a lone square. Seeded at a terminal (its own
-                flattened index) and propagated outward one generation at a
-                time by closure.find_central_patch_items; -1 while unassigned.
-                Two patches merging get reconciled to whichever id is larger;
-                a patch looping back on its own id instead has its closing
-                .forces cut, so cycles don't propagate forever. (This field used
-                to be called path_id, back when we still called this concept
-                a "path" rather than a "patch".)
+                opposed to a lone square. An item can belong to more than one
+                patch at once (see closure.find_central_patch_items's merge
+                step), so this is a set, not a single scalar. Seeded at a
+                terminal with a singleton set holding its own flattened index,
+                and propagated outward one generation at a time by
+                closure.find_central_patch_items; empty set() while unassigned
+                to any patch. Two patches merging get reconciled by unioning
+                their two id sets together; a patch looping back on its own id
+                instead has its closing .forces cut, so cycles don't propagate
+                forever.
     max_id:     candidate for the largest flattened index among a pure ring's
-                members (one with no terminal anywhere, so centrality/patch_id
+                members (one with no terminal anywhere, so centrality/path_id
                 never reach it) - used by closure.find_cycle_patches as a
                 parallel-safe way to agree on a single break point without
                 relying on processing order; -1 while unassigned, and reset
@@ -94,7 +96,7 @@ class SquareItem:
     forces: set = field(default_factory=set)
     forced_by: set = field(default_factory=set)
     centrality: int = -1
-    patch_id: int = -1
+    path_id: set = field(default_factory=set)
     max_id: int = -1
     rectangle: tuple = (-1, -1)
 

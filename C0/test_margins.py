@@ -4,11 +4,11 @@ interior cell starts free.
 
 For each n, run the same stages redo_closure runs (find_alerts, link_patches,
 resolve_cycles_and_centrality), displaying the result - then check whether any
-alert_chosen item ended up with a real patch_id (not -1). If so, chase that
-patch (forced_closure + place_squares) and display again. Inspecting patch_id
+alert_chosen item ended up with a real path_id (non-empty). If so, chase that
+patch (forced_closure + place_squares) and display again. Inspecting path_id
 has to happen at this point, not after calling redo_closure itself:
-remove_blocked_links (redo_closure's last step) resets .patch_id back to -1 for
-everything except cells it has itself turned StateEnum.blocked, so the
+remove_blocked_links (redo_closure's last step) resets .path_id back to set()
+for everything except cells it has itself turned StateEnum.blocked, so the
 "is there a patch id" question is only answerable before that reset runs -
 exactly where redo_closure's own optional display fires. remove_blocked_links
 still runs at the end of each test, to leave the map in the same state
@@ -70,20 +70,23 @@ def run_margin_free_case(n):
     display_closure_step(m, f'margin {n}x{n}: after resolve_cycles_and_centrality',
                           show_links=True, show_pivots=True, show_real=True, colormap=colormap)
 
-    patch_ids = sorted({m[i, j].patch_id
-                         for i in range(size) for j in range(size)
-                         if m[i, j].alert_chosen and m[i, j].patch_id != -1})
-    print(f'margin {n}x{n}: patch_ids found = {patch_ids}')
+    # Union every alert_chosen cell's path_id together, rather than collecting
+    # them into a set directly - path_id is itself a set now, and a set of sets
+    # isn't hashable.
+    path_ids = sorted(set().union(*(m[i, j].path_id
+                                     for i in range(size) for j in range(size)
+                                     if m[i, j].alert_chosen and m[i, j].path_id)))
+    print(f'margin {n}x{n}: path_ids found = {path_ids}')
 
-    if patch_ids:
+    if path_ids:
         candidates = [(i, j) for i in range(size) for j in range(size)
-                      if m[i, j].alert_chosen and m[i, j].patch_id == patch_ids[0]]
+                      if m[i, j].alert_chosen and path_ids[0] in m[i, j].path_id]
         target = max(candidates, key=lambda p: len(m[p].forces))
         forced = forced_closure(m, target)
         place_squares(m, list(forced))
         reset_alert_bookkeeping(m)
         colormap = np.zeros((*m.shape, 3))
-        display_closure_step(m, f'margin {n}x{n}: after placing patch {patch_ids[0]} '
+        display_closure_step(m, f'margin {n}x{n}: after placing patch {path_ids[0]} '
                                  f'(chased from {target})',
                               show_links=True, show_pivots=True, show_real=True, colormap=colormap)
 
