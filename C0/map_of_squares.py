@@ -62,13 +62,14 @@ class SquareItem:
                 opposed to a lone square. An item can belong to more than one
                 patch at once (see closure.find_central_patch_items's merge
                 step), so this is a set, not a single scalar. Seeded at a
-                terminal with a singleton set holding its own flattened index,
-                and propagated outward one generation at a time by
-                closure.find_central_patch_items; empty set() while unassigned
-                to any patch. Two patches merging get reconciled by unioning
-                their two id sets together; a patch looping back on its own id
-                instead has its closing .forces cut, so cycles don't propagate
-                forever.
+                terminal with a singleton set holding its own flattened index;
+                every other item picks its own up by checking its .forces
+                targets - the causal, forward direction - one generation at a
+                time (closure.find_central_patch_items); empty set() while
+                unassigned to any patch. Two patches merging get reconciled by
+                unioning their two id sets together; a patch looping back on
+                its own id instead has its closing .forces cut, so cycles
+                don't propagate forever.
     max_id:     candidate for the largest flattened index among a pure ring's
                 members (one with no terminal anywhere, so centrality/path_id
                 never reach it) - used by closure.find_cycle_patches as a

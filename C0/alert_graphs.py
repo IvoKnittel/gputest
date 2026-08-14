@@ -73,8 +73,7 @@ def set_alert_chosen(i, j, ring):
     every diagonal ring position that's currently free gets a link to every corner
     found here, not only the one diagonal neighbour geometrically tied to one
     specific quadrant. (This is also what makes a later, separate relay stage for
-    "any free item diagonal to an alert_blocked item" unnecessary - see
-    closure.link_patches.) A diagonal ring position that happens to
+    "any free item diagonal to an alert_blocked item" unnecessary.) A diagonal ring position that happens to
     itself be one of the corners found is excluded from its own link (no self-loop).
 
     A single centre can have more than one corner (iter_alert_thirds can yield

@@ -395,7 +395,7 @@ def compute_blue_arrows(m):
 
 
 def display_closure_step(m, title, show_links=False, show_pivots=False, show_real=False,
-                          show_roots_terminals=False, ax=None, colormap=None):
+                          show_entries_terminals=False, ax=None, colormap=None):
     """Show a single map_of_squares panel coloured via colorize_with_alerts, so
     alert_blocked (blue), alert_chosen (yellow), and both-at-once (green) are
     visible on top of the plain free/chosen/blocked colours - see
@@ -415,7 +415,7 @@ def display_closure_step(m, title, show_links=False, show_pivots=False, show_rea
     alert_graphs.set_alert_chosen already excludes a diagonal ring position
     from its own link (`if c_idx == d_idx: continue`), so this should only
     ever show up in a hand-built scenario, not one produced by
-    find_alerts/link_patches.
+    find_alerts.
 
     show_pivots=True additionally draws a blue arrow, source to terminal, for
     every (source, terminal) pair compute_blue_arrows finds - source to
@@ -427,17 +427,17 @@ def display_closure_step(m, title, show_links=False, show_pivots=False, show_rea
     item like (6, 4) - not just the patch's deepest item - gets its own arrow
     too.
 
-    show_roots_terminals=True additionally draws a filled dot on every cell
-    that is a terminal or a root: blue for a terminal (item.alert_chosen and
+    show_entries_terminals=True additionally draws a filled dot on every cell
+    that is a terminal or an entry: blue for a terminal (item.alert_chosen and
     not item.forces - nothing left for it to force, the same condition
     find_central_patch_items uses to seed its walk, evaluated directly on
     every cell here rather than only on cells reached via someone else's
-    .forces) and red for a root (item.forces and not item.forced_by -
+    .forces) and red for an entry (item.forces and not item.forced_by -
     nothing forces this item, but it forces something onward - evaluated on
     every cell regardless of .alert_chosen, since that flag is a separate
     bookkeeping detail, not a property of the link structure itself). The two
     conditions can't both hold for the same item - a terminal has no .forces,
-    a root requires some - so there's no overlap to resolve between the two
+    an entry requires some - so there's no overlap to resolve between the two
     colours.
 
     show_real=True additionally draws the real-space map (real_space_map) in a
@@ -537,7 +537,7 @@ def display_closure_step(m, title, show_links=False, show_pivots=False, show_rea
                                          connectionstyle='arc3,rad=0.0'),
                         zorder=6)
 
-    if show_roots_terminals:
+    if show_entries_terminals:
         for i in range(rows):
             for j in range(cols):
                 item = m[i, j]

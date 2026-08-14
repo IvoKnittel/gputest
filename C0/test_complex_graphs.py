@@ -1,6 +1,6 @@
 """A catalogue of the algorithmically-distinct .forced_by/.forces shapes that
 can arise once alert_chosen items start pointing at each other - some derived
-from a real grid via find_alerts/link_patches, others hand-built directly with
+from a real grid via find_alerts, others hand-built directly with
 the "link library" in representation.py (set_link/build_cycle), so each shape
 can be examined in isolation.
 """
@@ -14,7 +14,6 @@ from representation import (build_map_of_squares,
                              display_graph_map_and_real_space,
                              display_closure_step)
 from closure import (find_alerts,
-                      link_patches,
                       redo_closure,
                       place_squares)
 
@@ -23,7 +22,7 @@ def test_line():
     """A simple chain, no branching anywhere: every item has exactly one item
     pointing at it and points at exactly one item itself, in a straight run
     down to a single terminal - this one, unlike every other test in this
-    file, is derived from a real grid via find_alerts/link_patches rather
+    file, is derived from a real grid via find_alerts rather
     than hand-built with the link library, so the cascade below is genuinely
     computed, not merely asserted.
 
@@ -35,7 +34,7 @@ def test_line():
     so (8, 2), (6, 4), (4, 6) end up alert_blocked, and (7, 3), (5, 5), (3, 7)
     become "a new alert_blocked" right back, each pair completing the next.
     (9, 1) itself is not part of any such pair - it is simply diagonally
-    adjacent to (8, 2), and link_patches picks that up as a real (non-self-loop)
+    adjacent to (8, 2), and find_alerts picks that up as a real (non-self-loop)
     link straight to (7, 3), starting the cascade without needing an
     alert_blocked of its own.
 
@@ -48,7 +47,6 @@ def test_line():
     place_squares(m, positions)
 
     find_alerts(m)
-    link_patches(m)
 
     alert_chosen_positions_asserted = [(9, 1), (7, 3), (5, 5), (3, 7)]
 
@@ -157,16 +155,29 @@ def test_line_into_cycle():
     # above) - path_id is only ever assigned to alert_chosen items, so unlike
     # (1, 6)/(1, 8) it never gets one.
     assert m[1, 4].path_id == set()
-    assert m[1, 6].path_id == m[1, 8].path_id
+    # (1, 6)/(1, 8) are a pure 2-cycle - no terminal exists until
+    # find_cycle_patches's ring-leader election opens one, so asserting mere
+    # equality here isn't enough: both would trivially equal set() if the
+    # cycle never got opened at all. (1, 8) has the larger flattened index
+    # (18 > 16), so it deterministically wins the election and becomes the
+    # terminal.
+    assert m[1, 8].centrality == 0
+    assert m[1, 6].centrality == 1
+    assert m[1, 6].path_id and m[1, 6].path_id == m[1, 8].path_id
     colormap = np.zeros((*m.shape, 3))
     display_closure_step(m, 'line into cycle', show_links=True, show_real=True, colormap=colormap)
 
 
 def test_several_lines_into_cycle():
-    """Several separate tails feeding into the same cycle at once - this is
-    test_do_closure_steps's actual (2, 2) situation: (2, 4), (3, 3), (4, 2),
-    (4, 4) all pointing at (2, 2), with only (3, 3) genuinely on the ring. The
-    concrete shape that crowds find_cycle_patches's scalar max_id.
+    """Several separate tails feeding into the same cycle at once, with only
+    one of the incoming tails genuinely on the ring itself - the concrete
+    shape that crowds find_cycle_patches's scalar max_id (see its "Known gap"
+    docstring note).
+
+    Never actually run through the closure pipeline: display_graph_map_and_
+    real_space only draws the .forces/.forced_by graph as built here, it
+    doesn't call resolve_cycles_and_centrality - so this shape's effect on
+    find_cycle_patches is illustrated, not exercised or verified by this test.
     """
     m = build_map_of_squares(8, 12)
     build_cycle(m, [(3, 4), (3, 8)])
@@ -179,10 +190,14 @@ def test_several_lines_into_cycle():
 
 def test_cycle_line_outwards():
     """A cycle where one member *also* points outward at something beyond the
-    ring - the "link out of a cycle" shape currently our code fails here:
-    ring members and tails-feeding-in are the only
-    two shapes find_cycle_patches accounts for, and a node with both an
-    in-ring link and an outward one at once is neither.
+    ring - the "link out of a cycle" shape find_cycle_patches's own logic
+    doesn't account for: ring members and tails-feeding-in are the only two
+    shapes it handles, and a node with both an in-ring link and an outward
+    one at once is neither. That's a claim about the logic, not something
+    this test actually exercises: display_graph_map_and_real_space only draws
+    the .forces/.forced_by graph as built here, it never calls
+    resolve_cycles_and_centrality, so nothing here has actually run this
+    shape through find_cycle_patches to confirm what happens.
     """
     m = build_map_of_squares(8, 10)
     build_cycle(m, [(3, 4), (3, 7)])
@@ -193,7 +208,10 @@ def test_cycle_line_outwards():
 def test_line_inwards_cycle_line_outwards():
     """The fully general combination: one or more tails feeding into a cycle,
     and a separate line leading back out of it - everything the two simpler
-    "line into cycle" and "cycle line outwards" cases show, at once.
+    "line into cycle" and "cycle line outwards" cases show, at once. Same
+    caveat as both of those: display_graph_map_and_real_space only draws the
+    graph as built, it never runs resolve_cycles_and_centrality, so this
+    combination's effect on find_cycle_patches is illustrated, not verified.
     """
     m = build_map_of_squares(10, 12)
     build_cycle(m, [(4, 5), (4, 8)])

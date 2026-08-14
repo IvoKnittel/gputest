@@ -78,7 +78,7 @@ terminal artificially, at exactly one point on the ring, chosen the same way no
 matter which cell happens to get processed first. After that cut, the ring is just
 an ordinary chain again, and gets the same centrality/path_id treatment everything
 else does (see the "p=21 c=..." labels - one shared patch, distance-from-terminal
-counted outward from the cut).
+counted in .forces hops from the cut).
 
 ## 4. What we're actually preventing
 

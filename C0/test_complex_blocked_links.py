@@ -3,11 +3,11 @@ import matplotlib.pyplot as plt
 
 from map_of_squares import StateEnum
 from representation import map_of_squares_from_array, place_blocked_squares, display_closure_step
-from closure import redo_closure, reset_alert_bookkeeping, find_alerts, link_patches, remove_blocked_links, resolve_cycles_and_centrality
+from closure import redo_closure, reset_alert_bookkeeping, find_alerts, remove_blocked_links, resolve_cycles_and_centrality
 
 def test_two_forced_cells_block_each_other():
     """A 12x12 map: a 1-cell blocked margin wrapped around the 10x10 area that used
-    to be the whole map, so the forces/patch behaviour under test comes from the
+    to be the whole map, so the forces/path_id behaviour under test comes from the
     shape itself, not from free cells touching the array's own edge.
     """
 
@@ -30,7 +30,6 @@ def test_two_forced_cells_block_each_other():
               if i in (0, size - 1) or j in (0, size - 1)]
     place_blocked_squares(m, border)
     find_alerts(m)
-    link_patches(m)
     resolve_cycles_and_centrality(m)
 
     # (5, 4) and (7, 6) both force the mutually-blocking pair (6, 4)/(5, 5) -
@@ -55,7 +54,7 @@ def test_two_forced_cells_block_each_other():
     display_closure_step(m, 'after remove_blocked_links', show_links=True, show_pivots=True, show_real=True, ax=ax_before, colormap=colormap)
     reset_alert_bookkeeping(m, keep_path_id_for_blocked=True)
 
-    find_alerts(m); link_patches(m)
+    find_alerts(m)
     resolve_cycles_and_centrality(m)
     
     fig, (ax_before, ax_after) = plt.subplots(1, 2, figsize=(10, 5))

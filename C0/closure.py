@@ -38,29 +38,22 @@ def find_alerts(map_of_squares):
                 set_alert_chosen(i, j, ring)
 
 
-def link_patches(map_of_squares):
-    """Stage 2 of the closure pipeline - formerly a relay: for every free item,
-    adopt whatever a diagonal neighbour's own .forces relayed, on the premise
-    that an alert_blocked neighbour's .forces still described "what to do if I
-    get blocked". That premise stopped holding once set_alert_chosen started
-    linking every free diagonal neighbour of an alert_blocked centre directly
-    (see its docstring) - an alert_blocked neighbour's .forces describes
-    something unrelated (whatever *it* separately forces as someone else's
-    diagonal linker), so relaying it here actively overwrote correct stage-1
-    forces with wrong ones. There is nothing left for a relay stage to find;
-    this function is now a guaranteed no-op, kept only so every existing
-    caller (every test's pipeline) keeps working unchanged.
-    """
-
-
-def mark_self_blocking_same_patch(map_of_squares):
+def mark_self_blocking_shared_path_id(map_of_squares):
     """First stage of remove_blocked_links: find pairs of alert_chosen items that
-    diagonally block each other while sharing at least one patch id - choosing
-    either one blocks the other, so the patch can never actually be chosen as a
-    whole.
+    diagonally block each other while sharing at least one path_id - choosing
+    either one blocks the other, so neither can actually end up chosen alongside
+    whatever else shares that id.
 
     Requires path_id to already have converged (resolve_cycles_and_centrality) -
     before that every item's path_id is still set(), so this returns [].
+
+    Known unreliable: this only ever fires for an item that already has a
+    non-empty path_id, but path_id/centrality assignment (find_central_patch_items)
+    has a confirmed seeding gap - an alert_chosen item forced only by
+    non-alert_chosen items never gets seeded (concrete case: (3,4) in
+    test_impossible.py::test_try_3x3_hole3). A diagonally-blocking pair where
+    either member falls into that gap is silently invisible here, so
+    remove_blocked_links can miss a genuine conflict. Deferred - not fixed here.
 
     Returns a list of ((row, col), (row, col)) pairs, each unordered pair reported
     once - propagate_deletions_once resolves each pair in turn.
@@ -89,8 +82,8 @@ def clog_item(map_of_squares, pos):
     mutually-blocking pair (see propagate_deletions_once), which can itself never
     be fulfilled either. Set to StateEnum.blocked, not free - it never gets chosen
     - with every other field reset to its default except .path_id (left
-    untouched - a clogged item stays on the record as having belonged to this
-    patch), and its own index retracted from every other item's
+    untouched - a clogged item stays on the record as having once shared this
+    path_id), and its own index retracted from every other item's
     .forces/.forced_by so nothing downstream still counts on it.
     """
     item = map_of_squares[pos]
@@ -109,14 +102,14 @@ def clog_item(map_of_squares, pos):
 
 def propagate_deletions_once(map_of_squares, pair):
     """Second stage of remove_blocked_links: resolve one mutually-blocking pair
-    (see mark_self_blocking_same_patch).
+    (see mark_self_blocking_shared_path_id).
 
     Any item forcing *both* members of the pair is itself contradictory - it
     promised two things that can never both be chosen - so it gets clogged
     (clog_item). Once that's done, whichever member is left with no remaining
     .forced_by (every one of its forcers was one of the clogged common ones) is
-    freed from the poisoned patch: it becomes its own fresh, independent patch
-    (path_id set to a fresh singleton set holding its own flattened index),
+    freed from whatever it used to share a path_id with: it gets a fresh,
+    independent path_id (a singleton set holding its own flattened index),
     propagated forward along its .forces to every item it reaches. A member
     that still has some other, non-common forcer left is untouched here -
     deferred to a later round.
@@ -160,12 +153,18 @@ def propagate_deletions_once(map_of_squares, pair):
 def remove_blocked_links(map_of_squares, title=None, show=False):
     """Cleanup stage run once path_id has converged (resolve_cycles_and_centrality):
     resolve every pair of alert_chosen items that diagonally block each other
-    within the same patch (see mark_self_blocking_same_patch/
+    while sharing a path_id (see mark_self_blocking_shared_path_id/
     propagate_deletions_once), re-scanning after each round since resolving one
     pair can change .forced_by elsewhere and surface a new contradiction. Stops
-    once a full round resolves nothing - a pair that mark_self_blocking_same_patch
+    once a full round resolves nothing - a pair that mark_self_blocking_shared_path_id
     still finds at that point (neither member's remaining forcers were all
     common) is left as-is, not an error.
+
+    Known to fail for now, not just in the "left as-is" sense above: it can
+    silently miss a genuine mutually-blocking pair outright, whenever either
+    member never got a path_id in the first place (see
+    mark_self_blocking_shared_path_id's docstring for the confirmed gap). We're
+    deferring a real fix and coming back to it later.
 
     clog_item can leave behind a lone .blocked cell that completes some other
     2x2 block into a seat, so place_square_in_seat_closed runs next to resolve
@@ -178,14 +177,14 @@ def remove_blocked_links(map_of_squares, title=None, show=False):
     always runs last - with keep_path_id_for_blocked=True, so a clog_item'd
     item's .path_id (left alone by clog_item itself, since it's now
     permanently blocked) is still observable once this call returns, not just
-    mid-call. The caller is expected to re-run find_alerts/link_patches itself
+    mid-call. The caller is expected to re-run find_alerts itself
     if it needs fresh bookkeeping afterwards.
     """
     changed = False
     round_changed = True
     while round_changed:
         round_changed = False
-        for pair in mark_self_blocking_same_patch(map_of_squares):
+        for pair in mark_self_blocking_shared_path_id(map_of_squares):
             if propagate_deletions_once(map_of_squares, pair):
                 round_changed = True
         if round_changed:
@@ -205,7 +204,7 @@ def forced_closure(map_of_squares, position):
     plus whatever those force in turn, and so on, until every chain reaches a
     terminal (forces == set()) or loops back onto something already collected.
 
-    This is the "actually commit to it" counterpart to link_patches/
+    This is the "actually commit to it" counterpart to find_alerts/
     remove_blocked_links, which only ever *record* what choosing an item would
     oblige - nothing before this walks the recorded chain to say which positions
     that obligation actually reaches. Follows every entry in .forces, not just
@@ -236,11 +235,11 @@ def reset_alert_bookkeeping(map_of_squares, keep_path_id_for_blocked=False):
     """Clear every cell's .alert_blocked, .alert_chosen, .forces, .forced_by,
     .centrality, .path_id, and .max_id back to their defaults (False,
     False, set(), set(), -1, set(), -1), map-wide, regardless of .state - so
-    find_alerts/link_patches/resolve_cycles_and_centrality/remove_blocked_links
+    find_alerts/resolve_cycles_and_centrality/remove_blocked_links
     can be re-run from a clean slate instead of layering new results on top of
     whatever an earlier round left behind.
 
-    find_alerts and link_patches only ever add: both skip any cell whose .state
+    find_alerts only ever adds: it skips any cell whose .state
     isn't StateEnum.free, so once a cell is placed (e.g. as part of a
     forced_closure chase), whatever .alert_chosen/.alert_blocked/.forces/
     .forced_by it was carrying from an earlier round is never cleared - it just
@@ -253,7 +252,7 @@ def reset_alert_bookkeeping(map_of_squares, keep_path_id_for_blocked=False):
     longer plays. Needed whenever a round places more than one square at once
     (e.g. after chasing a forced_closure): the incremental single-step
     discipline the rest of closure.py assumes - one placement, then one
-    find_alerts/link_patches pass - no longer applies once several cells change
+    find_alerts pass - no longer applies once several cells change
     state in the same round, so the safe thing is to recompute every cell's
     alert bookkeeping from the current board state, not just the newly-placed
     ones.
@@ -384,14 +383,11 @@ def find_central_patch_items(map_of_squares, gen):
 
     gen counts how many times this function has already been called for
     map_of_squares: call it with gen=0 first, then gen=1, 2, ... on each subsequent
-    call. Requires find_alerts/link_patches to have already run (.alert_chosen/.forces
+    call. Requires find_alerts to have already run (.alert_chosen/.forces
     must be set).
 
-    The function runs over all alert_chosen items, checking every entry in .forces -
-    not just an arbitrary one - since an item can force more than one other at once
-    (see SquareItem.forces' docstring): checking only one entry would silently drop a
-    real obligation, exactly the failure mode forced_closure's own docstring warns
-    about. If gen=0 and the current item has a linked item with no .forces of its own,
+    The function runs over all alert_chosen items, checking every entry in .forces.
+    If gen=0 and the current item has a linked item with no .forces of its own,
     the linked item is a terminal item, and we set its centrality to 0, and its
     path_id to a fresh singleton set holding its own flattened index (i * rows + j) -
     a fresh id for the patch that starts there.
@@ -400,12 +396,13 @@ def find_central_patch_items(map_of_squares, gen):
     yet: if any of its linked items has centrality gen-1, the current item's
     centrality becomes gen (an item is only ever assigned a centrality once - a
     second linked item resolving at some bigger gen in a later call can't clobber
-    it). So centrality ends up measuring distance, in .forces hops, from a terminal
-    item outward, one ring further with each generation.
+    it). So centrality ends up measuring how many .forces hops an item sits from the
+    nearest terminal - one hop more with each generation.
 
-    In that same step, path_id propagates outward alongside centrality: the linked
-    item (centrality gen-1, closer to the terminal) hands its path_id to the current
-    item (centrality gen, one step further out) -
+    In that same step, item picks up its path_id alongside its centrality: item
+    follows its own .forces - the causal, forward direction - to the linked item,
+    whose centrality (gen-1) is lower, since centrality decreases going forward
+    along .forces, down to 0 exactly at a terminal -
       - if the current item has no path_id yet (empty set), it adopts a copy of the
         linked item's (copied, not aliased - see propagate_deletions_once for why),
       - if it already has a *different* one (two patches have merged here), an item
@@ -429,12 +426,12 @@ def find_central_patch_items(map_of_squares, gen):
     the other lacks without either being a superset of the other - so unioning in
     everything new from every target is the correct generalization of a single
     "biggest wins" tie-break: picking just one target's addition would silently drop
-    whatever the others had. Doing this every call lets a correction travel back down
-    the losing patch, one hop per call, until the whole patch shares the same,
-    converged id set - which is what makes path_id double as a stable per-patch
-    identifier in the end, without needing a separate pass to compute one: no
-    additional "kernel calls" beyond the ones this function already needs for
-    centrality.
+    whatever the others had. Doing this every call lets a correction move backward,
+    one .forced_by hop at a time (from a target back to whatever forces it), until the
+    whole patch shares the same, converged id set - which is what makes path_id
+    double as a stable per-patch identifier in the end, without needing a separate
+    pass to compute one: no additional "kernel calls" beyond the ones this function
+    already needs for centrality.
 
     Reads for this correction step are all taken before any of its writes are
     applied (same snapshot-then-apply discipline as find_cycle_patches), so a
@@ -518,7 +515,7 @@ def find_cycle_patches(map_of_squares, gen):
 
     -- Known gap: fan-in candidates can still crowd each other out --
     More than one item can point at the same target via the (arbitrary) .forces
-    entry this function reads - fan-in, the same shape link_patches's own .forces
+    entry this function reads - fan-in, the same shape SquareItem.forces
     exists to support - so more than one candidate id
     can arrive at the same
     node in the same generation (test_do_closure_steps: (2, 2) receives a
@@ -623,41 +620,38 @@ def find_cycle_patches(map_of_squares, gen):
         target.max_id = value
 
 
-#    From here on the project is no longer aiming for a
-#    parallel algorithm (for now).
-
-def propagate_path_id_from_roots(map_of_squares):
-    """Union every item reachable, via .forces, from a "root" with the root's own
+def propagate_path_id_from_entries(map_of_squares):
+    """Union every item reachable, via .forces, from an "entry" with the entry's own
     path_id.
 
-    A root here is an alert_chosen item with .forces but no .forced_by: nothing
-    forces it, so - unlike everything downstream of it - its own path_id was never
-    at the losing end of one of find_central_patch_items's merge decisions (see that
-    function's docstring: path_id only ever propagates from lower centrality
-    outward to higher, so a losing branch at a merge point keeps its own smaller,
-    stale id set instead of adopting the merged one). A root's path_id is therefore
-    among the most-settled ids available for its whole component - this walks
-    outward from every root along its own .forces links (same walk as
-    forced_closure) and unions the root's path_id into every reached item's own -
-    unioning rather than overwriting, since an item downstream may already have
-    picked up an id from elsewhere (e.g. another root, or a merge) that overwriting
-    would otherwise discard.
+    An entry here is an alert_chosen item with .forces but no .forced_by: nothing
+    forces it, so - unlike everything reachable from it going forward along .forces -
+    its own path_id was never at the losing end of one of find_central_patch_items's
+    merge decisions (see that function's docstring: path_id only ever moves by an
+    item reading forward along its own .forces to a lower-centrality neighbour, never
+    the other way, so a losing branch at a merge point keeps its own smaller, stale id
+    set instead of adopting the merged one). An entry's path_id is therefore among the
+    most-settled ids available for its whole component - this walks forward from every
+    entry along its own .forces links (same walk as forced_closure) and unions the
+    entry's path_id into every reached item's own - unioning rather than overwriting,
+    since an item forward of it may already have picked up an id from elsewhere (e.g.
+    another entry, or a merge) that overwriting would otherwise discard.
 
     Not the last word on the matter - ensuring every item connected by links ends up
     sharing the same path_id, in every graph shape, needs more than this (a
-    component with more than one root, or none at all - e.g. a pure cycle before
+    component with more than one entry, or none at all - e.g. a pure cycle before
     find_cycle_patches has opened it - isn't guaranteed to converge by this alone).
     Just an improvement over leaving a losing branch's stale id in place.
     """
     rows, cols = map_of_squares.shape
     for i in range(rows):
         for j in range(cols):
-            root = map_of_squares[i, j]
-            if not (root.alert_chosen and root.forces and not root.forced_by):
+            entry = map_of_squares[i, j]
+            if not (entry.alert_chosen and entry.forces and not entry.forced_by):
                 continue
-            if not root.path_id:
+            if not entry.path_id:
                 continue
-            to_visit = list(root.forces)
+            to_visit = list(entry.forces)
             visited = set()
             while to_visit:
                 pos = to_visit.pop()
@@ -665,13 +659,13 @@ def propagate_path_id_from_roots(map_of_squares):
                     continue
                 visited.add(pos)
                 item = map_of_squares[pos]
-                item.path_id = item.path_id | root.path_id
+                item.path_id = item.path_id | entry.path_id
                 to_visit.extend(item.forces)
 
 
 def resolve_cycles_and_centrality(m, max_gens=20):
     """Run find_cycle_patches then find_central_patch_items to convergence on m,
-    then propagate_path_id_from_roots, in place.
+    then propagate_path_id_from_entries, in place.
 
     Fails for some graph types - parts of the graph will not be discovered.
 
@@ -688,16 +682,16 @@ def resolve_cycles_and_centrality(m, max_gens=20):
     while find_central_patch_items(m, gen):
         gen += 1
 
-    propagate_path_id_from_roots(m)
+    propagate_path_id_from_entries(m)
 
 
 def redo_closure(m, title, show=False):
-    find_alerts(m); link_patches(m)
+    find_alerts(m)
     resolve_cycles_and_centrality(m)
     if show:
         colormap = np.zeros((*m.shape, 3))
         display_closure_step(m, title, show_links=True, show_real=True, colormap=colormap)
     remove_blocked_links(m)
     reset_alert_bookkeeping(m)
-    find_alerts(m); link_patches(m)
+    find_alerts(m)
     resolve_cycles_and_centrality(m)

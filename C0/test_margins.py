@@ -2,7 +2,7 @@
 n = 2, 3, 4, 5. Map size is (n+2) x (n+2): every border cell is blocked, every
 interior cell starts free.
 
-For each n, run the same stages redo_closure runs (find_alerts, link_patches,
+For each n, run the same stages redo_closure runs (find_alerts,
 resolve_cycles_and_centrality), displaying the result - then check whether any
 alert_chosen item ended up with a real path_id (non-empty). If so, chase that
 patch (forced_closure + place_squares) and display again. Inspecting path_id
@@ -33,7 +33,6 @@ from map_of_squares import StateEnum
 from representation import (build_margin_free_map,
                              display_closure_step, is_realmap_cover_complete)
 from closure import (find_alerts,
-                      link_patches,
                       resolve_cycles_and_centrality,
                       redo_closure,
                       forced_closure,
@@ -64,7 +63,6 @@ def run_margin_free_case(n):
     size = n + 2
 
     find_alerts(m)
-    link_patches(m)
     resolve_cycles_and_centrality(m)
     colormap = np.zeros((*m.shape, 3))
     display_closure_step(m, f'margin {n}x{n}: after resolve_cycles_and_centrality',
