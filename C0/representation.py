@@ -160,7 +160,8 @@ def place_blocked_squares(map_of_squares, positions):
 # display
 
 def display_map_of_squares_3States(map_of_squares):
-    """Collapse each cell's .state into a display value: chosen=1, blocked=-1, free=0."""
+    """Collapse each cell's .state into a display value: chosen=1, blocked=-1,
+    blocked_tmp=2, free=0."""
     rows, cols = map_of_squares.shape
     display = np.zeros((rows, cols), dtype=float)
     for i in range(rows):
@@ -170,16 +171,20 @@ def display_map_of_squares_3States(map_of_squares):
                 display[i, j] = 1.0
             elif state == StateEnum.blocked:
                 display[i, j] = -1.0
+            elif state == StateEnum.blocked_tmp:
+                display[i, j] = 2.0
     return display
 
 
 # Fixed colour scheme for every display in this module: free=white, chosen=cyan,
-# blocked=gray. Grid lines (drawn separately, e.g. by a grid_on helper) are black.
-# margin=light grey - for the space around an axes' actual cells when its extent is
-# inset within a shared, larger frame (e.g. map_of_squares next to real_space_map).
+# blocked=gray, blocked_tmp=red. Grid lines (drawn separately, e.g. by a grid_on
+# helper) are black. margin=light grey - for the space around an axes' actual
+# cells when its extent is inset within a shared, larger frame (e.g.
+# map_of_squares next to real_space_map).
 FREE_COLOR = (1, 1, 1)
 CHOSEN_COLOR = (0, 1, 1)
 BLOCKED_COLOR = (0.5, 0.5, 0.5)
+BLOCKED_TMP_COLOR = (1, 0, 0)
 MARGIN_COLOR = (0.9, 0.9, 0.9)
 
 # alert_blocked/alert_chosen overlay colours - see colorize_with_alerts. A cell can
@@ -314,7 +319,8 @@ def colorize_with_alerts(map_of_squares):
     placement state.
     """
     state_display = display_map_of_squares_3States(map_of_squares)
-    rgb = colorize(state_display, {0: FREE_COLOR, 1: CHOSEN_COLOR, -1: BLOCKED_COLOR})
+    rgb = colorize(state_display, {0: FREE_COLOR, 1: CHOSEN_COLOR, -1: BLOCKED_COLOR,
+                                    2: BLOCKED_TMP_COLOR})
 
     alert_display = display_map_of_squares_alerts(map_of_squares)
     rgb[alert_display == -1] = ALERT_BLOCKED_COLOR
@@ -343,58 +349,7 @@ def grid_on(ax, rows, cols, offset=-0.5):
     ax.hlines(y_lines, x_lines[0], x_lines[-1], color='black', linewidth=1)
 
 
-def compute_blue_arrows(m):
-    """Simplified stand-in for the path_id/max-centrality computation
-    show_pivots used to depend on, which needed find_central_patch_items to
-    have fully converged - something the fan-in crowding gap on
-    find_cycle_patches (see its "Known gap" note) can leave stuck indefinitely
-    - and which only ever drew one arrow per patch, from its single furthest
-    ("pivot") item, even when several other items link directly to the same
-    terminal (e.g. an item like (6, 4) that forces straight to a terminal
-    (5, 6) just as directly as the patch's actual pivot, (2, 3), does, but only
-    (2, 3) got an arrow under the old computation).
-
-    Every alert_chosen item with no .forces of its own is a terminal by
-    definition (nothing further is forced) - centrality 0, assigned directly
-    here, with no generational propagation needed. Every other alert_chosen
-    item's own arrow is then found by walking one .forces entry at a time forward, one
-    hop at a time, until it reaches such a terminal - and the arrow is drawn
-    from that starting item straight to the terminal, not just from whichever
-    item happens to be furthest along the chain. A chain that loops back on
-    itself before reaching a terminal (a pure ring - see find_cycle_patches)
-    has nothing to resolve to, so no arrow is produced for it.
-
-    Mutates m (sets .centrality = 0 on every terminal found). Returns a list of
-    (source, terminal) position pairs, one per alert_chosen item that resolves
-    to a terminal - the blue arrows to draw.
-    """
-    rows, cols = m.shape
-    for i in range(rows):
-        for j in range(cols):
-            item = m[i, j]
-            if item.alert_chosen and not item.forces:
-                item.centrality = 0
-
-    arrows = []
-    for i in range(rows):
-        for j in range(cols):
-            item = m[i, j]
-            if not item.alert_chosen or not item.forces:
-                continue
-            pos = (i, j)
-            seen = {pos}
-            while m[pos].forces:
-                pos = next(iter(m[pos].forces))
-                if pos in seen:
-                    pos = None
-                    break
-                seen.add(pos)
-            if pos is not None:
-                arrows.append(((i, j), pos))
-    return arrows
-
-
-def display_closure_step(m, title, show_links=False, show_pivots=False, show_real=False,
+def display_closure_step(m, title, show_links=False, show_real=False,
                           show_entries_terminals=False, ax=None, colormap=None):
     """Show a single map_of_squares panel coloured via colorize_with_alerts, so
     alert_blocked (blue), alert_chosen (yellow), and both-at-once (green) are
@@ -417,16 +372,6 @@ def display_closure_step(m, title, show_links=False, show_pivots=False, show_rea
     ever show up in a hand-built scenario, not one produced by
     find_alerts.
 
-    show_pivots=True additionally draws a blue arrow, source to terminal, for
-    every (source, terminal) pair compute_blue_arrows finds - source to
-    terminal, not the other way around, to match the same causal direction the
-    black .forces/.forced_by arrows point in: a terminal is what every item
-    upstream of it, transitively, forces. Unlike drawing only from each patch's
-    single furthest ("pivot") item, this draws one arrow per item that resolves
-    to a terminal at all - see compute_blue_arrows for why: an intermediate
-    item like (6, 4) - not just the patch's deepest item - gets its own arrow
-    too.
-
     show_entries_terminals=True additionally draws a filled dot on every cell
     that is a terminal or an entry: blue for a terminal (item.alert_chosen and
     not item.forces - nothing left for it to force, the same condition
@@ -443,7 +388,14 @@ def display_closure_step(m, title, show_links=False, show_pivots=False, show_rea
     show_real=True additionally draws the real-space map (real_space_map) in a
     second panel to the right, so a placement's actual physical footprint is
     visible alongside its alert/link overlay - e.g. the last, most-resolved
-    step of a closure walkthrough (see test_do_closure_steps). Draws its
+    step of a closure walkthrough (see test_do_closure_steps). The panel's own
+    outermost ring (row/col 0 and row/col -1 of the (rows+1) x (cols+1)
+    real-space grid) is stamped BLOCKED_COLOR first, as a fixed frame -
+    unconditionally, regardless of which map_of_squares cells are actually
+    blocked: there's no principled way to map a blocked map_of_squares cell
+    onto a specific real-space footprint the way a chosen square's actual 2x2
+    placement has one, so this is a plain geometric border, not derived from
+    cell state. Chosen squares are stamped on top, same as always. Draws its
     own two-panel figure regardless of ax, since a fresh pair of axes is
     needed either way - pass ax=None (the default) whenever show_real=True.
 
@@ -518,25 +470,6 @@ def display_closure_step(m, title, show_links=False, show_pivots=False, show_rea
                                                  connectionstyle='arc3,rad=0.15'),
                                 zorder=3)
 
-    if show_pivots:
-        for (pi, pj), (ti, tj) in compute_blue_arrows(m):
-            if (pi, pj) == (ti, tj):
-                continue
-            # Shift both endpoints sideways, perpendicular to the
-            # source->terminal direction, so this arrow is drawn next to -
-            # rather than directly on top of - a black .forced_by arrow that
-            # happens to run between (or through) the same two cells.
-            dx, dy = tj - pj, ti - pi
-            length = (dx ** 2 + dy ** 2) ** 0.5
-            perp_x, perp_y = (-dy / length, dx / length) if length else (0, 0)
-            offset = 0.25
-            ax.annotate('', xy=(tj + perp_x * offset, ti + perp_y * offset),
-                        xytext=(pj + perp_x * offset, pi + perp_y * offset),
-                        arrowprops=dict(arrowstyle='->', color='blue',
-                                         linewidth=2, shrinkA=10, shrinkB=10,
-                                         connectionstyle='arc3,rad=0.0'),
-                        zorder=6)
-
     if show_entries_terminals:
         for i in range(rows):
             for j in range(cols):
@@ -549,6 +482,10 @@ def display_closure_step(m, title, show_links=False, show_pivots=False, show_rea
     if show_real:
         real_display = real_space_map(m)
         real_rgb = colorize(real_display, {0: FREE_COLOR})
+        real_rgb[0, :] = BLOCKED_COLOR
+        real_rgb[-1, :] = BLOCKED_COLOR
+        real_rgb[:, 0] = BLOCKED_COLOR
+        real_rgb[:, -1] = BLOCKED_COLOR
         for i in range(rows):
             for j in range(cols):
                 if m[i, j].state == StateEnum.chosen:
@@ -707,7 +644,8 @@ def display_real_space_and_map(map_of_squares, ax_real, ax_map):
     map_rows, map_cols = map_of_squares.shape
     map_display = display_map_of_squares_3States(map_of_squares)
     ax_map.set_facecolor(MARGIN_COLOR)
-    ax_map.imshow(colorize(map_display, {0: FREE_COLOR, 1: CHOSEN_COLOR, -1: BLOCKED_COLOR}),
+    ax_map.imshow(colorize(map_display, {0: FREE_COLOR, 1: CHOSEN_COLOR, -1: BLOCKED_COLOR,
+                                          2: BLOCKED_TMP_COLOR}),
                   extent=(0, map_cols, map_rows, 0))
     ax_map.set_title('map_of_squares')
     ax_map.axis('on')

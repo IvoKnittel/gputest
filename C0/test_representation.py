@@ -80,18 +80,15 @@ def test_do_closure_steps():
     display_closure_step(m, '0: initial state', colormap=colormap)
 
     find_alerts(m)
+    remove_blocked_links(m)
     colormap = np.zeros((*m.shape, 3))
     display_closure_step(m, '2: find_alerts  (alert_blocked=blue, alert_chosen=yellow, both=green)', colormap=colormap)
 
     resolve_cycles_and_centrality(m)
 
     colormap = np.zeros((*m.shape, 3))
-    display_closure_step(m, '5 forward: find_cycle_patches + find_central_patch_items (pivots in blue)',
-                          show_links=True, show_pivots=False, show_real=True, colormap=colormap)
-
-    remove_blocked_links(m)
-    colormap = np.zeros((*m.shape, 3))
-    display_closure_step(m, '3b: remove_blocked_links', show_links=True, colormap=colormap)
+    display_closure_step(m, '5 forward: find_cycle_patches + find_central_patch_items',
+                          show_links=True, show_real=True, colormap=colormap)
 
 
 def test_find_alerts_forces_and_free_cells():

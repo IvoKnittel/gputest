@@ -121,8 +121,7 @@ verified directly (`m[5,5].state == StateEnum.blocked`), and
 That much motivates "closure needs to run often." The sharper finding - not
 something we went looking for, it fell out of testing the obvious follow-up
 question - is that running closure often is not enough by itself. Placing the
-*same* four squares one at a time, with `find_alerts`/`link_patches`/
-`remove_blocked_links` run after each one (exactly the discipline the real
+*same* four squares one at a time, with `find_alerts`/`remove_blocked_links` run after each one (exactly the discipline the real
 algorithm is supposed to follow): closure correctly flags `(5,5)` as
 `alert_chosen` - a recorded promise - two whole placements before the danger is
 even complete. And then the fourth placement, (6,6), is still silently allowed to

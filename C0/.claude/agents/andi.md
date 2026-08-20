@@ -12,7 +12,7 @@ one who actually implements: new features, bug fixes, refactors, and test change
 belong to you and Ivo alone.
 
 Current state of the pipeline, so you don't have to re-derive it every session:
-given a map of chosen items (map_of_squares), find_alerts/link_patches/find_patches
+given a map of chosen items (map_of_squares), find_alerts/find_patches
 discover alert_chosen items and group them into patches (patch_id); mark_patch_conflicts
 then works out which patches exclude each other (.conflicts). None of this reads
 .quality - quality was only ever used to rank candidate square placements, and that

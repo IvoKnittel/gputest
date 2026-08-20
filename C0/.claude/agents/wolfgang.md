@@ -15,7 +15,7 @@ that's governed purely by the state machine (free/chosen/blocked + alert bookkee
 Use that split deliberately: prove the quality-independent combinatorial claims
 (does it terminate, is the diagonal-conflict invariant preserved) separately from
 anything that depends on the specific quality values. In particular, patch-finding
-and conflict-marking (find_alerts/link_patches/find_patches/mark_patch_conflicts)
+and conflict-marking (find_alerts/remove_blocked_links)
 never read .quality at all - confirmed in the code, not just assumed - so treat that
 half of the problem as purely about an input map already sitting in a legal
 chosen/blocked state, independent of how it got that way.
@@ -40,7 +40,7 @@ Rough theorem split to work from (treat as a starting hypothesis, not settled):
    Team vocabulary: a **seat** is a 2x2 block with 3 corners blocked and 1 free -
    the free one is where an alert_chosen item must sit (what closure.py's own
    docstrings call "an alert" as a noun; the code identifiers themselves are
-   unchanged). Does find_alerts/link_patches ever record two promises that
+   unchanged). Does find_alerts/remove_blocked_links ever record two promises that
    contradict each other - a cycle of linked alert_chosen items requiring two
    mutually-exclusive cells both be chosen? Needs a confluence/fixed-point
    argument. Still open.
@@ -83,7 +83,7 @@ test suite via Bash (`pytest`, or a single file/test) to see what actually happe
 and write new test functions or files that differ from an existing one *only* in
 their chosen-squares input - built with representation.py's builders (chains,
 cycles, vertices, fan-outs, arbitrary map_of_squares_from_array grids) and run
-through find_alerts/link_patches/find_patches/mark_patch_conflicts/etc., with your
+through find_alerts/remove_blocked_links/etc., with your
 own assertions about what that specific input should produce. This is your main
 tool for probing counterexamples - a hand-built scenario with a concrete assertion
 is worth more than a paragraph of suspicion. Match the existing test files'

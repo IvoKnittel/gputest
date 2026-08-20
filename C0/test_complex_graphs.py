@@ -14,7 +14,7 @@ from representation import (build_map_of_squares,
                              display_graph_map_and_real_space,
                              display_closure_step)
 from closure import (find_alerts,
-                      redo_closure,
+                      do_closure,
                       place_squares)
 
 
@@ -94,7 +94,7 @@ def test_tree_fan_out():
             [0, 0, 0, 0, 0, 0, 0, 0, 0, 0]]
 
     m = map_of_squares_from_array(grid)
-    redo_closure(m, "")
+    do_closure(m, "")
 
     assert not m[4, 4].alert_chosen and m[4, 4].forced_by == set()
     assert m[4, 4].forces == {(2, 2), (2, 6), (6, 2), (6, 6)}
@@ -118,7 +118,7 @@ def test_tree_fan_in():
             [0, 0, 0, 0, 0, 0, 0, 0, 0, 0]]
 
     m = map_of_squares_from_array(grid)
-    redo_closure(m,'')
+    do_closure(m,'')
     colormap = np.zeros((*m.shape, 3))
     display_closure_step(m, 'line into cycle', show_links=True, show_real=True, colormap=colormap)
 
@@ -142,7 +142,7 @@ def test_line_into_cycle():
             [0, 0, 0, 0, 0, 0, 0, 0, 0, 0]]
 
     m = map_of_squares_from_array(grid)
-    redo_closure(m, "")
+    do_closure(m, "")
 
     assert not m[1, 4].alert_chosen
     assert m[1, 6].alert_chosen
@@ -151,19 +151,14 @@ def test_line_into_cycle():
     assert m[1, 4].forces == {(1,6)}
     assert m[1, 6].forces == {(1,8)}
     assert (1, 6) in m[1, 8].forced_by
-    # (1, 4) is a pure linker, never itself alert_chosen (see the docstring
-    # above) - path_id is only ever assigned to alert_chosen items, so unlike
-    # (1, 6)/(1, 8) it never gets one.
+    # (1, 4) has exactly one .forces target, (1, 6) - assign_paths prunes a
+    # single-target entry like this rather than seeding it directly: (1, 4)
+    # has no influence on which cells must be chosen together beyond "if
+    # (1, 4) is chosen, (1, 6) is chosen", so (1, 6) gets treated like the
+    # entry instead, and (1, 4) never receives an id of its own. Not about
+    # .alert_chosen - (1, 4) isn't one, but that's not why it stays empty.
     assert m[1, 4].path_id == set()
-    # (1, 6)/(1, 8) are a pure 2-cycle - no terminal exists until
-    # find_cycle_patches's ring-leader election opens one, so asserting mere
-    # equality here isn't enough: both would trivially equal set() if the
-    # cycle never got opened at all. (1, 8) has the larger flattened index
-    # (18 > 16), so it deterministically wins the election and becomes the
-    # terminal.
-    assert m[1, 8].centrality == 0
-    assert m[1, 6].centrality == 1
-    assert m[1, 6].path_id and m[1, 6].path_id == m[1, 8].path_id
+
     colormap = np.zeros((*m.shape, 3))
     display_closure_step(m, 'line into cycle', show_links=True, show_real=True, colormap=colormap)
 

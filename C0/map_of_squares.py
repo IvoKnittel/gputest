@@ -11,6 +11,7 @@ class StateEnum(Enum):
     free = 0
     chosen = 1
     blocked = 2
+    blocked_tmp = 3
 
 
 @dataclass

@@ -4,7 +4,7 @@ import numpy as np
 
 from map_of_squares import InvalidTilingError
 from representation import build_map_of_squares, display_closure_step
-from closure import redo_closure, place_squares
+from closure import do_closure, place_squares
 from test_utils import place_and_chase 
 
 def test_pinwheel():
@@ -36,7 +36,7 @@ def test_show_other_full_2x2():
     place_squares(m, [(3, 3), (4, 3), (5, 6), (6, 6)])
     colormap = np.zeros((*m.shape, 3))
     display_closure_step(m, 'initial state', show_links=True, show_real=True, colormap=colormap)
-    redo_closure(m, '')
+    do_closure(m, '')
     colormap = np.zeros((*m.shape, 3))
     display_closure_step(m, 'next state', show_links=True, show_real=True, colormap=colormap)
 
