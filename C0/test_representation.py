@@ -4,7 +4,8 @@ from map_of_squares import StateEnum
 from representation import (map_of_squares_from_array,
                              display_closure_step)
 from closure import (find_alerts,
-                      remove_blocked_links,
+                      get_blocked_links,
+                      set_blocked_links,
                       resolve_cycles_and_centrality)
 
 
@@ -80,7 +81,7 @@ def test_do_closure_steps():
     display_closure_step(m, '0: initial state', colormap=colormap)
 
     find_alerts(m)
-    remove_blocked_links(m)
+    set_blocked_links(m, get_blocked_links(m))
     colormap = np.zeros((*m.shape, 3))
     display_closure_step(m, '2: find_alerts  (alert_blocked=blue, alert_chosen=yellow, both=green)', colormap=colormap)
 

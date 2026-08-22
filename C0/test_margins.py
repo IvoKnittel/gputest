@@ -29,7 +29,8 @@ from closure import (find_alerts,
                       resolve_cycles_and_centrality,
                       do_closure,
                       forced_closure,
-                      remove_blocked_links,
+                      get_blocked_links,
+                      set_blocked_links,
                       place_squares,
                       reset_alert_bookkeeping)
 
@@ -57,7 +58,7 @@ def run_margin_free_case(n):
     size = n + 2
 
     find_alerts(m)
-    remove_blocked_links(m)
+    set_blocked_links(m, get_blocked_links(m))
     resolve_cycles_and_centrality(m)
     colormap = np.zeros((*m.shape, 3))
     display_closure_step(m, f'margin {n}x{n}: after resolve_cycles_and_centrality',

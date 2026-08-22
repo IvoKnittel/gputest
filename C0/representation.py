@@ -317,15 +317,26 @@ def colorize_with_alerts(map_of_squares):
     ALERT_BLOCKED_COLOR / ALERT_CHOSEN_COLOR / ALERT_BOTH_COLOR instead - so
     alert flags are visible on top of, rather than instead of, the underlying
     placement state.
+
+    StateEnum.blocked_tmp is the one exception: closure.set_blocked_links
+    sets it without clearing whatever .alert_chosen/.alert_blocked a cell
+    was still carrying from find_alerts (do_closure doesn't call
+    reset_alert_bookkeeping until after its own display), so a blocked_tmp
+    cell can easily still have both flags raised - the overlay would then
+    paint ALERT_BOTH_COLOR (green) squarely over what should read as
+    blocked_tmp's red, hiding a real .state behind stale alert bookkeeping.
+    blocked_tmp is excluded from the overlay entirely so it always shows
+    through.
     """
     state_display = display_map_of_squares_3States(map_of_squares)
     rgb = colorize(state_display, {0: FREE_COLOR, 1: CHOSEN_COLOR, -1: BLOCKED_COLOR,
                                     2: BLOCKED_TMP_COLOR})
 
     alert_display = display_map_of_squares_alerts(map_of_squares)
-    rgb[alert_display == -1] = ALERT_BLOCKED_COLOR
-    rgb[alert_display == 1] = ALERT_CHOSEN_COLOR
-    rgb[alert_display == 2] = ALERT_BOTH_COLOR
+    not_blocked_tmp = state_display != 2
+    rgb[(alert_display == -1) & not_blocked_tmp] = ALERT_BLOCKED_COLOR
+    rgb[(alert_display == 1) & not_blocked_tmp] = ALERT_CHOSEN_COLOR
+    rgb[(alert_display == 2) & not_blocked_tmp] = ALERT_BOTH_COLOR
     return rgb
 
 
