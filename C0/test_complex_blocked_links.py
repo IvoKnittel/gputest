@@ -3,12 +3,18 @@ import matplotlib.pyplot as plt
 
 from map_of_squares import StateEnum
 from representation import map_of_squares_from_array, place_blocked_squares, display_closure_step
-from closure import reset_alert_bookkeeping, find_alerts, assign_paths, get_blocked_links, set_blocked_links, finalize_blocked_tmp, place_square_in_seat_closed, do_closure, resolve_cycles_and_centrality
+from closure import reset_alert_bookkeeping, find_alerts, assign_paths, get_blocked_links, set_blocked_links, finalize_blocked_tmp, place_square_in_seat_closed, do_closure
 
 def test_two_forced_cells_block_each_other():
     """A 12x12 map: a 1-cell blocked margin wrapped around the 10x10 area that used
     to be the whole map, so the forces/path_id behaviour under test comes from the
     shape itself, not from free cells touching the array's own edge.
+
+    Runs the current standard round twice, by hand rather than via do_closure,
+    since this test wants each round's before/after drawn into its own pair of
+    side-by-side subplot axes - do_closure's own display always creates a
+    standalone figure, it can't be handed an existing ax the way this test's
+    two-panel comparison needs.
     """
 
     grid = [[0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
@@ -30,8 +36,10 @@ def test_two_forced_cells_block_each_other():
               if i in (0, size - 1) or j in (0, size - 1)]
     place_blocked_squares(m, border)
     find_alerts(m)
+    assign_paths(m)
     set_blocked_links(m, get_blocked_links(m))
-    resolve_cycles_and_centrality(m)
+    finalize_blocked_tmp(m)
+    place_square_in_seat_closed(m)
 
     fig, (ax_before, ax_after) = plt.subplots(1, 2, figsize=(10, 5))
     colormap = np.zeros((*m.shape, 3))
@@ -39,9 +47,11 @@ def test_two_forced_cells_block_each_other():
     reset_alert_bookkeeping(m)
 
     find_alerts(m)
+    assign_paths(m)
     set_blocked_links(m, get_blocked_links(m))
-    resolve_cycles_and_centrality(m)
-    
+    finalize_blocked_tmp(m)
+    place_square_in_seat_closed(m)
+
     fig, (ax_before, ax_after) = plt.subplots(1, 2, figsize=(10, 5))
     colormap = np.zeros((*m.shape, 3))
     display_closure_step(m, 'closure redone', show_links=True, show_real=True, ax=ax_before, colormap=colormap)

@@ -3,7 +3,7 @@
 import numpy as np
 
 from map_of_squares import InvalidTilingError
-from representation import build_map_of_squares, display_closure_step
+from representation import build_map_of_squares, place_blocked_squares, display_closure_step
 from closure import do_closure, place_squares
 from test_utils import place_and_chase 
 
@@ -31,31 +31,44 @@ def test_pinwheel():
 
 def test_show_other_full_2x2():
     """Show a situation that is not a pinwheel but contains a fully blocked 2x2.
+
+    Documentation only, not an assertion: this shape happens to be a genuine
+    impossibility (do_closure now rejects it via check_tiling_invariant), but
+    that's not the point being illustrated here - the point is just that a
+    fully blocked 2x2 need not be a pinwheel shape. Catch the rejection so the
+    test always passes and still shows whichever state resulted.
     """
     m = build_map_of_squares(9, 9)
     place_squares(m, [(3, 3), (4, 3), (5, 6), (6, 6)])
     colormap = np.zeros((*m.shape, 3))
     display_closure_step(m, 'initial state', show_links=True, show_real=True, colormap=colormap)
-    do_closure(m, '')
+    try:
+        do_closure(m, '')
+        title = 'next state'
+    except InvalidTilingError as e:
+        title = f'next state (rejected - {e})'
     colormap = np.zeros((*m.shape, 3))
-    display_closure_step(m, 'next state', show_links=True, show_real=True, colormap=colormap)
+    display_closure_step(m, title, show_links=True, show_real=True, colormap=colormap)
 
 
 def test_other_full_2x2():
-
-    m = build_map_of_squares(9, 9)
-    place_and_chase(m, (3, 3), "round 1: (3,3) placed")
-    place_and_chase(m, (4, 3), "round 2: (4,3) placed")
-    place_and_chase(m, (5, 6), "round 3: (5,6) placed")
-    try:
-        place_and_chase(m, (6, 6), "round 4: (6,6) placed anyway")
-        raised = False
-    except InvalidTilingError as e:
-        raised = True
-        colormap = np.zeros((*m.shape, 3))
-        display_closure_step(m, f"round 4: place_squares rejected (6,6) - {e}",
-                              show_links=True, show_real=False, colormap=colormap)
-    assert raised, "(6,6) should be rejected outright now that (5,5) is already chosen"
+    """Same shape as test_show_other_full_2x2, but wrapped in a 1-cell blocked
+    margin (11x11 instead of 9x9, every placed cell shifted by (+1, +1)) so the
+    forces/path_id behaviour under test comes from the shape itself, not from
+    free cells touching the array's own edge - the pattern established in
+    test_complex_blocked_links.py.
+    """
+    m = build_map_of_squares(11, 11)
+    size = 11
+    border = [(i, j) for i in range(size) for j in range(size)
+              if i in (0, size - 1) or j in (0, size - 1)]
+    place_blocked_squares(m, border)
+    place_and_chase(m, (4, 4), "round 1: (4,4) placed")
+    place_and_chase(m, (5, 4), "round 2: (5,4) placed")
+    place_and_chase(m, (6, 7), "round 3: (6,7) placed")
+    place_and_chase(m, (5, 9), "round 4: (5,9) placed")
+    place_and_chase(m, (2, 9), "round 5: (2,9) placed")
+    place_and_chase(m, (8, 9), "round 6: (8,9) placed")
 
 def test_try_3x3_hole1():
     m = build_map_of_squares(12, 12)

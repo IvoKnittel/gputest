@@ -133,12 +133,29 @@ def real_space_map(map_of_squares):
     return real_space
 
 
-def is_realmap_cover_complete(map_of_squares):
-    """True once real_space_map(map_of_squares) has no cell left at its
-    initial value (0, free) - every real-space cell is covered by some
-    chosen square. False if at least one real-space cell is still 0.
+def is_realmap_cover_complete(map_of_squares, margin=0):
+    """True once real_space_map(map_of_squares), with margin real-space rings
+    trimmed off each edge, has no cell left at its initial value (0, free) -
+    every real-space cell in that region is covered by some chosen square.
+    False if at least one cell in that region is still 0.
+
+    margin=0 (default) checks the whole real-space grid, as before. Pass
+    margin=1 for a board built by build_margin_free_map(n): its outer ring of
+    StateEnum.blocked cells is never reachable by any interior chosen
+    square's real-space footprint (the interior spans map_of_squares rows/
+    cols 1..n, so the farthest any interior square's 2x2 stamp ever reaches
+    is real-space index n+1, one short of the (n+3)-wide grid's own far
+    edge) - real_space_map only ever marks a cell via a *chosen* square, and
+    nothing in the margin is ever chosen, so that outer ring stays 0
+    forever, regardless of how complete the actual (margin-free) tiling is.
+    Checking the whole grid unconditionally would make this permanently
+    unsatisfiable for such a board - margin=1 checks "the real map" in the
+    sense the margin tests mean it: the original free cells, without the
+    margin wrapped around them.
     """
     real_space = real_space_map(map_of_squares)
+    if margin:
+        real_space = real_space[margin:-margin, margin:-margin]
     return bool((real_space != 0).all())
 
 
@@ -211,7 +228,8 @@ def get_random_shade_of_cyan():
     """A random (r, g, b) triple: CHOSEN_COLOR with its hue nudged slightly,
     saturation and value unchanged (still fully-saturated, full-brightness) -
     one of NUM_CYAN_SHADES evenly-spaced hues within +/- CYAN_HUE_SPREAD of
-    CHOSEN_COLOR's own hue.
+    CHOSEN_COLOR's own hue. Draws from the shared global random module - see
+    conftest.py for the one seed the whole test suite runs from.
     """
     hue = _CYAN_SHADE_HUES[random.randrange(NUM_CYAN_SHADES)] % 1.0
     return colorsys.hsv_to_rgb(hue, _CHOSEN_SATURATION, _CHOSEN_VALUE)

@@ -704,6 +704,16 @@ def do_closure(m, title, show=False):
     them), then once more, silently, after reset_alert_bookkeeping - the same
     double-pass shape this function has always had, just with every stage of
     a single pass now included both times instead of only some of them.
+
+    check_tiling_invariant runs once, at the very end, after both rounds -
+    raising loudly (InvalidTilingError) rather than leaving an impossible
+    2x2-all-blocked board to go unnoticed, which is what used to happen: the
+    check existed but nothing ever called it. Confirmed this can actually
+    happen: finalize_blocked_tmp/place_square_in_seat_closed can complete
+    several seats in one batch (place_square_in_seat_closed's own scan-then-
+    place-all-at-once discipline) without the per-placement re-scan that
+    would otherwise catch a forming pinwheel - see the (2, 2)/(2, 3)/(3, 2)/
+    (3, 3) case surfaced by test_margin_free_5x5realmap's very first round.
     """
     find_alerts(m)
     assign_paths(m)
@@ -719,3 +729,4 @@ def do_closure(m, title, show=False):
     set_blocked_links(m, get_blocked_links(m))
     finalize_blocked_tmp(m)
     place_square_in_seat_closed(m)
+    check_tiling_invariant(m)
