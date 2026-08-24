@@ -11,6 +11,7 @@ about the general case.
 
 import colorsys
 import random
+from dataclasses import dataclass
 
 import numpy as np
 import matplotlib.pyplot as plt
@@ -35,6 +36,30 @@ def build_margin_free_map(n):
               if i in (0, size - 1) or j in (0, size - 1)]
     place_blocked_squares(m, border)
     return m
+
+
+FREE_MARGIN_PADDING = 2
+
+
+def build_free_margin_map(n):
+    """(n + 2*FREE_MARGIN_PADDING) x (...) map, every cell free - no blocked
+    border anywhere (unlike build_margin_free_map), the n x n region of
+    interest just sits centred with a FREE_MARGIN_PADDING-cell buffer of
+    ordinary free cells on every side.
+
+    find_alerts/find_central_patch_items/find_cycle_patches all skip the
+    array's own outermost ring (range(1, rows - 1)), so an n x n region
+    placed flush against the real array boundary would leave its own edge
+    cells invisible to them. A 1-cell buffer would fix that for the region
+    itself, but not for the buffer ring immediately around it - if the
+    region's own edge ever forces a buffer cell into the graph, that cell
+    needs to be examined too, which needs its own neighbours in loop bounds.
+    2 cells of buffer covers both: the outer ring (row/col 0 and the last
+    one) stays untouched, ordinary free padding; the ring just inside it is
+    still within range(1, rows - 1), so it's examined like any other cell.
+    """
+    size = n + 2 * FREE_MARGIN_PADDING
+    return build_map_of_squares(size, size)
 
 # The four diagonal offsets a chosen item blocks (see closure.place_squares).
 DIAGONAL_OFFSETS = ((-1, -1), (-1, 1), (1, -1), (1, 1))
@@ -139,19 +164,13 @@ def is_realmap_cover_complete(map_of_squares, margin=0):
     every real-space cell in that region is covered by some chosen square.
     False if at least one cell in that region is still 0.
 
-    margin=0 (default) checks the whole real-space grid, as before. Pass
-    margin=1 for a board built by build_margin_free_map(n): its outer ring of
-    StateEnum.blocked cells is never reachable by any interior chosen
-    square's real-space footprint (the interior spans map_of_squares rows/
-    cols 1..n, so the farthest any interior square's 2x2 stamp ever reaches
-    is real-space index n+1, one short of the (n+3)-wide grid's own far
-    edge) - real_space_map only ever marks a cell via a *chosen* square, and
-    nothing in the margin is ever chosen, so that outer ring stays 0
-    forever, regardless of how complete the actual (margin-free) tiling is.
-    Checking the whole grid unconditionally would make this permanently
-    unsatisfiable for such a board - margin=1 checks "the real map" in the
-    sense the margin tests mean it: the original free cells, without the
-    margin wrapped around them.
+    margin=0 (default) checks the whole real-space grid. Pass margin=k for a
+    board with a k-cell blocked border wrapped around the region that
+    actually matters: real_space_map only ever marks a cell via a *chosen*
+    square, and nothing in a permanently-blocked border is ever chosen, so
+    its outer ring(s) stay 0 forever regardless of how complete the actual
+    tiling is - checking the whole grid unconditionally would make this
+    permanently unsatisfiable for such a board.
     """
     real_space = real_space_map(map_of_squares)
     if margin:
@@ -210,6 +229,31 @@ MARGIN_COLOR = (0.9, 0.9, 0.9)
 ALERT_BLOCKED_COLOR = (0, 0, 1)
 ALERT_CHOSEN_COLOR = (1, 1, 0)
 ALERT_BOTH_COLOR = (0, 1, 0)
+
+
+@dataclass
+class RealSpaceMargin:
+    """Options for display_closure_step's show_real panel: how it treats a
+    permanently-blocked border around the board. real_space_map itself
+    carries no notion of "blocked" (see display_closure_step's own
+    docstring - a blocked map_of_squares cell has no principled real-space
+    footprint), so this is the caller's own claim about how wide that
+    border is, not something derived from map_of_squares state - pass it
+    only for a board that genuinely has one (e.g. build_margin_free_map),
+    never for a margin-free board (e.g. build_free_margin_map,
+    map_of_squares_from_array) where there's nothing there to call out.
+
+    width: how many real-space cells deep the border is, on every side.
+    color: what to paint it, when crop=False. Ignored when crop=True.
+    crop: False (default) paints the outer `width` cells `color`, leaving
+    the full grid on screen with the border visually called out. True cuts
+    those cells off every side instead, so the panel only ever shows the
+    region that can actually be covered - matches the trim
+    is_realmap_cover_complete's own margin=width argument does.
+    """
+    width: int = 1
+    color: tuple = BLOCKED_COLOR
+    crop: bool = False
 
 # get_random_shade_of_cyan varies CHOSEN_COLOR's hue within +/- this fraction
 # of the hue wheel, in NUM_CYAN_SHADES evenly-spaced steps - "slight" meaning
@@ -379,7 +423,8 @@ def grid_on(ax, rows, cols, offset=-0.5):
 
 
 def display_closure_step(m, title, show_links=False, show_real=False,
-                          show_entries_terminals=False, ax=None, colormap=None):
+                          show_entries_terminals=False, ax=None, colormap=None,
+                          margin=None):
     """Show a single map_of_squares panel coloured via colorize_with_alerts, so
     alert_blocked (blue), alert_chosen (yellow), and both-at-once (green) are
     visible on top of the plain free/chosen/blocked colours - see
@@ -417,14 +462,18 @@ def display_closure_step(m, title, show_links=False, show_real=False,
     show_real=True additionally draws the real-space map (real_space_map) in a
     second panel to the right, so a placement's actual physical footprint is
     visible alongside its alert/link overlay - e.g. the last, most-resolved
-    step of a closure walkthrough (see test_do_closure_steps). The panel's own
-    outermost ring (row/col 0 and row/col -1 of the (rows+1) x (cols+1)
-    real-space grid) is stamped BLOCKED_COLOR first, as a fixed frame -
-    unconditionally, regardless of which map_of_squares cells are actually
-    blocked: there's no principled way to map a blocked map_of_squares cell
-    onto a specific real-space footprint the way a chosen square's actual 2x2
-    placement has one, so this is a plain geometric border, not derived from
-    cell state. Chosen squares are stamped on top, same as always. Draws its
+    step of a closure walkthrough (see test_do_closure_steps). Every real-space
+    cell starts FREE_COLOR and only ever changes when an actual chosen
+    square's footprint is stamped onto it - there's no principled way to map
+    a blocked map_of_squares cell onto a specific real-space footprint the
+    way a chosen square's actual 2x2 placement has one (blocked means "no
+    square may have a corner here", not "something occupies this site"), so
+    this panel never derives a border from cell state on its own. Pass a
+    RealSpaceMargin as margin to call one out anyway, for a board that
+    genuinely has a permanently-blocked border (e.g. build_margin_free_map) -
+    see RealSpaceMargin's own docstring for width/color/crop. margin=None
+    (the default) draws no border at all, which is what a margin-free board
+    (e.g. build_free_margin_map, map_of_squares_from_array) wants. Draws its
     own two-panel figure regardless of ax, since a fresh pair of axes is
     needed either way - pass ax=None (the default) whenever show_real=True.
 
@@ -511,10 +560,14 @@ def display_closure_step(m, title, show_links=False, show_real=False,
     if show_real:
         real_display = real_space_map(m)
         real_rgb = colorize(real_display, {0: FREE_COLOR})
-        real_rgb[0, :] = BLOCKED_COLOR
-        real_rgb[-1, :] = BLOCKED_COLOR
-        real_rgb[:, 0] = BLOCKED_COLOR
-        real_rgb[:, -1] = BLOCKED_COLOR
+
+        if margin is not None and not margin.crop:
+            w = margin.width
+            real_rgb[:w, :] = margin.color
+            real_rgb[-w:, :] = margin.color
+            real_rgb[:, :w] = margin.color
+            real_rgb[:, -w:] = margin.color
+
         for i in range(rows):
             for j in range(cols):
                 if m[i, j].state == StateEnum.chosen:
@@ -526,7 +579,12 @@ def display_closure_step(m, title, show_links=False, show_real=False,
                     if found:
                        i1 = pos_overwritten[0]
                        j1 = pos_overwritten[1]
-                       real_rgb[i1:i1 + 2, j1:j1 + 2] = get_shade_of_cyan((i1, j1), m, colormap) 
+                       real_rgb[i1:i1 + 2, j1:j1 + 2] = get_shade_of_cyan((i1, j1), m, colormap)
+
+        if margin is not None and margin.crop:
+            w = margin.width
+            real_display = real_display[w:-w, w:-w]
+            real_rgb = real_rgb[w:-w, w:-w]
 
         ax_real.imshow(real_rgb)
         ax_real.set_title('real space')

@@ -51,12 +51,18 @@ def test_show_other_full_2x2():
     display_closure_step(m, title, show_links=True, show_real=True, colormap=colormap)
 
 
-def test_other_full_2x2():
-    """Same shape as test_show_other_full_2x2, but wrapped in a 1-cell blocked
-    margin (11x11 instead of 9x9, every placed cell shifted by (+1, +1)) so the
-    forces/path_id behaviour under test comes from the shape itself, not from
-    free cells touching the array's own edge - the pattern established in
-    test_complex_blocked_links.py.
+def test_frozen_area():
+    """After round 2, a large stretch of the interior still shows as free, but
+    it no longer really is: a single square already pins down everything that
+    happens there, so rounds 3-6 just walk through cells whose outcome was
+    decided two rounds earlier, not ones that are still open to choice.
+
+    That's harmless for sequential placement - each round's do_closure chase
+    resolves a cell before the next one is ever considered, so it never
+    matters that the choice was effectively already made. It would matter for
+    placing squares in parallel across a superlattice, though: two workers
+    each looking at a still-"free" cell in a frozen area could think they have
+    an independent choice when only one of them actually does.
     """
     m = build_map_of_squares(11, 11)
     size = 11

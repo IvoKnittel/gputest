@@ -545,10 +545,10 @@ def resolve_cycles_and_centrality(m, max_gens=20):
 
 
 def forced_closure(map_of_squares, position):
-    """Every position transitively forced by position's own .forces (see
-    SquareItem.forces), not including position itself: position's direct forces,
-    plus whatever those force in turn, and so on, until every chain reaches a
-    terminal (forces == set()) or loops back onto something already collected.
+    """position itself, plus every position transitively forced by its own
+    .forces (see SquareItem.forces): position's direct forces, plus whatever
+    those force in turn, and so on, until every chain reaches a terminal
+    (forces == set()) or loops back onto something already collected.
 
     This is the "actually commit to it" counterpart to find_alerts/
     get_blocked_links/set_blocked_links, which only ever *record* what
@@ -561,10 +561,11 @@ def forced_closure(map_of_squares, position):
     assumption that find_cycle_patches has already run - a forces chain can
     still loop back on itself at this stage - so each position is only ever
     visited once.
-    
 
-    A pure read - does not place anything itself. The caller places position,
-    calls this, and places every position in the result too (see place_squares).
+    A pure read - does not place anything itself. The caller places every
+    position in the result, position included (see place_squares) - every
+    call site does this as `place_squares(m, list(forced_closure(m, pos)))`,
+    with no separate `+ [pos]`.
     """
     to_visit = list(map_of_squares[position].forces)
     forced = set()
@@ -682,10 +683,14 @@ def finalize_blocked_tmp(m):
                 m[i, j].state = StateEnum.blocked
 
 
-def do_closure(m, title, show=False):
+def do_closure(m, title, show=False, margin=None):
     """Run one full round of the closure pipeline, twice (see below for why
     twice), in place: find_alerts, assign_paths, get_blocked_links/
     set_blocked_links, finalize_blocked_tmp, place_square_in_seat_closed.
+
+    margin (a representation.RealSpaceMargin, or None) is forwarded as-is to
+    display_closure_step's own margin argument when show=True - see its
+    docstring; ignored when show=False.
 
     The last two stages are the current standard, not just set_blocked_links:
     a cell get_blocked_links flags is a genuine, permanent impossibility (see
@@ -722,7 +727,8 @@ def do_closure(m, title, show=False):
     place_square_in_seat_closed(m)
     if show:
         colormap = np.zeros((*m.shape, 3))
-        display_closure_step(m, title, show_links=True, show_real=True, colormap=colormap)
+        display_closure_step(m, title, show_links=True, show_real=True, colormap=colormap,
+                              margin=margin)
     reset_alert_bookkeeping(m)
     find_alerts(m)
     assign_paths(m)

@@ -23,7 +23,7 @@ import random
 import numpy as np
 
 from map_of_squares import StateEnum, InvalidTilingError
-from representation import (build_margin_free_map,
+from representation import (build_margin_free_map, RealSpaceMargin,
                              display_closure_step, is_realmap_cover_complete)
 from closure import (find_alerts,
                       resolve_cycles_and_centrality,
@@ -35,6 +35,7 @@ from closure import (find_alerts,
                       reset_alert_bookkeeping)
 
 MAX_RANDOM_PLACEMENTS = 8
+MARGIN = RealSpaceMargin(width=1)
 
 def place_random_free_cell(m, size):
     """Place one square at a random still-free cell, chasing whatever it
@@ -62,7 +63,7 @@ def run_margin_free_case(n):
     resolve_cycles_and_centrality(m)
     colormap = np.zeros((*m.shape, 3))
     display_closure_step(m, f'margin {n}x{n}: after resolve_cycles_and_centrality',
-                          show_links=True, show_real=True, colormap=colormap)
+                          show_links=True, show_real=True, colormap=colormap, margin=MARGIN)
 
     # Union every alert_chosen cell's path_id together, rather than collecting
     # them into a set directly - path_id is itself a set now, and a set of sets
@@ -82,15 +83,15 @@ def run_margin_free_case(n):
         colormap = np.zeros((*m.shape, 3))
         display_closure_step(m, f'margin {n}x{n}: after placing patch {path_ids[0]} '
                                  f'(chased from {target})',
-                              show_links=True, show_real=True, colormap=colormap)
+                              show_links=True, show_real=True, colormap=colormap, margin=MARGIN)
 
     for k in range(MAX_RANDOM_PLACEMENTS):
         if not place_random_free_cell(m, size):
             colormap = np.zeros((*m.shape, 3))
             display_closure_step(m, f'margin {n}x{n}: no free cell left',
-                                  show_links=True, show_real=True, colormap=colormap)
+                                  show_links=True, show_real=True, colormap=colormap, margin=MARGIN)
             break
-        do_closure(m, f'margin {n}x{n}: random placement {k + 1}', show=True)
+        do_closure(m, f'margin {n}x{n}: random placement {k + 1}', show=True, margin=MARGIN)
         if is_realmap_cover_complete(m, margin=1):
             break
 
@@ -107,7 +108,7 @@ def test_margin_free_3x3realmap():
         raised = True
         colormap = np.zeros((*m.shape, 3))
         display_closure_step(m, f'margin {n}x{n}: initial closure rejected - {e}',
-                              show_links=True, show_real=True, colormap=colormap)
+                              show_links=True, show_real=True, colormap=colormap, margin=MARGIN)
     assert raised, "initial closure should be rejected outright now"
 
 def test_margin_free_4x4realmap():
@@ -120,9 +121,9 @@ def test_margin_free_4x4realmap():
         if not place_random_free_cell(m, size):
             colormap = np.zeros((*m.shape, 3))
             display_closure_step(m, f'margin {n}x{n}: no free cell left',
-                                  show_links=True, show_real=True, colormap=colormap)
+                                  show_links=True, show_real=True, colormap=colormap, margin=MARGIN)
             break
-        do_closure(m, f'margin {n}x{n}: random placement {k + 1}', show=True)
+        do_closure(m, f'margin {n}x{n}: random placement {k + 1}', show=True, margin=MARGIN)
         if is_realmap_cover_complete(m, margin=1):
             success=True
             break
@@ -140,7 +141,7 @@ def test_margin_free_5x5realmap():
         raised = True
         colormap = np.zeros((*m.shape, 3))
         display_closure_step(m, f'margin {n}x{n}: initial closure rejected - {e}',
-                              show_links=True, show_real=True, colormap=colormap)
+                              show_links=True, show_real=True, colormap=colormap, margin=MARGIN)
     assert raised, "initial closure should be rejected outright now"
 
 def test_margin_free_6x6realmap():
@@ -153,9 +154,9 @@ def test_margin_free_6x6realmap():
         if not place_random_free_cell(m, size):
             colormap = np.zeros((*m.shape, 3))
             display_closure_step(m, f'margin {n}x{n}: no free cell left',
-                                  show_links=True, show_real=True, colormap=colormap)
+                                  show_links=True, show_real=True, colormap=colormap, margin=MARGIN)
             break
-        do_closure(m, f'margin {n}x{n}: random placement {k + 1}', show=True)
+        do_closure(m, f'margin {n}x{n}: random placement {k + 1}', show=True, margin=MARGIN)
         if is_realmap_cover_complete(m, margin=1):
             success=True
             break
