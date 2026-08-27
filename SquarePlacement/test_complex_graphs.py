@@ -9,10 +9,7 @@ import numpy as np
 
 from map_of_squares import StateEnum
 from representation import (build_map_of_squares,
-                             set_link,
-                             build_cycle,
                              map_of_squares_from_array,
-                             display_graph_map_and_real_space,
                              display_closure_step)
 from closure import (find_alerts,
                       assign_paths,
@@ -20,6 +17,8 @@ from closure import (find_alerts,
                       do_closure,
                       forced_closure,
                       place_squares)
+
+from test_utils import place_and_chase 
 
 
 def test_line():
@@ -133,8 +132,15 @@ def test_tree_fan_in():
     colormap = np.zeros((*m.shape, 3))
     display_closure_step(m, 'fan-in forced via (2, 1)', show_links=True, show_real=True, colormap=colormap)
 
+def test_cycle_unidirectional_bidirectional():
+    """ build a free cell with 4 direct blocked neighbors. """
+    m = build_map_of_squares(12, 12)
+    place_and_chase(m, (2, 2), "round 1: (2,2) placed", True)
+    place_and_chase(m, (3, 5), "round 2: (3,5) placed", True)
+    place_and_chase(m, (5, 1), "round 3: (5,1) placed", True) 
+    place_and_chase(m, (6, 4), "round 4: (6,4) placed", True)   
 
-def test_line_into_cycle():
+def test_line_into_eye():
     """(1, 4) is a pure diagonal linker into (1, 6) - like (4, 4) in
     test_tree_fan_out, it has real forces without being alert_chosen itself,
     since nothing ever flags it as anyone's own corner. (1, 6) and (1, 8), at
@@ -194,7 +200,7 @@ def test_line_into_cycle():
                           show_links=True, show_real=True, colormap=colormap)
 
 
-def test_cycle_line_outwards():
+def test_eye_outwards():
     
     grid = [[0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
             [0, 0, 0, 0, 0, 1, 0, 1, 0, 0],

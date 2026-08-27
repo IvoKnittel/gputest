@@ -112,12 +112,3 @@ def test_try_3x3_hole3():
 
     #place_and_chase(m, (8, 7), "round 9: (8,7) placed")
     place_and_chase(m, (7, 5), "round 9: (7,5) placed", show_entries_terminals=True)
-
-
-def test_free_cell_with_4_direct_blocked_neighbors():
-    """ build a free cell with 4 direct blocked neighbors. """
-    m = build_map_of_squares(12, 12)
-    place_and_chase(m, (2, 2), "round 1: (2,2) placed", True)
-    place_and_chase(m, (3, 5), "round 2: (3,5) placed", True)
-    place_and_chase(m, (5, 1), "round 3: (5,1) placed", True) 
-    place_and_chase(m, (6, 4), "round 4: (6,4) placed", True)   

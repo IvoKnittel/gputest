@@ -1,7 +1,4 @@
 {
-    "python.testing.pytestArgs": [
-        "one-off_stripe"
-    ],
     "python.testing.unittestEnabled": false,
     "python.testing.pytestEnabled": true
 }
