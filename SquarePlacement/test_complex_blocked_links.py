@@ -93,7 +93,6 @@ def test_two_forced_cells_block_each_other():
         colormap = np.zeros((*m.shape, 3))
         display_closure_step(m, 'closure redone', show_links=True, show_real=True, colormap=colormap)
 
-
 def test_get_and_set_blocked_links_marks_blocked_tmp():
     """Same shape as test_two_forced_cells_block_each_other, but stopping
     right after get_blocked_links/set_blocked_links to look at what they

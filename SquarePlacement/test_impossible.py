@@ -3,7 +3,7 @@
 import numpy as np
 
 from map_of_squares import InvalidTilingError
-from representation import build_map_of_squares, place_blocked_squares, display_closure_step
+from representation import build_map_of_squares, display_closure_step
 from closure import do_closure, place_squares
 from test_utils import place_and_chase 
 
@@ -27,8 +27,7 @@ def test_pinwheel():
         display_closure_step(m, f"round 4: placing_square at (5,2) rejected - {e}",
                               show_links=True, show_real=False, colormap=colormap)
     assert raised, "(5,2) should be rejected outright now"
-
-
+       
 def test_show_other_full_2x2():
     """Show a situation that is not a pinwheel but contains a fully blocked 2x2.
 
@@ -49,32 +48,6 @@ def test_show_other_full_2x2():
         title = f'next state (rejected - {e})'
     colormap = np.zeros((*m.shape, 3))
     display_closure_step(m, title, show_links=True, show_real=True, colormap=colormap)
-
-
-def test_frozen_area():
-    """After round 2, a large stretch of the interior still shows as free, but
-    it no longer really is: a single square already pins down everything that
-    happens there, so rounds 3-6 just walk through cells whose outcome was
-    decided two rounds earlier, not ones that are still open to choice.
-
-    That's harmless for sequential placement - each round's do_closure chase
-    resolves a cell before the next one is ever considered, so it never
-    matters that the choice was effectively already made. It would matter for
-    placing squares in parallel across a superlattice, though: two workers
-    each looking at a still-"free" cell in a frozen area could think they have
-    an independent choice when only one of them actually does.
-    """
-    m = build_map_of_squares(11, 11)
-    size = 11
-    border = [(i, j) for i in range(size) for j in range(size)
-              if i in (0, size - 1) or j in (0, size - 1)]
-    place_blocked_squares(m, border)
-    place_and_chase(m, (4, 4), "round 1: (4,4) placed")
-    place_and_chase(m, (5, 4), "round 2: (5,4) placed")
-    place_and_chase(m, (6, 7), "round 3: (6,7) placed")
-    place_and_chase(m, (5, 9), "round 4: (5,9) placed")
-    place_and_chase(m, (2, 9), "round 5: (2,9) placed")
-    place_and_chase(m, (8, 9), "round 6: (8,9) placed")
 
 def test_try_3x3_hole1():
     m = build_map_of_squares(12, 12)

@@ -115,6 +115,16 @@ def set_square_chosen(map_of_squares, pos):
     (representation.py can't import from closure.py without a cycle) can call
     it as the one place .state ever becomes StateEnum.chosen.
 
+    Raises InvalidTilingError if pos isn't currently StateEnum.free. Confirmed
+    reachable, not just defensive: Quality/test_image_to_squares.py's
+    test_selfblocking_seats_real_seqfail placed a square on (1, 2) after
+    closure had already legitimately blocked it (as a diagonal neighbour of an
+    earlier placement) - before this check existed, that silently overwrote
+    the block back to chosen, producing an invalid diagonal-chosen pair only
+    caught later, incidentally, by real_space_map. Rejecting it right here
+    surfaces the actual mistake (choosing an illegal cell) at the point it
+    happens, instead of some unrelated-looking failure downstream.
+
     Checks all four direct neighbours of pos: the first one found that is
     itself already chosen *and* still unpaired (.rectangle == (-1, -1)) is
     paired with pos - each one's .rectangle records the other's index. A
@@ -124,6 +134,8 @@ def set_square_chosen(map_of_squares, pos):
     that existing pairing.
     """
     item = map_of_squares[pos]
+    if item.state != StateEnum.free:
+        raise InvalidTilingError(f"cannot choose {pos}: state is {item.state}, not free")
     item.state = StateEnum.chosen
 
     rows, cols = map_of_squares.shape

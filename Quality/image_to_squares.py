@@ -94,22 +94,6 @@ def tile_counts_2d(shape):
     num0_col, num1_col = tile_counts_for_axis(shape[h])
     return (num0_row, num0_col), (num1_row, num1_col)
 
-def is_free(extension_map,k,l):
-    if np.any(extension_map[k:k+2,l:l+2] < 0):
-        return False
-    return True
-
-occupied = -10.0
-blocked = -5.0
-emtpy    = 0
-
-def insert_t(extension_tile,idx, more):
-    if idx[v] >= extension_tile.shape[v] or idx[h] >= extension_tile.shape[h]:
-        return extension_tile
-
-    extension_tile[idx[v]:idx[v] + 2, idx[h]:idx[h] + 2] = occupied
-    return extension_tile
-
 
 def core_range_for_tile(upper_left_idx):
     """The 3x3 mutable core sits 1 cell in from the 5x5 tile's own upper-left
@@ -139,21 +123,62 @@ def best_allowed(map_of_squares, core_range):
     return best_idx is not None, best_idx
 
 
-def insert_best(square_storage_location_map, upper_left_idx):
+def insert_best(square_storage_location_map, upper_left_idx, show=False):
     """Place the single highest-quality free SquareItem in the tile's 3x3 core at
     upper_left_idx, then run the closure it triggers."""
     found, best_idx = best_allowed(square_storage_location_map, core_range_for_tile(upper_left_idx))
     if found:
-        place_and_chase(square_storage_location_map, best_idx, f"select_single_{best_idx}", show=False)
+        place_and_chase(square_storage_location_map, best_idx, f"select_single_{best_idx}", show)
     return found
 
-def image_squares_select_single(square_storage_location_map, num_tiles_expand_noshift_shift, shift):
+def tile_upper_left_indices(num_tiles_expand_noshift_shift, colorcode, super=False):
+    """Every tile's (i, j) upper-left index that colorcode's kernel call covers.
+
+    colorcode 0..3 picks a shift phase directly, shift = (colorcode // 2, colorcode % 2) -
+    matching the plain 4-way superlattice sweep.
+
+    When super=True, colorcode ranges 0..15: the high 2 bits (colorcode // 4) pick the
+    shift phase as above, and the low 2 bits (colorcode % 4) pick one of the 4 sub-groups
+    that further split that shift's tiles by (I % 2, J % 2). Each of the 16 colorcodes then
+    owns a disjoint set of tiles, so the 16 kernel calls commute and may run in any order.
+    """
+    if super:
+        shift_code, sub_code = divmod(colorcode, 4)
+    else:
+        shift_code, sub_code = colorcode, None
+    shift = (shift_code // 2, shift_code % 2)
+
     sz_tile=2*sz_halftile
     num_tiles_expand_row = num_tiles_expand_noshift_shift[shift[0]][v]
     num_tiles_expand_col = num_tiles_expand_noshift_shift[shift[1]][h]
     for I in range(0, num_tiles_expand_row):
         for J in range(0, num_tiles_expand_col):
-            i=shift[v]*sz_halftile + sz_tile * I
-            j=shift[h]*sz_halftile + sz_tile * J
-            insert_best(square_storage_location_map, (i, j))
+            if super and (2*(I % 2) + (J % 2)) != sub_code:
+                continue
+            yield shift[v]*sz_halftile + sz_tile * I, shift[h]*sz_halftile + sz_tile * J
+
+
+def image_squares_select_single(square_storage_location_map, num_tiles_expand_noshift_shift, colorcode, super=False, show=False):
+    for i, j in tile_upper_left_indices(num_tiles_expand_noshift_shift, colorcode, super):
+        insert_best(square_storage_location_map, (i, j), show)
     return square_storage_location_map
+
+
+def insert_tile(m, num_tiles_expand_noshift_shift, colorcode, super=False, only_if_equals=None):
+    """Write colorcode into the 3x3 core of every tile colorcode selects (see
+    tile_upper_left_indices).
+
+    only_if_equals=None (default): every cell in each selected core is overwritten
+    unconditionally, as before. Pass a value (e.g. a "free" sentinel) to only
+    overwrite cells still at that value - anything m was pre-seeded with (a blocked
+    margin, a cell already known to be chosen) is left untouched instead of being
+    clobbered by this kernel call.
+    """
+    for i, j in tile_upper_left_indices(num_tiles_expand_noshift_shift, colorcode, super):
+        (r0, r1), (c0, c1) = core_range_for_tile((i, j))
+        if only_if_equals is None:
+            m[r0:r1, c0:c1] = colorcode
+        else:
+            core = m[r0:r1, c0:c1]
+            core[core == only_if_equals] = colorcode
+    return m

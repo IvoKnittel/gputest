@@ -140,6 +140,45 @@ def place_square_in_seat(map_of_squares):
     side effect can't change a later seat's free corner out from under it
     mid-scan.
 
+    -- Known gap: two seats in the same scan can be mutually diagonal --
+    Confirmed by direct repro (build a margin-blocked board, run real square
+    placement through it - see Quality/test_image_to_squares.py's
+    test_square_placement_random_order_supersuperlattice): two 2x2 blocks found
+    as seats in the *same* scan can themselves be diagonal neighbours of each
+    other. When that happens there is no locally-correct resolution:
+
+    - Choosing both (today's behaviour) violates the no-diagonal-chosen-pair
+      invariant real_space_map enforces - check_tiling_invariant doesn't catch
+      this, since it only checks for a fully-blocked 2x2.
+    - Blocking either one instead - tried and reverted, see the commit history
+      here - immediately turns THAT one's own already-3-blocked 2x2 fully
+      blocked, tripping check_tiling_invariant directly.
+    - Deferring one and protecting it from the other's diagonal-blocking step -
+      also tried and reverted - only postpones the same conflict: nothing else
+      in this pipeline stops a later round from choosing a free cell whose
+      diagonal neighbour is already chosen, so the deferred seat gets chosen on
+      its own a few rounds later and the exact same violation reappears.
+
+    Every local fix attempted here changes *which* invariant breaks, never
+    prevents both. That means this state - two independently-forced seats that
+    are mutually diagonal - shouldn't be reachable in the first place: this
+    function's own docstring already flags it as "independent of .alert_chosen
+    bookkeeping", i.e. it bypasses the whole find_alerts/assign_paths/
+    get_blocked_links/set_blocked_links promise-and-contradiction system (see
+    get_blocked_links's docstring) that exists specifically to catch a
+    self-contradicting pair *before* it calcifies into two simultaneously-forced
+    cells. The real fix belongs upstream of this function, not inside it - not
+    attempted here.
+
+    Concrete evidence of exactly that bypass, already in the suite:
+    test_complex_blocked_links.test_seat_from_two_alert_blocked places one
+    square and shows a *different*, distant cell end up StateEnum.chosen with
+    an empty .forced_by throughout - chosen purely by this function's own scan,
+    never recorded by find_alerts/assign_paths at all. get_blocked_links only
+    ever checks path_id membership, so a cell chosen this way - no path_id, no
+    .forced_by - is invisible to it. Two such choices happening to be diagonal
+    neighbours of each other is exactly the gap above.
+
     Returns True if a seat was found (and placed), False otherwise -
     place_square_in_seat_closed loops on this until a call changes nothing.
     """
@@ -597,6 +636,19 @@ def get_blocked_links(m):
     A pure read - .path_id/.state are only ever looked at, never written, so
     unlike set_blocked_links this needs no snapshot-then-apply discipline of
     its own: nothing here can invalidate an earlier read.
+
+    -- Flagged for rewrite: global id set + a second full-grid scan to match it --
+    This function's whole output is a set of ids with no positional
+    information; set_blocked_links then has to re-scan every cell
+    (`unique_id((i, j), ...) in p`) just to find which cells those ids
+    actually belong to. That round trip through unique_id/a global set is the
+    same shape the old remove_blocked_links mechanism had (see
+    .claude/agents/wolfgang.md) - it works, but it's not in place: propagating
+    the contradiction directly along each cell's own .forces/.forced_by links
+    (the same links assign_paths/propagate_path_id_from_entries already walk)
+    instead of round-tripping through a global id set would let get_blocked_links
+    mark the origin cells itself, with no second grid-wide scan needed. Not
+    done yet: noted here as a target, not attempted.
     """
     rows, cols = m.shape
     p = set()
@@ -688,9 +740,35 @@ def do_closure(m, title, show=False, margin=None):
     twice), in place: find_alerts, assign_paths, get_blocked_links/
     set_blocked_links, finalize_blocked_tmp, place_square_in_seat_closed.
 
+    -- Flagged for rewrite: cell-by-cell Python loops, not GPU-style tiles --
+    Every stage this orchestrates (find_alerts, assign_paths,
+    find_central_patch_items, find_cycle_patches, get_blocked_links,
+    set_blocked_links, place_square_in_seat, check_tiling_invariant,
+    reset_alert_bookkeeping, ...) is its own independent `for i in
+    range(rows): for j in range(cols):` scan over every cell in plain Python.
+    image_to_squares.py's insert_tile/image_squares_select_single already
+    show the shape this should take instead - one "kernel call" per disjoint
+    tile/core, each a batched, vectorizable operation rather than a
+    scalar-per-cell Python loop. Not done yet: noted here as a target, not
+    attempted - a real rewrite has to work out how each stage's cross-cell
+    dependencies (e.g. assign_paths' forward walk along .forces,
+    get_blocked_links' snapshot-then-apply discipline) survive being
+    re-expressed over tiles instead of individual cells first.
+
     margin (a representation.RealSpaceMargin, or None) is forwarded as-is to
     display_closure_step's own margin argument when show=True - see its
     docstring; ignored when show=False.
+
+    show=True's display (after the first pass, before the bookkeeping reset -
+    see below) also raises InvalidTilingError if it finds two chosen squares
+    that are diagonal neighbours - display_closure_step's show_real=True panel
+    reports that via its own return value now (real_space_map no longer raises
+    it directly, see its docstring), and this is the one place that turns it
+    back into a raise, matching check_tiling_invariant's already-loud handling
+    of the other kind of invalid board (a fully-blocked 2x2). show=False skips
+    this check entirely, same as it always skipped the display itself - a
+    diagonal-chosen conflict can still be present on a show=False run, just
+    undetected by do_closure itself either way.
 
     The last two stages are the current standard, not just set_blocked_links:
     a cell get_blocked_links flags is a genuine, permanent impossibility (see
@@ -727,8 +805,12 @@ def do_closure(m, title, show=False, margin=None):
     place_square_in_seat_closed(m)
     if show:
         colormap = np.zeros((*m.shape, 3))
-        display_closure_step(m, title, show_links=True, show_real=True, colormap=colormap,
-                              margin=margin)
+        error = display_closure_step(m, title, show_links=True, show_real=True, colormap=colormap,
+                                      margin=margin)
+        if error:
+            raise InvalidTilingError(
+                f"{title}: real_space_map found a diagonal-chosen conflict - "
+                f"see the map_of_squares panel just shown for which cells")
     reset_alert_bookkeeping(m)
     find_alerts(m)
     assign_paths(m)

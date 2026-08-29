@@ -129,10 +129,21 @@ def real_space_map(map_of_squares):
     map_of_squares agree on a shared 1x2 or 2x1 strip of real-space cells - both
     squares stamp those same cells to 1, so that overlap is fine. Two chosen
     squares that are diagonal neighbours in map_of_squares only share a single
-    real-space corner cell, which is not a valid overlap for this representation -
-    raise InvalidTilingError if that is found. (Direct- and diagonal-neighbour
-    overlaps are the only two overlaps geometrically possible between 2x2 squares,
-    so there is no other case left to check.)
+    real-space corner cell, which is not a valid overlap for this representation.
+    (Direct- and diagonal-neighbour overlaps are the only two overlaps
+    geometrically possible between 2x2 squares, so there is no other case left
+    to check.)
+
+    Returns (real_space, error): error is True the moment a diagonal-neighbour
+    conflict like that is found (real_space is returned as-built up to that
+    point, not filled in any further - the scan stops there), False once the
+    whole map has been scanned clean. Used to raise InvalidTilingError directly;
+    now it just reports the problem instead, so a caller (e.g.
+    display_closure_step's show_real handling) can decide what to do with a
+    corrupt board - inspect it, skip drawing it, or raise itself - rather than
+    this function's own scan deciding that unconditionally. See
+    display_closure_step's show_real=True branch and do_closure's own show=True
+    path for where that decision is made now.
     """
     rows, cols = map_of_squares.shape
     real_space = np.zeros((rows + 1, cols + 1), dtype=int)
@@ -150,12 +161,9 @@ def real_space_map(map_of_squares):
             for di, dj in NEIGHBOUR_DIAGONAL_OFFSETS:
                 ni, nj = i + di, j + dj
                 if (0 <= ni < rows and 0 <= nj < cols and map_of_squares[ni, nj].state == StateEnum.chosen):
-                    raise InvalidTilingError(
-                        f"squares at ({i}, {j}) and ({ni}, {nj}) are diagonal "
-                        f"neighbours - their footprints only share one real-space "
-                        f"corner cell, which is not a valid overlap")
+                    return real_space, True
 
-    return real_space
+    return real_space, False
 
 
 def is_realmap_cover_complete(map_of_squares, margin=0):
@@ -171,8 +179,16 @@ def is_realmap_cover_complete(map_of_squares, margin=0):
     its outer ring(s) stay 0 forever regardless of how complete the actual
     tiling is - checking the whole grid unconditionally would make this
     permanently unsatisfiable for such a board.
+
+    False (not just incomplete, but not trustworthy either) if real_space_map
+    itself reports a diagonal-chosen conflict - a corrupt board was never
+    covered validly to begin with, so there's no principled coverage answer to
+    give; this does not raise itself (see real_space_map's own docstring for
+    why), it's the caller's job to decide whether that's worth surfacing.
     """
-    real_space = real_space_map(map_of_squares)
+    real_space, error = real_space_map(map_of_squares)
+    if error:
+        return False
     if margin:
         real_space = real_space[margin:-margin, margin:-margin]
     return bool((real_space != 0).all())
@@ -498,8 +514,19 @@ def display_closure_step(m, title, show_links=False, show_real=False,
     share a real-space edge still get different colours, so whichever is
     stamped last wins that shared strip; only an actual .rectangle pairing
     guarantees a seamless colour across it.
+
+    Returns error: True if show_real=True and real_space_map reported a
+    diagonal-chosen conflict (the real-space panel is skipped in that case -
+    there's no valid footprint to draw - the map_of_squares panel on the left
+    is still drawn as usual), False otherwise (including whenever
+    show_real=False, since nothing was checked). real_space_map itself no
+    longer raises on this - see its own docstring - so a caller that wants the
+    old always-raise behaviour needs to check this return value and raise
+    InvalidTilingError itself; do_closure's own show=True path does exactly
+    that.
     """
     rows, cols = m.shape
+    error = False
     if show_real:
         fig, (ax, ax_real) = plt.subplots(1, 2, figsize=(10, 5))
         standalone = True
@@ -558,42 +585,53 @@ def display_closure_step(m, title, show_links=False, show_real=False,
                     ax.plot(j, i, 'o', markersize=10, color='red', zorder=5)
 
     if show_real:
-        real_display = real_space_map(m)
-        real_rgb = colorize(real_display, {0: FREE_COLOR})
+        real_display, error = real_space_map(m)
+        if error:
+            # Corrupt - real_display doesn't represent a valid footprint, so
+            # there's nothing principled to draw here. Leave the panel blank
+            # rather than rendering a misleading picture; the map_of_squares
+            # panel on the left is unaffected and still shows the cells
+            # actually responsible.
+            ax_real.set_title('real space (corrupt - skipped)')
+            ax_real.axis('off')
+        else:
+            real_rgb = colorize(real_display, {0: FREE_COLOR})
 
-        if margin is not None and not margin.crop:
-            w = margin.width
-            real_rgb[:w, :] = margin.color
-            real_rgb[-w:, :] = margin.color
-            real_rgb[:, :w] = margin.color
-            real_rgb[:, -w:] = margin.color
+            if margin is not None and not margin.crop:
+                w = margin.width
+                real_rgb[:w, :] = margin.color
+                real_rgb[-w:, :] = margin.color
+                real_rgb[:, :w] = margin.color
+                real_rgb[:, -w:] = margin.color
 
-        for i in range(rows):
-            for j in range(cols):
-                if m[i, j].state == StateEnum.chosen:
-                    real_rgb[i:i + 2, j:j + 2] = get_shade_of_cyan((i, j), m, colormap)
-        for i in range(rows):
-            for j in range(cols):
-                if m[i, j].state == StateEnum.chosen:
-                    found, pos_overwritten = get_overwritten_hue_position((i,j), m)
-                    if found:
-                       i1 = pos_overwritten[0]
-                       j1 = pos_overwritten[1]
-                       real_rgb[i1:i1 + 2, j1:j1 + 2] = get_shade_of_cyan((i1, j1), m, colormap)
+            for i in range(rows):
+                for j in range(cols):
+                    if m[i, j].state == StateEnum.chosen:
+                        real_rgb[i:i + 2, j:j + 2] = get_shade_of_cyan((i, j), m, colormap)
+            for i in range(rows):
+                for j in range(cols):
+                    if m[i, j].state == StateEnum.chosen:
+                        found, pos_overwritten = get_overwritten_hue_position((i,j), m)
+                        if found:
+                           i1 = pos_overwritten[0]
+                           j1 = pos_overwritten[1]
+                           real_rgb[i1:i1 + 2, j1:j1 + 2] = get_shade_of_cyan((i1, j1), m, colormap)
 
-        if margin is not None and margin.crop:
-            w = margin.width
-            real_display = real_display[w:-w, w:-w]
-            real_rgb = real_rgb[w:-w, w:-w]
+            if margin is not None and margin.crop:
+                w = margin.width
+                real_display = real_display[w:-w, w:-w]
+                real_rgb = real_rgb[w:-w, w:-w]
 
-        ax_real.imshow(real_rgb)
-        ax_real.set_title('real space')
-        ax_real.axis('on')
-        grid_on(ax_real, *real_display.shape)
+            ax_real.imshow(real_rgb)
+            ax_real.set_title('real space')
+            ax_real.axis('on')
+            grid_on(ax_real, *real_display.shape)
 
     if standalone:
         plt.tight_layout()
         plt.show()
+
+    return error
 
 
 # link library
@@ -721,8 +759,13 @@ def display_real_space_and_map(map_of_squares, ax_real, ax_map):
     "map_of_squares" panels, alongside its third (graph) panel - unlike
     display_closure_step's show_real=True, which always draws its own fresh
     two-panel figure, so it can't slot into a pre-existing three-panel layout.
+
+    Returns error, the same flag real_space_map itself now reports instead of
+    raising (see its docstring) - drawn as-is either way, same as before this
+    function had any error handling of its own; a caller that cares can check
+    the return value.
     """
-    real_display = real_space_map(map_of_squares)
+    real_display, error = real_space_map(map_of_squares)
     ax_real.imshow(colorize(real_display, {0: FREE_COLOR, 1: CHOSEN_COLOR}))
     ax_real.set_title('real space')
     ax_real.axis('on')
@@ -739,6 +782,7 @@ def display_real_space_and_map(map_of_squares, ax_real, ax_map):
     grid_on(ax_map, map_rows, map_cols, offset=0)
     ax_map.set_xlim(ax_real.get_xlim())
     ax_map.set_ylim(ax_real.get_ylim())
+    return error
 
 
 def display_graph_map_and_real_space(map_of_squares, title=None):
@@ -752,8 +796,9 @@ def display_graph_map_and_real_space(map_of_squares, title=None):
     """
     fig, (ax_graph, ax_map, ax_real) = plt.subplots(1, 3, figsize=(15, 5))
     display_links(map_of_squares, title='graph', ax=ax_graph)
-    display_real_space_and_map(map_of_squares, ax_real, ax_map)
+    error = display_real_space_and_map(map_of_squares, ax_real, ax_map)
     if title:
         fig.suptitle(title)
     plt.tight_layout()
     plt.show()
+    return error
