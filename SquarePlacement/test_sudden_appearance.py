@@ -7,7 +7,7 @@ from closure import do_closure
 
 def test_seat_from_two_alert_blocked():
     """(7, 5) ends up StateEnum.chosen with an empty .forced_by throughout -
-    the .forces/.forced_by link analysis (find_alerts/assign_paths) never
+    the .forces/.forced_by link analysis (find_alerts_set_links/assign_paths) never
     records it as forced by anything, before or after. It's chosen purely by
     place_square_in_seat_closed's raw state scan (three corners blocked, one
     free) once placing (5, 4) happens to complete that seat -
@@ -16,15 +16,14 @@ def test_seat_from_two_alert_blocked():
     StateEnum.chosen that the link analysis never sees.
 
     This is exactly why get_blocked_links's contradiction detection (see
-    test_get_and_set_blocked_links_marks_blocked_tmp below) can't catch two
-    seat-scan-derived choices contradicting each other: it only ever checks
-    path_id membership, and a cell chosen this way never gets a path_id (or
-    any .forced_by) assigned to it at all - there's nothing for
+    test_complex_blocked_links.test_get_and_set_blocked_links_marks_blocked_tmp)
+    can't catch two seat-scan-derived choices contradicting each other: it only
+    ever checks path_id membership, and a cell chosen this way never gets a
+    path_id (or any .forced_by) assigned to it at all - there's nothing for
     get_blocked_links to inspect. See place_square_in_seat's "Known gap"
     docstring (closure.py) for the concrete failure this enables: two such
     "escaped" choices that turn out to be diagonal neighbours of each other,
-    caught nowhere (Quality/test_image_to_squares.py's
-    test_selfblocking_seats is the minimal repro of that).
+    caught nowhere.
     """
     grid = [[0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
             [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],

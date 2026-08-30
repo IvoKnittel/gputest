@@ -2,7 +2,7 @@ import numpy as np
 
 from map_of_squares import StateEnum
 from representation import map_of_squares_from_array, place_blocked_squares, display_closure_step
-from closure import reset_alert_bookkeeping, find_alerts, assign_paths, get_blocked_links, set_blocked_links, finalize_blocked_tmp, place_square_in_seat_closed, check_tiling_invariant, do_closure
+from closure import reset_alert_bookkeeping, find_alerts_set_links, assign_paths, get_blocked_links, set_blocked_links, finalize_blocked_tmp, place_square_in_seat_closed, check_tiling_invariant, do_closure
 
 def test_two_forced_cells_block_each_other():
     """A 12x12 map: a 1-cell blocked margin wrapped around the 10x10 area that used
@@ -44,9 +44,9 @@ def test_two_forced_cells_block_each_other():
     border = [(i, j) for i in range(size) for j in range(size)
               if i in (0, size - 1) or j in (0, size - 1)]
     place_blocked_squares(m, border)
-    find_alerts(m)
+    find_alerts_set_links(m)
     # Only the two hand-placed dominoes are chosen yet, and .forces/.forced_by
-    # (find_alerts's own output) are already real - path_id/centrality
+    # (find_alerts_set_links's own output) are already real - path_id/centrality
     # (assign_paths) and the blocked-links procedure (get_blocked_links/
     # set_blocked_links) haven't run yet, so this is the alert/link structure
     # in its rawest, pre-path form.
@@ -74,7 +74,7 @@ def test_two_forced_cells_block_each_other():
     state_before_redo = [[m[i, j].state for j in range(size)] for i in range(size)]
     reset_alert_bookkeeping(m)
 
-    find_alerts(m)
+    find_alerts_set_links(m)
     assign_paths(m)
     p2 = get_blocked_links(m)
     # The board is already a fixed point of one round - redoing it from a
@@ -98,7 +98,7 @@ def test_get_and_set_blocked_links_marks_blocked_tmp():
     right after get_blocked_links/set_blocked_links to look at what they
     actually mark. Both need path_id to already be real (run after
     assign_paths, do_closure's own order) - calling get_blocked_links straight
-    after find_alerts, without assign_paths in between, leaves every path_id
+    after find_alerts_set_links, without assign_paths in between, leaves every path_id
     empty and returns an empty set too, not because nothing is wrong but
     because there was nothing yet for it to check. Every StateEnum.blocked_tmp
     cell shows up red.
@@ -145,7 +145,7 @@ def test_get_and_set_blocked_links_marks_blocked_tmp():
     border = [(i, j) for i in range(size) for j in range(size)
               if i in (0, size - 1) or j in (0, size - 1)]
     place_blocked_squares(m, border)
-    find_alerts(m)
+    find_alerts_set_links(m)
     assign_paths(m)
 
     p = get_blocked_links(m)

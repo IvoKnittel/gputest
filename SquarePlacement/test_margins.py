@@ -2,19 +2,18 @@
 n = 2, 3, 4, 5. Map size is (n+2) x (n+2): every border cell is blocked, every
 interior cell starts free.
 
-For each n, run the same stages redo_closure runs (find_alerts, remove blocked links,
-resolve_cycles_and_centrality), displaying the result - then check whether any
+For each n, run find_alerts_set_links, set_blocked_links(get_blocked_links(m)),
+and resolve_cycles_and_centrality, displaying the result - then check whether any
 alert_chosen item ended up with a real path_id (non-empty). If so, chase that
 patch (forced_closure + place_squares) and display again. Inspecting path_id
-has to happen at this point, not after calling redo_closure itself:
-No assertions - display-only, matching test_simple_situations.py/
-test_rose_cascades_and_holes.py's style: the point here is to look at what
-these specific inputs produce, not to pin down expected behaviour with
-asserts.
+has to happen at this point, not after calling do_closure itself:
+No assertions - display-only, matching test_simple_situations.py's style: the
+point here is to look at what these specific inputs produce, not to pin down
+expected behaviour with asserts.
 
 After that first chase, each test keeps going with up to 4 more rounds of
 random placement: pick a random still-free cell, chase whatever it obligates
-(forced_closure + place_squares), redo closure, and display - stopping early,
+(forced_closure + place_squares), run do_closure, and display - stopping early,
 before 4 rounds, the moment no free cell is left to place.
 """
 
@@ -25,7 +24,7 @@ import numpy as np
 from map_of_squares import StateEnum, InvalidTilingError
 from representation import (build_margin_free_map, RealSpaceMargin,
                              display_closure_step, is_realmap_cover_complete)
-from closure import (find_alerts,
+from closure import (find_alerts_set_links,
                       resolve_cycles_and_centrality,
                       do_closure,
                       forced_closure,
@@ -58,7 +57,7 @@ def run_margin_free_case(n):
     m = build_margin_free_map(n)
     size = n + 2
 
-    find_alerts(m)
+    find_alerts_set_links(m)
     set_blocked_links(m, get_blocked_links(m))
     resolve_cycles_and_centrality(m)
     colormap = np.zeros((*m.shape, 3))

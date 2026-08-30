@@ -14,7 +14,7 @@ QUADRANT_TRIPLES = [(7, 0, 1), (1, 2, 3), (3, 4, 5), (5, 6, 7)]
 def iter_alert_thirds(ring):
     """Yield the ring index of the free corner completing each real seat around the
     centre - team term for what this module's own identifiers (alert_blocked,
-    alert_chosen, find_alerts) call an "alert": a 2x2 block with three corners
+    alert_chosen, find_alerts_set_links) call an "alert": a 2x2 block with three corners
     blocked and one free, the free one being the seat an alert_chosen item must
     fill (see docs/rose_cascades_and_holes/README.md). Each QUADRANT_TRIPLE
     (direct, corner, direct) is one such block; it becomes a seat once the centre
@@ -55,7 +55,7 @@ def set_alert_blocked(item, ring):
         break
 
 
-def set_alert_chosen(i, j, ring):
+def set_alert_chosen_set_links(i, j, ring):
     """For a centre at (i, j) with alert_blocked set, blocking it would put some
     2x2 block at three-blocked-one-free - a seat. Find that seat's remaining free
     corner(s) among ring and raise their alert_chosen flag - so far, as before.
@@ -78,9 +78,8 @@ def set_alert_chosen(i, j, ring):
 
     A single centre can have more than one corner (iter_alert_thirds can yield
     several) - alert_chosen_local (one bool per ring position) collapses a corner
-    independently found twice (see test_do_closure_steps, where (6, 2)'s ring
-    index 1 completes two different triples at once) into a single entry, same
-    as before.
+    independently found twice (e.g. one ring position completing two different
+    triples at once) into a single entry.
     """
     alert_chosen_local = [False] * 8
     for third_idx in iter_alert_thirds(ring):

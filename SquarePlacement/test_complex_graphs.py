@@ -1,6 +1,6 @@
 """A catalogue of the algorithmically-distinct .forced_by/.forces shapes that
 can arise once alert_chosen items start pointing at each other - some derived
-from a real grid via find_alerts, others hand-built directly with
+from a real grid via find_alerts_set_links, others hand-built directly with
 the "link library" in representation.py (set_link/build_cycle), so each shape
 can be examined in isolation.
 """
@@ -11,7 +11,7 @@ from map_of_squares import StateEnum
 from representation import (build_map_of_squares,
                              map_of_squares_from_array,
                              display_closure_step)
-from closure import (find_alerts,
+from closure import (find_alerts_set_links,
                       assign_paths,
                       get_blocked_links,
                       do_closure,
@@ -22,7 +22,7 @@ from test_utils import place_and_chase
 
 
 def test_line():
-    """A simple chain, no branching - derived from a real grid via find_alerts,
+    """A simple chain, no branching - derived from a real grid via find_alerts_set_links,
     unlike the rest of this file's hand-built shapes.
 
     The six placed squares' blocked diagonal neighbours pair into three mutual
@@ -36,7 +36,7 @@ def test_line():
     positions = [(6, 1), (9, 4), (4, 3), (7, 6), (2, 5), (5, 8)]
     place_squares(m, positions)
 
-    find_alerts(m)
+    find_alerts_set_links(m)
 
     alert_chosen_positions_asserted = [(9, 1), (7, 3), (5, 5), (3, 7)]
 
@@ -58,7 +58,7 @@ def test_line():
 
 
 def test_tree_fan_out():
-    """One item forces several others at once - motivates set_alert_chosen
+    """One item forces several others at once - motivates set_alert_chosen_set_links
     linking every free diagonal neighbour of an alert_blocked centre, not
     just the one tied to its own quadrant.
 

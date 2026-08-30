@@ -29,7 +29,7 @@ class SquareItem:
                 nothing (a "terminal" item, in patch terms). A set, not a list -
                 membership is all that ever matters here, never order, and the
                 same (row, col) index is never a meaningful duplicate of itself.
-                Set by alert_graphs.set_alert_chosen: for an alert_blocked
+                Set by alert_graphs.set_alert_chosen_set_links: for an alert_blocked
                 centre P, every one of P's own free diagonal neighbours (not P
                 itself - P is the item at risk of being *blocked*, never the one
                 being chosen here) gets P's corner(s) added to its own .forces.
@@ -47,7 +47,7 @@ class SquareItem:
                 not any particular "first" one the way a list index would be.
     forced_by:  every (row, col) index that has ever forced this item - i.e. the
                 other side of the same relationship .forces records, filled
-                alongside it wherever a .forces entry is created (set_alert_chosen,
+                alongside it wherever a .forces entry is created (set_alert_chosen_set_links,
                 representation.set_link) so it's always available without
                 needing a separate reversed copy of the map to look it up.
                 Also a set, for the same reason .forces is. A .forces cut
@@ -79,7 +79,7 @@ class SquareItem:
                 back to -1 as soon as this item (or the item it forces) gets a
                 real centrality, since max_id has no meaning outside a pure ring.
                 A single scalar, so more than one item pointing at this one via
-                .forces at once (see .forces above and test_do_closure_steps)
+                .forces at once (see .forces above)
                 can still have one candidate crowd out another here - see the
                 "Known gap" note on find_cycle_patches.
     rectangle:  (row, col) index of the direct neighbour this item has been
@@ -101,8 +101,7 @@ class SquareItem:
     path_id: set = field(default_factory=set)
     max_id: int = -1
     rectangle: tuple = (-1, -1)
-
-
+         
 # The four direct (orthogonal) neighbours - as opposed to a diagonal one -
 # checked by set_square_chosen when pairing a newly-chosen item into a domino.
 DIRECT_OFFSETS = ((-1, 0), (1, 0), (0, -1), (0, 1))
@@ -115,15 +114,14 @@ def set_square_chosen(map_of_squares, pos):
     (representation.py can't import from closure.py without a cycle) can call
     it as the one place .state ever becomes StateEnum.chosen.
 
-    Raises InvalidTilingError if pos isn't currently StateEnum.free. Confirmed
-    reachable, not just defensive: Quality/test_image_to_squares.py's
-    test_selfblocking_seats_real_seqfail placed a square on (1, 2) after
-    closure had already legitimately blocked it (as a diagonal neighbour of an
-    earlier placement) - before this check existed, that silently overwrote
-    the block back to chosen, producing an invalid diagonal-chosen pair only
-    caught later, incidentally, by real_space_map. Rejecting it right here
-    surfaces the actual mistake (choosing an illegal cell) at the point it
-    happens, instead of some unrelated-looking failure downstream.
+    Raises InvalidTilingError if pos isn't currently StateEnum.free - reachable,
+    not just defensive: placing a square on a cell closure has already
+    legitimately blocked (as a diagonal neighbour of an earlier placement)
+    would, without this check, silently overwrite the block back to chosen,
+    producing an invalid diagonal-chosen pair only caught later, incidentally,
+    by real_space_map. Rejecting it right here surfaces the actual mistake
+    (choosing an illegal cell) at the point it happens, instead of some
+    unrelated-looking failure downstream.
 
     Checks all four direct neighbours of pos: the first one found that is
     itself already chosen *and* still unpaired (.rectangle == (-1, -1)) is

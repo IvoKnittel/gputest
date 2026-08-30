@@ -47,7 +47,7 @@ def build_free_margin_map(n):
     interest just sits centred with a FREE_MARGIN_PADDING-cell buffer of
     ordinary free cells on every side.
 
-    find_alerts/find_central_patch_items/find_cycle_patches all skip the
+    find_alerts_set_links/find_central_patch_items/find_cycle_patches all skip the
     array's own outermost ring (range(1, rows - 1)), so an n x n region
     placed flush against the real array boundary would leave its own edge
     cells invisible to them. A 1-cell buffer would fix that for the region
@@ -398,7 +398,7 @@ def colorize_with_alerts(map_of_squares):
 
     StateEnum.blocked_tmp is the one exception: closure.set_blocked_links
     sets it without clearing whatever .alert_chosen/.alert_blocked a cell
-    was still carrying from find_alerts (do_closure doesn't call
+    was still carrying from find_alerts_set_links (do_closure doesn't call
     reset_alert_bookkeeping until after its own display), so a blocked_tmp
     cell can easily still have both flags raised - the overlay would then
     paint ALERT_BOTH_COLOR (green) squarely over what should read as
@@ -443,9 +443,7 @@ def display_closure_step(m, title, show_links=False, show_real=False,
                           margin=None):
     """Show a single map_of_squares panel coloured via colorize_with_alerts, so
     alert_blocked (blue), alert_chosen (yellow), and both-at-once (green) are
-    visible on top of the plain free/chosen/blocked colours - see
-    test_representation.test_do_closure_steps, which calls this after each
-    closure stage in turn.
+    visible on top of the plain free/chosen/blocked colours.
 
     show_links=True additionally draws a black arrow into every alert_chosen
     item from each item in its .forced_by (see SquareItem.forced_by) -
@@ -457,10 +455,10 @@ def display_closure_step(m, title, show_links=False, show_real=False,
     mapping imshow already uses for the image itself, so no coordinate
     translation is needed. A self-loop (a source equal to (i, j) itself) has no
     direction to draw an arrow along, so it's circled in red instead -
-    alert_graphs.set_alert_chosen already excludes a diagonal ring position
-    from its own link (`if c_idx == d_idx: continue`), so this should only
-    ever show up in a hand-built scenario, not one produced by
-    find_alerts.
+    alert_graphs.set_alert_chosen_set_links already excludes a diagonal ring
+    position from its own link (`if c_idx == d_idx: continue`), so this should
+    only ever show up in a hand-built scenario, not one produced by
+    find_alerts_set_links.
 
     show_entries_terminals=True additionally draws a filled dot on every cell
     that is a terminal or an entry: blue for a terminal (item.alert_chosen and
@@ -478,7 +476,7 @@ def display_closure_step(m, title, show_links=False, show_real=False,
     show_real=True additionally draws the real-space map (real_space_map) in a
     second panel to the right, so a placement's actual physical footprint is
     visible alongside its alert/link overlay - e.g. the last, most-resolved
-    step of a closure walkthrough (see test_do_closure_steps). Every real-space
+    step of a closure walkthrough. Every real-space
     cell starts FREE_COLOR and only ever changes when an actual chosen
     square's footprint is stamped onto it - there's no principled way to map
     a blocked map_of_squares cell onto a specific real-space footprint the
@@ -507,7 +505,7 @@ def display_closure_step(m, title, show_links=False, show_real=False,
     chosen cell/rectangle on the same panel. Free/blocked cells, and the alert
     overlay colours, are unaffected - only StateEnum.chosen cells are
     overridden, and alert flags are never raised on a chosen cell to begin
-    with (find_alerts skips any cell that isn't StateEnum.free), so there's
+    with (find_alerts_set_links skips any cell that isn't StateEnum.free), so there's
     nothing here for that override to clobber. show_real=True's real-space
     panel uses the same per-cell shades, stamped onto each chosen square's own
     2x2 real-space footprint - two *unpaired* chosen squares that happen to
@@ -560,10 +558,7 @@ def display_closure_step(m, title, show_links=False, show_real=False,
                     # arrow's own direction, so several arrows converging on
                     # the same cell from different directions (e.g. multiple
                     # items linking to the same target) fan out instead of
-                    # all landing on the exact same point - see
-                    # test_representation.test_do_closure_steps, where (5, 2),
-                    # (7, 2), (7, 3), and (7, 5) all separately link into the
-                    # (6, 3)/(6, 4) pair.
+                    # all landing on the exact same point.
                     dx, dy = j - sj, i - si
                     length = (dx ** 2 + dy ** 2) ** 0.5
                     perp_x, perp_y = (-dy / length, dx / length) if length else (0, 0)
