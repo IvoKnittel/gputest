@@ -451,8 +451,13 @@ def display_closure_step(m, title, show_links=False, show_real=False,
     around. An item can have more than one, drawn
     directly on top of the image - the same (row, col) -> (x, y) = (col, row)
     mapping imshow already uses for the image itself, so no coordinate
-    translation is needed. A self-loop (a source equal to (i, j) itself) has no
-    direction to draw an arrow along, so it's circled in red instead -
+    translation is needed. A mutual pair - A forces B and B forces A - is
+    drawn as a single plain line with no arrowhead instead of two opposing
+    arrows: direction carries no information once it points both ways, and
+    two curved arrows drawn on top of each other in opposite directions are
+    hard to read as one relationship. A self-loop (a source equal to (i, j)
+    itself) has no direction to draw an arrow along, so it's circled in red
+    instead -
     alert_graphs.set_alert_chosen_set_links already excludes a diagonal ring
     position from its own link (`if c_idx == d_idx: continue`), so this should
     only ever show up in a hand-built scenario, not one produced by
@@ -541,6 +546,7 @@ def display_closure_step(m, title, show_links=False, show_real=False,
     grid_on(ax, rows, cols)
 
     if show_links:
+        drawn_mutual_pairs = set()
         for i in range(rows):
             for j in range(cols):
                 item = m[i, j]
@@ -551,6 +557,19 @@ def display_closure_step(m, title, show_links=False, show_real=False,
                         ax.plot(j, i, 'o', markersize=16, markerfacecolor='none',
                                 markeredgecolor='red', markeredgewidth=2, zorder=4)
                         continue
+
+                    mutual = (i, j) in m[si, sj].forced_by
+                    if mutual:
+                        pair = frozenset(((i, j), (si, sj)))
+                        if pair in drawn_mutual_pairs:
+                            continue
+                        drawn_mutual_pairs.add(pair)
+                        ax.annotate('', xy=(j, i), xytext=(sj, si),
+                                    arrowprops=dict(arrowstyle='-', color='black',
+                                                     shrinkA=8, shrinkB=8),
+                                    zorder=3)
+                        continue
+
                     # Shift both endpoints sideways, perpendicular to this
                     # arrow's own direction, so several arrows converging on
                     # the same cell from different directions (e.g. multiple

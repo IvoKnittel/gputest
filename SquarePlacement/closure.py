@@ -55,67 +55,124 @@ def find_alerts_set_links(map_of_squares):
 
 def find_secondary_links(map_of_squares):
     """
-    A relay on top of find_alerts_set_links: an item C that just became
-    alert_chosen is certain to be chosen - and choosing it really blocks its own
-    four diagonal neighbours (see place_squares). So each of C's still-free
-    diagonal neighbours D is certain to become blocked too - not "if", the way
-    find_alerts_set_links's own alert_blocked is, but for sure.
+    A relay on top of find_alerts_set_links: for each alert_blocked item P,
+    simulate each candidate placement a (a free diagonal neighbour of P - the
+    thing that would actually cause P to become blocked) together with every
+    corner B that blocking P already promises (P's own alert_chosen corners,
+    from find_alerts_set_links), and look for seats that only exist once both
+    of those - a's own diagonal-blocking footprint and B's - are combined.
+    Link a directly to any such newly-created seat's corner.
 
-    Inputs: reads .alert_chosen map-wide, and .state of each alert_chosen
-    cell's diagonal neighbours plus that neighbour's own 8-neighbour ring.
+    Inputs: reads .alert_blocked map-wide; for each alert_blocked P, .state of
+    P's own ring (to recompute its corners) and of the diagonal neighbours of
+    every position in the simulated chosen set (a and its corners); .state of
+    every 2x2 block touching one of those.
 
-    Outputs: writes .alert_blocked (on the diagonal neighbour), .alert_chosen/
-    .forced_by (on the corner found), and .forces (on the original alert_chosen
-    cell); returns None.
+    Outputs: writes .forces (on a), .forced_by and .alert_chosen (on each
+    newly-linked corner); returns None.
 
-    Scope: local - a fixed 2-hop read radius per cell, no
-    traversal and no whole-board aggregate returned.
+    Scope: local - a fixed, bounded-radius simulation per (P, a) pair (P's
+    ring, a's diagonal footprint, each corner's diagonal footprint, and the
+    2x2 blocks touching any of that) - no traversal, no whole-board
+    aggregate.
 
     -------------------------------------------------------------------------
 
-    Run the exact same
-    seat check find_alerts_set_links runs for a hypothetically-blocked item
-    (iter_alert_thirds on D's own ring) to see whether D's now-certain blocking
-    completes a seat elsewhere - a fresh alert_chosen corner find_alerts_set_links's
-    single real-state pass, run before any of this was known, couldn't have seen.
+    For an alert_blocked P, iter_alert_thirds(P's ring) gives B - the same
+    corners find_alerts_set_links already found and linked from *every* free
+    diagonal neighbour of P (it doesn't know which neighbour will actually
+    trigger P's block, so it links them all). This function instead asks, one
+    candidate a at a time: given that a specifically is what gets chosen -
+    which blocks P, forcing every member of B to be chosen too, which in turn
+    blocks *their* diagonal neighbours - does that combined, real chain of
+    consequences complete a seat that isn't already one on the real board?
+    If so, a is the one and only cause of it, so a (not B, not P) is what
+    gets linked to the new corner.
 
-    find_alerts_set_links links every one of an alert_blocked item's free diagonal
-    neighbours to the seat's corner, because it doesn't know which of them will end
-    up triggering the block. Here the trigger is already known exactly - C itself -
-    so it's C, not each of D's own diagonal neighbours, that gets linked to the new
-    corner: C.forces gains it, and it gets C added to its own .forced_by. A corner
-    landing back on C's own position (D is diagonal to C, so C sits in D's ring
-    too) is skipped - C is presently alert_chosen, hence still StateEnum.free, so
-    iter_alert_thirds can otherwise mistake it for a genuine free completer of its
-    own seat.
+    The simulation never needs an explicit local grid copy: only two kinds of
+    cell ever change from the real board - the chosen set (a plus B) and
+    whichever of their diagonal neighbours are currently free (blocked as a
+    side effect) - so a small position->state override dict, consulted in
+    place of the real .state, is enough. Only the 2x2 blocks touching an
+    overridden position can possibly change seat status, so only those are
+    rechecked; a block already a real seat before the override is skipped -
+    that one belongs to place_square_in_seat_closed's direct scan already,
+    not to this function.
+
+    A found corner is skipped, not linked, if it's already .forced_by some
+    member of B: find_alerts_set_links already links every member of B
+    directly from a (a is one of P's free diagonal neighbours, and B is
+    exactly what P's own alert_blocked/alert_chosen pass linked every such
+    neighbour to), so a can already reach that corner in two hops via
+    whichever b forces it - linking a to it directly would be a redundant
+    edge, true but adding no reachability forced_closure didn't already have,
+    and it only clutters the display. This one-hop-from-B check isn't a
+    complete reachability test (a corner could be several hops past some b
+    with nothing directly linking them), but it's cheap and catches the
+    common case without turning this function's otherwise fixed-radius
+    simulation into a graph walk.
     """
     rows, cols = map_of_squares.shape
-    for i in range(rows):
-        for j in range(cols):
-            c_item = map_of_squares[i, j]
-            if not c_item.alert_chosen:
+    for i in range(1, rows - 1):
+        for j in range(1, cols - 1):
+            p_item = map_of_squares[i, j]
+            if not p_item.alert_blocked:
+                continue
+
+            ring = [map_of_squares[i + di, j + dj] for di, dj in RING_OFFSETS]
+            b_positions = {(i + RING_OFFSETS[idx][0], j + RING_OFFSETS[idx][1])
+                           for idx in iter_alert_thirds(ring)}
+            if not b_positions:
                 continue
 
             for di, dj in DIAGONAL_OFFSETS:
-                di_pos, dj_pos = i + di, j + dj
-                if not (1 <= di_pos < rows - 1 and 1 <= dj_pos < cols - 1):
+                a_pos = (i + di, j + dj)
+                if not (0 <= a_pos[0] < rows and 0 <= a_pos[1] < cols):
+                    continue
+                a_item = map_of_squares[a_pos]
+                if a_item.state != StateEnum.free:
                     continue
 
-                d_item = map_of_squares[di_pos, dj_pos]
-                if d_item.state != StateEnum.free:
-                    continue
+                chosen_hyp = {a_pos} | b_positions
+                overrides = {pos: StateEnum.chosen for pos in chosen_hyp}
+                for ci, cj in chosen_hyp:
+                    for bdi, bdj in DIAGONAL_OFFSETS:
+                        n_pos = (ci + bdi, cj + bdj)
+                        if not (0 <= n_pos[0] < rows and 0 <= n_pos[1] < cols):
+                            continue
+                        if n_pos in overrides:
+                            continue
+                        if map_of_squares[n_pos].state == StateEnum.free:
+                            overrides[n_pos] = StateEnum.blocked
 
-                d_item.alert_blocked = True
-                ring = [map_of_squares[di_pos + rdi, dj_pos + rdj] for rdi, rdj in RING_OFFSETS]
-                for third_idx in iter_alert_thirds(ring):
-                    ti = di_pos + RING_OFFSETS[third_idx][0]
-                    tj = dj_pos + RING_OFFSETS[third_idx][1]
-                    if (ti, tj) == (i, j):
-                        continue
-                    corner = map_of_squares[ti, tj]
-                    corner.alert_chosen = True
-                    c_item.forces.add((ti, tj))
-                    corner.forced_by.add((i, j))
+                def eff_state(pos):
+                    return overrides.get(pos, map_of_squares[pos].state)
+
+                checked_blocks = set()
+                for pi, pj in overrides:
+                    for bi in (pi - 1, pi):
+                        for bj in (pj - 1, pj):
+                            if 0 <= bi < rows - 1 and 0 <= bj < cols - 1:
+                                checked_blocks.add((bi, bj))
+
+                for bi, bj in checked_blocks:
+                    corners = [(bi, bj), (bi, bj + 1), (bi + 1, bj), (bi + 1, bj + 1)]
+
+                    real_states = [map_of_squares[c].state for c in corners]
+                    if (real_states.count(StateEnum.blocked) == 3
+                            and real_states.count(StateEnum.free) == 1):
+                        continue  # already a real seat - not newly created
+
+                    hyp_states = [eff_state(c) for c in corners]
+                    if (hyp_states.count(StateEnum.blocked) == 3
+                            and hyp_states.count(StateEnum.free) == 1):
+                        corner_pos = corners[hyp_states.index(StateEnum.free)]
+                        corner_item = map_of_squares[corner_pos]
+                        if corner_item.forced_by & b_positions:
+                            continue  # already reachable from a via some b in B
+                        a_item.forces.add(corner_pos)
+                        corner_item.forced_by.add(a_pos)
+                        corner_item.alert_chosen = True
 
 
 def clear_all_but_state(map_of_squares):
@@ -310,14 +367,23 @@ def place_square_in_seat(map_of_squares):
     cells. The real fix belongs upstream of this function, not inside it - not
     attempted here.
 
-    Concrete evidence of exactly that bypass, already in the suite:
-    test_sudden_appearance.test_seat_from_two_alert_blocked places one
-    square and shows a *different*, distant cell end up StateEnum.chosen with
-    an empty .forced_by throughout - chosen purely by this function's own scan,
-    never recorded by find_alerts_set_links/assign_paths at all. get_blocked_links only
-    ever checks path_id membership, so a cell chosen this way - no path_id, no
-    .forced_by - is invisible to it. Two such choices happening to be diagonal
-    neighbours of each other is exactly the gap above.
+    test_sudden_appearance.py used to be concrete evidence of exactly that
+    bypass - test_seat_from_two_alert_blocked and test_frozen_area each
+    placed one square and showed a *different*, distant cell end up
+    StateEnum.chosen with an empty .forced_by throughout, chosen purely by
+    this function's own scan, never recorded by find_alerts_set_links/
+    assign_paths at all. find_secondary_links (closure.py) now catches both
+    of those two specific cases - see its own docstring for how - so those
+    two tests now assert a real .forced_by instead. The general gap above is
+    still open, though: find_secondary_links only catches a seat that forms
+    by combining one alert_blocked item's own diagonal-blocking footprint
+    with a corner it already promises - not every way a seat can form
+    without either corner being locally visible beforehand. get_blocked_links
+    only ever checks path_id membership, so a cell chosen this function's own
+    way - no path_id, no .forced_by - is still invisible to it whenever
+    find_secondary_links doesn't happen to cover the shape. Two such choices
+    happening to be diagonal neighbours of each other is exactly the gap
+    above, and it doesn't currently have a live repro in the suite.
 
     Returns True if a seat was found (and placed), False otherwise -
     place_square_in_seat_closed loops on this until a call changes nothing.
@@ -801,6 +867,7 @@ def do_closure(m, title, show=False, margin=None):
     (3, 3) case surfaced by test_margin_free_5x5realmap's very first round.
     """
     find_alerts_set_links(m)
+    find_secondary_links(m)
     assign_paths(m)
     set_blocked_links(m, get_blocked_links(m))
     place_square_in_seat_closed(m)
@@ -814,6 +881,7 @@ def do_closure(m, title, show=False, margin=None):
                 f"see the map_of_squares panel just shown for which cells")
     clear_all_but_state(m)
     find_alerts_set_links(m)
+    find_secondary_links(m)
     assign_paths(m)
     set_blocked_links(m, get_blocked_links(m))
     place_square_in_seat_closed(m)
