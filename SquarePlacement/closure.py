@@ -790,7 +790,7 @@ def set_blocked_links(m, p):
         item.forced_by = set()
 
 
-def do_closure(m, title, show=False, margin=None):
+def do_closure(m, title, show=False, margin=None, roi_margin=0):
     """
     Run one full round of the closure pipeline, twice (see below for why
     twice), in place: find_alerts_set_links, assign_paths, get_blocked_links/
@@ -822,9 +822,9 @@ def do_closure(m, title, show=False, margin=None):
     get_blocked_links' snapshot-then-apply discipline) survive being
     re-expressed over tiles instead of individual cells first.
 
-    margin (a representation.RealSpaceMargin, or None) is forwarded as-is to
-    display_closure_step's own margin argument when show=True - see its
-    docstring; ignored when show=False.
+    margin (a representation.RealSpaceMargin, or None) and roi_margin are
+    forwarded as-is to display_closure_step's own margin/roi_margin arguments
+    when show=True - see their docstrings; ignored when show=False.
 
     show=True's display (after the first pass, before the bookkeeping reset -
     see below) also raises InvalidTilingError if it finds two chosen squares
@@ -863,8 +863,8 @@ def do_closure(m, title, show=False, margin=None):
     happen: place_square_in_seat_closed can complete
     several seats in one batch (its own scan-then-
     place-all-at-once discipline) without the per-placement re-scan that
-    would otherwise catch a forming pinwheel - see the (2, 2)/(2, 3)/(3, 2)/
-    (3, 3) case surfaced by test_margin_free_5x5realmap's very first round.
+    would otherwise catch a forming pinwheel - see the (3, 3)/(3, 4)/(4, 3)/
+    (4, 4) case surfaced by test_margin_free_5x5realmap's very first round.
     """
     find_alerts_set_links(m)
     find_secondary_links(m)
@@ -874,7 +874,7 @@ def do_closure(m, title, show=False, margin=None):
     if show:
         colormap = np.zeros((*m.shape, 3))
         error = display_closure_step(m, title, show_links=True, show_real=True, colormap=colormap,
-                                      margin=margin)
+                                      margin=margin, roi_margin=roi_margin)
         if error:
             raise InvalidTilingError(
                 f"{title}: real_space_map found a diagonal-chosen conflict - "

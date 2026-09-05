@@ -29,13 +29,36 @@ def build_map_of_squares(rows, cols):
     return m
 
 def build_margin_free_map(n):
-    """(n+2) x (n+2) map: a 1-cell blocked margin around an n x n free interior."""
-    size = n + 2
-    m = build_map_of_squares(size, size)
-    border = [(i, j) for i in range(size) for j in range(size)
-              if i in (0, size - 1) or j in (0, size - 1)]
-    place_blocked_squares(m, border)
-    return m
+    """(n+4) x (n+4) map, built by choosing its outermost 1-cell ring rather
+    than blocking anything directly: map_of_squares_from_array's own
+    diagonal-blocking side effect then blocks the ring just inside that
+    chosen one, leaving an n x n free core untouched at (2, 2) .. (n+1, n+1).
+
+    The region anyone actually wants to look at - that blocked ring plus the
+    free core, matching what this function used to build directly as a plain
+    (n+2) x (n+2) field - is (1, 1) .. (n+2, n+2); the outermost chosen ring
+    itself is a construction detail, not part of the board. See
+    display_closure_step's roi_margin argument for cropping it back off
+    before display.
+
+    The chosen ring is NOT a full closed rectangular outline - that would be
+    self-contradictory: turning a corner with unit-wide chosen cells always
+    puts two chosen cells (the row-arm's and column-arm's immediate corner
+    neighbours, e.g. (0, 1) and (1, 0)) diagonal to each other, which is
+    itself an invalid diagonal-chosen conflict (see real_space_map), baked
+    into the board before any placement even starts. Both full top/bottom
+    rows are chosen, but each side column is chosen only for its own interior
+    rows (2 .. size-3) - skipping exactly the one row next to each corner
+    (row 1 and row size-2) that would otherwise conflict with the corner's
+    own row-arm cell. Nothing is lost by the skip: that ring position (e.g.
+    (1, 1)) is still blocked anyway, via the corner cell itself (e.g. (0, 0),
+    diagonal to (1, 1) regardless of what column 0 does at row 1).
+    """
+    size = n + 4
+    grid = np.zeros((size, size), dtype=int)
+    grid[0, :] = grid[-1, :] = 1
+    grid[2:-2, 0] = grid[2:-2, -1] = 1
+    return map_of_squares_from_array(grid)
 
 
 # The four diagonal offsets a chosen item blocks (see closure.place_squares).
@@ -398,7 +421,7 @@ def grid_on(ax, rows, cols, offset=-0.5):
 
 def display_closure_step(m, title, show_links=False, show_real=False,
                           show_entries_terminals=False, ax=None, colormap=None,
-                          margin=None):
+                          margin=None, roi_margin=0):
     """Show a single map_of_squares panel coloured via colorize_with_alerts, so
     alert_blocked (blue), alert_chosen (yellow), and both-at-once (green) are
     visible on top of the plain free/chosen/blocked colours.
@@ -475,6 +498,27 @@ def display_closure_step(m, title, show_links=False, show_real=False,
     stamped last wins that shared strip; only an actual .rectangle pairing
     guarantees a seamless colour across it.
 
+    roi_margin=0 (default): the map_of_squares panel (and its show_links/
+    show_entries_terminals overlays) draws every cell of m, unchanged.
+    roi_margin=w>0 instead crops w outer rings off that panel before display -
+    for a board like build_margin_free_map's, built with an artificial
+    outermost ring purely to seed a blocked ring just inside it via that
+    ring's own diagonal-blocking side effect (see build_margin_free_map's own
+    docstring): that outermost ring is a construction detail, not part of the
+    board anyone actually wants to look at. find_alerts_set_links never scans
+    a board's true outermost ring (see its own docstring) and this crop only
+    ever removes exactly that many outer rings, so every cell that could
+    possibly carry an alert/link/entry/terminal is guaranteed to already fall
+    inside the cropped region - nothing is lost by the crop, every remaining
+    overlay coordinate is just shifted by -roi_margin to match the cropped
+    image. show_real's real-space panel still computes real_space_map(m)
+    over all of m (it needs the true free/covered background, and margin -
+    a RealSpaceMargin - governs that panel's own cropping/colouring), but
+    likewise skips stamping a per-cell get_shade_of_cyan shade onto any
+    chosen cell inside this same outer ring - nothing but noise for a cell
+    nobody asked to see, and paint that would otherwise cover over margin's
+    own colouring wherever the two overlap.
+
     Returns error: True if show_real=True and real_space_map reported a
     diagonal-chosen conflict (the real-space panel is skipped in that case -
     there's no valid footprint to draw - the map_of_squares panel on the left
@@ -494,27 +538,30 @@ def display_closure_step(m, title, show_links=False, show_real=False,
         standalone = ax is None
         if standalone:
             fig, ax = plt.subplots(figsize=(5, 5))
+    w = roi_margin
     ax.set_facecolor(MARGIN_COLOR)
     rgb = colorize_with_alerts(m)
     for i in range(rows):
         for j in range(cols):
             if m[i, j].state == StateEnum.chosen:
                 rgb[i, j] = CHOSEN_COLOR
+    if w:
+        rgb = rgb[w:rows - w, w:cols - w]
     ax.imshow(rgb)
     ax.set_title(title)
     ax.axis('on')
-    grid_on(ax, rows, cols)
+    grid_on(ax, rows - 2 * w, cols - 2 * w)
 
     if show_links:
         drawn_mutual_pairs = set()
-        for i in range(rows):
-            for j in range(cols):
+        for i in range(w, rows - w):
+            for j in range(w, cols - w):
                 item = m[i, j]
                 if not (item.alert_chosen and item.forced_by):
                     continue
                 for si, sj in item.forced_by:
                     if (si, sj) == (i, j):
-                        ax.plot(j, i, 'o', markersize=16, markerfacecolor='none',
+                        ax.plot(j - w, i - w, 'o', markersize=16, markerfacecolor='none',
                                 markeredgecolor='red', markeredgewidth=2, zorder=4)
                         continue
 
@@ -524,7 +571,7 @@ def display_closure_step(m, title, show_links=False, show_real=False,
                         if pair in drawn_mutual_pairs:
                             continue
                         drawn_mutual_pairs.add(pair)
-                        ax.annotate('', xy=(j, i), xytext=(sj, si),
+                        ax.annotate('', xy=(j - w, i - w), xytext=(sj - w, si - w),
                                     arrowprops=dict(arrowstyle='-', color='black',
                                                      shrinkA=8, shrinkB=8),
                                     zorder=3)
@@ -539,21 +586,21 @@ def display_closure_step(m, title, show_links=False, show_real=False,
                     length = (dx ** 2 + dy ** 2) ** 0.5
                     perp_x, perp_y = (-dy / length, dx / length) if length else (0, 0)
                     offset = 0.12
-                    ax.annotate('', xy=(j + perp_x * offset, i + perp_y * offset),
-                                xytext=(sj + perp_x * offset, si + perp_y * offset),
+                    ax.annotate('', xy=(j - w + perp_x * offset, i - w + perp_y * offset),
+                                xytext=(sj - w + perp_x * offset, si - w + perp_y * offset),
                                 arrowprops=dict(arrowstyle='->', color='black',
                                                  shrinkA=8, shrinkB=8,
                                                  connectionstyle='arc3,rad=0.15'),
                                 zorder=3)
 
     if show_entries_terminals:
-        for i in range(rows):
-            for j in range(cols):
+        for i in range(w, rows - w):
+            for j in range(w, cols - w):
                 item = m[i, j]
                 if item.alert_chosen and not item.forces:
-                    ax.plot(j, i, 'o', markersize=10, color='blue', zorder=5)
+                    ax.plot(j - w, i - w, 'o', markersize=10, color='blue', zorder=5)
                 elif item.forces and not item.forced_by:
-                    ax.plot(j, i, 'o', markersize=10, color='red', zorder=5)
+                    ax.plot(j - w, i - w, 'o', markersize=10, color='red', zorder=5)
 
     if show_real:
         real_display, error = real_space_map(m)
@@ -569,18 +616,26 @@ def display_closure_step(m, title, show_links=False, show_real=False,
             real_rgb = colorize(real_display, {0: FREE_COLOR})
 
             if margin is not None and not margin.crop:
-                w = margin.width
-                real_rgb[:w, :] = margin.color
-                real_rgb[-w:, :] = margin.color
-                real_rgb[:, :w] = margin.color
-                real_rgb[:, -w:] = margin.color
+                mw = margin.width
+                real_rgb[:mw, :] = margin.color
+                real_rgb[-mw:, :] = margin.color
+                real_rgb[:, :mw] = margin.color
+                real_rgb[:, -mw:] = margin.color
 
-            for i in range(rows):
-                for j in range(cols):
+            # roi_margin cells are excluded here too, not just from the
+            # map_of_squares panel above: a cell in that outer ring only
+            # exists to seed the blocked ring just inside it (see
+            # build_margin_free_map/roi_margin's own docstring) - stamping
+            # its real footprint with its own get_shade_of_cyan draw would
+            # both paint over margin's gray box above wherever the two
+            # regions overlap, and burn a random draw purely for a cell nobody
+            # asked to see.
+            for i in range(w, rows - w):
+                for j in range(w, cols - w):
                     if m[i, j].state == StateEnum.chosen:
                         real_rgb[i:i + 2, j:j + 2] = get_shade_of_cyan((i, j), m, colormap)
-            for i in range(rows):
-                for j in range(cols):
+            for i in range(w, rows - w):
+                for j in range(w, cols - w):
                     if m[i, j].state == StateEnum.chosen:
                         found, pos_overwritten = get_overwritten_hue_position((i,j), m)
                         if found:
@@ -589,9 +644,9 @@ def display_closure_step(m, title, show_links=False, show_real=False,
                            real_rgb[i1:i1 + 2, j1:j1 + 2] = get_shade_of_cyan((i1, j1), m, colormap)
 
             if margin is not None and margin.crop:
-                w = margin.width
-                real_display = real_display[w:-w, w:-w]
-                real_rgb = real_rgb[w:-w, w:-w]
+                mw = margin.width
+                real_display = real_display[mw:-mw, mw:-mw]
+                real_rgb = real_rgb[mw:-mw, mw:-mw]
 
             ax_real.imshow(real_rgb)
             ax_real.set_title('real space')
