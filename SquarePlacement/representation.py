@@ -38,29 +38,6 @@ def build_margin_free_map(n):
     return m
 
 
-FREE_MARGIN_PADDING = 2
-
-
-def build_free_margin_map(n):
-    """(n + 2*FREE_MARGIN_PADDING) x (...) map, every cell free - no blocked
-    border anywhere (unlike build_margin_free_map), the n x n region of
-    interest just sits centred with a FREE_MARGIN_PADDING-cell buffer of
-    ordinary free cells on every side.
-
-    find_alerts_set_links skips the
-    array's own outermost ring (range(1, rows - 1)), so an n x n region
-    placed flush against the real array boundary would leave its own edge
-    cells invisible to it. A 1-cell buffer would fix that for the region
-    itself, but not for the buffer ring immediately around it - if the
-    region's own edge ever forces a buffer cell into the graph, that cell
-    needs to be examined too, which needs its own neighbours in loop bounds.
-    2 cells of buffer covers both: the outer ring (row/col 0 and the last
-    one) stays untouched, ordinary free padding; the ring just inside it is
-    still within range(1, rows - 1), so it's examined like any other cell.
-    """
-    size = n + 2 * FREE_MARGIN_PADDING
-    return build_map_of_squares(size, size)
-
 # The four diagonal offsets a chosen item blocks (see closure.place_squares).
 DIAGONAL_OFFSETS = ((-1, -1), (-1, 1), (1, -1), (1, 1))
 
@@ -95,23 +72,6 @@ def map_of_squares_from_array(state_grid):
 
     return m
 
-
-def map_of_squares_to_array(map_of_squares):
-    """Collapse a map_of_squares array back to a plain 0/1 grid: chosen=1, anything
-    else (free or blocked) = 0.
-
-    This is the inverse of map_of_squares_from_array: blocked cells there were
-    derived from the chosen ones, not part of the original input, so they collapse
-    back to 0 along with free cells - round-tripping a grid through
-    map_of_squares_from_array and then this function returns the original grid.
-    """
-    rows, cols = map_of_squares.shape
-    grid = np.zeros((rows, cols), dtype=int)
-    for i in range(rows):
-        for j in range(cols):
-            if map_of_squares[i, j].state == StateEnum.chosen:
-                grid[i, j] = 1
-    return grid
 
 # transform
 
@@ -254,8 +214,8 @@ class RealSpaceMargin:
     footprint), so this is the caller's own claim about how wide that
     border is, not something derived from map_of_squares state - pass it
     only for a board that genuinely has one (e.g. build_margin_free_map),
-    never for a margin-free board (e.g. build_free_margin_map,
-    map_of_squares_from_array) where there's nothing there to call out.
+    never for a margin-free board (e.g. map_of_squares_from_array) where
+    there's nothing there to call out.
 
     width: how many real-space cells deep the border is, on every side.
     color: what to paint it, when crop=False. Ignored when crop=True.
@@ -489,7 +449,7 @@ def display_closure_step(m, title, show_links=False, show_real=False,
     genuinely has a permanently-blocked border (e.g. build_margin_free_map) -
     see RealSpaceMargin's own docstring for width/color/crop. margin=None
     (the default) draws no border at all, which is what a margin-free board
-    (e.g. build_free_margin_map, map_of_squares_from_array) wants. Draws its
+    (e.g. map_of_squares_from_array) wants. Draws its
     own two-panel figure regardless of ax, since a fresh pair of axes is
     needed either way - pass ax=None (the default) whenever show_real=True.
 
@@ -644,172 +604,3 @@ def display_closure_step(m, title, show_links=False, show_real=False,
 
     return error
 
-
-# link library
-
-
-def set_link(map_of_squares, source, target):
-    """Mark source as alert_chosen and link it to target; target is also marked
-    alert_chosen (a linked-to item is, by construction, always alert_chosen too).
-    target's .forced_by gets source added too (see SquareItem.forced_by),
-    the incoming-side record of this same pairing.
-    """
-    si, sj = source
-    ti, tj = target
-    map_of_squares[si, sj].alert_chosen = True
-    map_of_squares[ti, tj].forced_by.add(source)
-    map_of_squares[si, sj].forces.add(target)
-    map_of_squares[ti, tj].alert_chosen = True
-
-
-def build_cycle(map_of_squares, cells):
-    """Link cells[0] -> cells[1] -> ... -> cells[-1] -> cells[0]: a closed cycle
-    with no terminal anywhere in it.
-    """
-    ring = list(cells) + [cells[0]]
-    for source, target in zip(ring, ring[1:]):
-        set_link(map_of_squares, source, target)
-
-
-def describe_links(map_of_squares):
-    """Return one line per alert_chosen item: its index, link target(s) (or
-    "terminal" if it has none), path_id, and centrality - shown as "-" while
-    still unassigned (empty set() for path_id, -1 for centrality), since most
-    hand-built scenarios start out that way. An item linked to more than one
-    target (see SquareItem.forces) lists all of them, comma-separated - and an
-    item belonging to more than one patch at once (see SquareItem.path_id)
-    lists all of those ids too.
-    """
-    rows, cols = map_of_squares.shape
-    lines = []
-    for i in range(rows):
-        for j in range(cols):
-            item = map_of_squares[i, j]
-            if not item.alert_chosen:
-                continue
-            target = ", ".join(str(t) for t in item.forces) if item.forces else "terminal"
-            path_id = ", ".join(str(x) for x in sorted(item.path_id)) if item.path_id else "-"
-            centrality = item.centrality if item.centrality != -1 else "-"
-            lines.append(f"({i}, {j}) -> {target}   path_id={path_id} centrality={centrality}")
-    return lines
-
-
-def display_links(map_of_squares, title=None, ax=None):
-    """Plot every alert_chosen item as a dot (bigger/darker for a terminal - an
-    item with no .forces of its own) and draw an arrow from every linked item to
-    each of its targets (see SquareItem.forces), so chains, cycles, fan-in
-    vertices, and an item linked to several targets at once are all visible at a
-    glance.
-
-    ax=None (default): create a new figure/axes and call plt.show() once this
-    panel is drawn, as a standalone display - matching display_closure_step's
-    ax=None convention. Pass an existing ax to draw into it instead, without
-    creating a figure or calling plt.show() - e.g. to place this alongside
-    other panels in one figure, see display_graph_map_and_real_space.
-    """
-    rows, cols = map_of_squares.shape
-    standalone = ax is None
-    if standalone:
-        fig, ax = plt.subplots(figsize=(cols / 2 + 2, rows / 2 + 2))
-
-    for i in range(rows):
-        for j in range(cols):
-            item = map_of_squares[i, j]
-            if not item.alert_chosen:
-                continue
-            is_terminal = not item.forces
-            ax.plot(j, i, 'o',
-                    markersize=14 if is_terminal else 9,
-                    color='black' if is_terminal else 'tab:blue',
-                    zorder=3)
-            label = f"({i},{j})"
-            if item.path_id:
-                label += f"\np={sorted(item.path_id)}"
-            if item.centrality != -1:
-                label += f" c={item.centrality}"
-            ax.annotate(label, (j, i), textcoords="offset points",
-                        xytext=(8, 8), fontsize=8)
-
-    for i in range(rows):
-        for j in range(cols):
-            item = map_of_squares[i, j]
-            if not item.alert_chosen:
-                continue
-            for ti, tj in item.forces:
-                ax.annotate('', xy=(tj, ti), xytext=(j, i),
-                            arrowprops=dict(arrowstyle='->', color='tab:blue',
-                                             shrinkA=10, shrinkB=10,
-                                             connectionstyle='arc3,rad=0.15'),
-                            zorder=2)
-
-    ax.set_xlim(-1, cols)
-    ax.set_ylim(rows, -1)
-    ax.set_xticks(range(cols))
-    ax.set_yticks(range(rows))
-    ax.grid(True, linestyle=':', alpha=0.4)
-    ax.set_aspect('equal')
-    if title:
-        ax.set_title(title)
-    if standalone:
-        plt.tight_layout()
-        plt.show()
-
-
-def display_real_space_and_map(map_of_squares, ax_real, ax_map):
-    """Draw the real-space grid and the map_of_squares grid into the given axes,
-    aligned so map_of_squares sits inset within the same frame as real_space:
-    map_of_squares is isomorphic to the grid-intersection points of real_space
-    (the centre of square (i, j) is exactly the corner shared by the four
-    real-space cells (i,j), (i,j+1), (i+1,j), (i+1,j+1) that square occupies -
-    i.e. real-space coordinate (j + 0.5, i + 0.5)), so shifting this image's
-    extent by +0.5 and matching ax_map's limits to ax_real's draws it inset
-    within the very same frame - one cell-width smaller and centred on all
-    sides, since map_of_squares has one fewer row and column than real_space.
-
-    Used by display_graph_map_and_real_space's own "real space"/
-    "map_of_squares" panels, alongside its third (graph) panel - unlike
-    display_closure_step's show_real=True, which always draws its own fresh
-    two-panel figure, so it can't slot into a pre-existing three-panel layout.
-
-    Returns error, the same flag real_space_map itself now reports instead of
-    raising (see its docstring) - drawn as-is either way, same as before this
-    function had any error handling of its own; a caller that cares can check
-    the return value.
-    """
-    real_display, error = real_space_map(map_of_squares)
-    ax_real.imshow(colorize(real_display, {0: FREE_COLOR, 1: CHOSEN_COLOR}))
-    ax_real.set_title('real space')
-    ax_real.axis('on')
-    grid_on(ax_real, *real_display.shape)
-
-    map_rows, map_cols = map_of_squares.shape
-    map_display = display_map_of_squares_3States(map_of_squares)
-    ax_map.set_facecolor(MARGIN_COLOR)
-    ax_map.imshow(colorize(map_display, {0: FREE_COLOR, 1: CHOSEN_COLOR, -1: BLOCKED_COLOR,
-                                          2: BLOCKED_TMP_COLOR}),
-                  extent=(0, map_cols, map_rows, 0))
-    ax_map.set_title('map_of_squares')
-    ax_map.axis('on')
-    grid_on(ax_map, map_rows, map_cols, offset=0)
-    ax_map.set_xlim(ax_real.get_xlim())
-    ax_map.set_ylim(ax_real.get_ylim())
-    return error
-
-
-def display_graph_map_and_real_space(map_of_squares, title=None):
-    """Show three panels side by side (landscape): the .forced_by/.forces
-    graph (display_links), the map_of_squares grid, and the real-space grid -
-    so a hand-built scenario's link structure and its (if any) placement state
-    are both visible at once, in one figure. See test_complex_graphs.py, whose
-    scenarios only ever set .alert_chosen/.forced_by/.forces and never
-    .state, so the latter two panels show an all-free grid there - the point
-    is still to have all three views in one consistent, comparable layout.
-    """
-    fig, (ax_graph, ax_map, ax_real) = plt.subplots(1, 3, figsize=(15, 5))
-    display_links(map_of_squares, title='graph', ax=ax_graph)
-    error = display_real_space_and_map(map_of_squares, ax_real, ax_map)
-    if title:
-        fig.suptitle(title)
-    plt.tight_layout()
-    plt.show()
-    return error

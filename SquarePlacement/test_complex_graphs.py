@@ -1,8 +1,8 @@
 """A catalogue of the algorithmically-distinct .forced_by/.forces shapes that
-can arise once alert_chosen items start pointing at each other - some derived
-from a real grid via find_alerts_set_links, others hand-built directly with
-the "link library" in representation.py (set_link/build_cycle), so each shape
-can be examined in isolation.
+can arise once alert_chosen items start pointing at each other - each one
+built from a real grid (map_of_squares_from_array) with a handful of squares
+placed to produce that specific shape via find_alerts_set_links/do_closure,
+so each shape can be examined in isolation.
 """
 
 import numpy as np

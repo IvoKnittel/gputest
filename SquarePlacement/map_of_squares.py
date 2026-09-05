@@ -54,8 +54,8 @@ class SquareItem:
                 not any particular "first" one the way a list index would be.
     forced_by:  every (row, col) index that has ever forced this item - i.e. the
                 other side of the same relationship .forces records, filled
-                alongside it wherever a .forces entry is created (set_alert_chosen_set_links,
-                representation.set_link) so it's always available without
+                alongside it wherever a .forces entry is created
+                (set_alert_chosen_set_links) so it's always available without
                 needing a separate reversed copy of the map to look it up.
                 Also a set, for the same reason .forces is. set_blocked_links
                 retracts both directions when it cuts .forces: the cut cell's
