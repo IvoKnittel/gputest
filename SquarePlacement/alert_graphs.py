@@ -32,17 +32,17 @@ def iter_alert_thirds(ring):
     block, so it is skipped.
     """
     for idx in range(8):
-        if ring[idx].state != StateEnum.blocked or ring[(idx + 1) % 8].state != StateEnum.blocked:
+        if ring[idx].state != StateEnum.blocked or ring[(idx + 1) % 8].state != StateEnum.blocked:  # BR-032
             continue
         triple = next(t for t in QUADRANT_TRIPLES if idx in t and (idx + 1) % 8 in t)
         third_idx = next(k for k in triple if k not in (idx, (idx + 1) % 8))
-        if ring[third_idx].state == StateEnum.free:
+        if ring[third_idx].state == StateEnum.free:  # BR-033
             yield third_idx
 
     for direct_a, corner, direct_b in QUADRANT_TRIPLES:
         if (ring[direct_a].state == StateEnum.blocked
                 and ring[direct_b].state == StateEnum.blocked
-                and ring[corner].state == StateEnum.free):
+                and ring[corner].state == StateEnum.free):  # BR-034
             yield corner
 
 
@@ -90,12 +90,12 @@ def set_alert_chosen_set_links(i, j, ring):
 
     for d_idx in (0, 2, 4, 6):
         diagonal_item = ring[d_idx]
-        if diagonal_item.state != StateEnum.free:
+        if diagonal_item.state != StateEnum.free:  # BR-035
             continue
         di, dj = RING_OFFSETS[d_idx]
         d_pos = (i + di, j + dj)
         for c_idx in corner_indices:
-            if c_idx == d_idx:
+            if c_idx == d_idx:  # BR-036
                 continue
             ci, cj = RING_OFFSETS[c_idx]
             c_pos = (i + ci, j + cj)

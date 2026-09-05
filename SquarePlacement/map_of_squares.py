@@ -91,6 +91,25 @@ class SquareItem:
                 first-come: a chosen neighbour that already has a partner is
                 skipped rather than repaired, so pairing one more chosen item
                 onto either end of an existing domino later never disturbs it.
+    blocked_paths: ids (a subset of path_id) this item has learned are
+                self-contradicting - the same fact get_blocked_links computes
+                into its own returned set, but kept per-cell here instead of
+                collapsed into one global id set, plus one hop of forward
+                propagation along .forces (see closure.apply_blocked_paths).
+                Belongs to a separate, not-yet-wired-in alternative to
+                get_blocked_links/set_blocked_links (closure.seed_blocked_paths/
+                apply_blocked_paths/propagate_blocked_tmp_closed) - do_closure
+                itself still runs the original get_blocked_links/set_blocked_links
+                pipeline; nothing here is read or written by that path. Empty
+                set() while unassigned.
+    is_blocked_tmp: this mechanism's own marker for "just discovered
+                permanently blocked by a path contradiction" - the counterpart
+                to blocked_tmp above, but for the blocked_paths mechanism, kept
+                as a distinct field so the two mechanisms never read or write
+                each other's bookkeeping. Unlike set_blocked_links, nothing in
+                this mechanism clears .forces/.forced_by/.path_id when it flags
+                a cell - see apply_blocked_paths/propagate_blocked_tmp_closed's
+                own docstrings. False while unassigned.
     """
     quality: float = -1.0
     state: StateEnum = StateEnum.free
@@ -103,6 +122,8 @@ class SquareItem:
     path_id: set = field(default_factory=set)
     max_id: int = -1
     rectangle: tuple = (-1, -1)
+    blocked_paths: set = field(default_factory=set)
+    is_blocked_tmp: bool = False
          
 # The four direct (orthogonal) neighbours - as opposed to a diagonal one -
 # checked by set_square_chosen when pairing a newly-chosen item into a domino.

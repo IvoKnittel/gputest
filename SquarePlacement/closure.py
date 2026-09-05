@@ -46,11 +46,11 @@ def find_alerts_set_links(map_of_squares):
     for i in range(1, rows - 1):
         for j in range(1, cols - 1):
             item = map_of_squares[i, j]
-            if item.state != StateEnum.free:
+            if item.state != StateEnum.free:  # BR-001
                 continue
             ring = [map_of_squares[i + di, j + dj] for di, dj in RING_OFFSETS]
             set_alert_blocked(item, ring)
-            if item.alert_blocked:
+            if item.alert_blocked:  # BR-002
                 set_alert_chosen_set_links(i, j, ring)
 
 def find_secondary_links(map_of_squares):
@@ -116,21 +116,21 @@ def find_secondary_links(map_of_squares):
     for i in range(1, rows - 1):
         for j in range(1, cols - 1):
             p_item = map_of_squares[i, j]
-            if not p_item.alert_blocked:
+            if not p_item.alert_blocked:  # BR-003
                 continue
 
             ring = [map_of_squares[i + di, j + dj] for di, dj in RING_OFFSETS]
             b_positions = {(i + RING_OFFSETS[idx][0], j + RING_OFFSETS[idx][1])
                            for idx in iter_alert_thirds(ring)}
-            if not b_positions:
+            if not b_positions:  # BR-004
                 continue
 
             for di, dj in DIAGONAL_OFFSETS:
                 a_pos = (i + di, j + dj)
-                if not (0 <= a_pos[0] < rows and 0 <= a_pos[1] < cols):
+                if not (0 <= a_pos[0] < rows and 0 <= a_pos[1] < cols):  # BR-005
                     continue
                 a_item = map_of_squares[a_pos]
-                if a_item.state != StateEnum.free:
+                if a_item.state != StateEnum.free:  # BR-006
                     continue
 
                 chosen_hyp = {a_pos} | b_positions
@@ -138,11 +138,11 @@ def find_secondary_links(map_of_squares):
                 for ci, cj in chosen_hyp:
                     for bdi, bdj in DIAGONAL_OFFSETS:
                         n_pos = (ci + bdi, cj + bdj)
-                        if not (0 <= n_pos[0] < rows and 0 <= n_pos[1] < cols):
+                        if not (0 <= n_pos[0] < rows and 0 <= n_pos[1] < cols):  # BR-007
                             continue
-                        if n_pos in overrides:
+                        if n_pos in overrides:  # BR-008
                             continue
-                        if map_of_squares[n_pos].state == StateEnum.free:
+                        if map_of_squares[n_pos].state == StateEnum.free:  # BR-009
                             overrides[n_pos] = StateEnum.blocked
 
                 def eff_state(pos):
@@ -152,7 +152,7 @@ def find_secondary_links(map_of_squares):
                 for pi, pj in overrides:
                     for bi in (pi - 1, pi):
                         for bj in (pj - 1, pj):
-                            if 0 <= bi < rows - 1 and 0 <= bj < cols - 1:
+                            if 0 <= bi < rows - 1 and 0 <= bj < cols - 1:  # BR-010
                                 checked_blocks.add((bi, bj))
 
                 for bi, bj in checked_blocks:
@@ -160,15 +160,15 @@ def find_secondary_links(map_of_squares):
 
                     real_states = [map_of_squares[c].state for c in corners]
                     if (real_states.count(StateEnum.blocked) == 3
-                            and real_states.count(StateEnum.free) == 1):
+                            and real_states.count(StateEnum.free) == 1):  # BR-011
                         continue  # already a real seat - not newly created
 
                     hyp_states = [eff_state(c) for c in corners]
                     if (hyp_states.count(StateEnum.blocked) == 3
-                            and hyp_states.count(StateEnum.free) == 1):
+                            and hyp_states.count(StateEnum.free) == 1):  # BR-012
                         corner_pos = corners[hyp_states.index(StateEnum.free)]
                         corner_item = map_of_squares[corner_pos]
-                        if corner_item.forced_by & b_positions:
+                        if corner_item.forced_by & b_positions:  # BR-013
                             continue  # already reachable from a via some b in B
                         a_item.forces.add(corner_pos)
                         corner_item.forced_by.add(a_pos)
@@ -266,7 +266,7 @@ def check_tiling_invariant(map_of_squares):
         for j in range(cols - 1):
             corners = (map_of_squares[i, j], map_of_squares[i, j + 1],
                        map_of_squares[i + 1, j], map_of_squares[i + 1, j + 1])
-            if all(c.state == StateEnum.blocked for c in corners):
+            if all(c.state == StateEnum.blocked for c in corners):  # BR-014
                 raise InvalidTilingError(f"2x2 all-blocked block at ({i}, {j})")
 
 
@@ -305,7 +305,7 @@ def place_squares(map_of_squares, positions):
         for di, dj in DIAGONAL_OFFSETS:
             ni, nj = i + di, j + dj
             if (0 <= ni < rows and 0 <= nj < cols
-                    and map_of_squares[ni, nj].state == StateEnum.free):
+                    and map_of_squares[ni, nj].state == StateEnum.free):  # BR-015
                 map_of_squares[ni, nj].state = StateEnum.blocked
 
 
@@ -394,10 +394,10 @@ def place_square_in_seat(map_of_squares):
         for j in range(cols - 1):
             corners = [(i, j), (i, j + 1), (i + 1, j), (i + 1, j + 1)]
             states = [map_of_squares[p].state for p in corners]
-            if states.count(StateEnum.blocked) == 3 and states.count(StateEnum.free) == 1:
+            if states.count(StateEnum.blocked) == 3 and states.count(StateEnum.free) == 1:  # BR-016
                 seats.add(corners[states.index(StateEnum.free)])
 
-    if not seats:
+    if not seats:  # BR-017
         return False
     place_squares(map_of_squares, list(seats))
     return True
@@ -459,10 +459,10 @@ def propagate_path_id_from_entries(map_of_squares):
     for i in range(rows):
         for j in range(cols):
             item = map_of_squares[i, j]
-            if not item.path_id:
+            if not item.path_id:  # BR-018
                 continue
-            
-            if not unique_id((i,j), (rows, cols)) in item.path_id:
+
+            if not unique_id((i,j), (rows, cols)) in item.path_id:  # BR-019
                 continue
 
             entry=item
@@ -470,7 +470,7 @@ def propagate_path_id_from_entries(map_of_squares):
             visited = set()
             while to_visit:
                 pos = to_visit.pop()
-                if pos in visited:
+                if pos in visited:  # BR-020
                     continue
                 visited.add(pos)
                 item = map_of_squares[pos]
@@ -502,7 +502,7 @@ def unique_id(pos, size):
     the same 8).
     """
     rows, cols = size
-    if rows >= cols:
+    if rows >= cols:  # BR-021
         return pos[0] * rows + pos[1]
     return pos[0] * cols + pos[1]
 
@@ -553,21 +553,21 @@ def assign_paths(map_of_squares):
     for i in range(rows):
         for j in range(cols):
             item = map_of_squares[i, j]
-            if item.forces and not item.forced_by:
-                if len(item.forces) == 1:
+            if item.forces and not item.forced_by:  # BR-022
+                if len(item.forces) == 1:  # BR-023
                     target_pos = next(iter(item.forces))
                     target = map_of_squares[target_pos[0], target_pos[1]]
                     target.path_id.add(unique_id(target_pos, (rows, cols)))
-                else:
+                else:  # BR-024
                     item.path_id = {unique_id((i,j), (rows, cols))}
 
-            if item.forced_by:
+            if item.forced_by:  # BR-025
                 for di, dj in DIAGONAL_OFFSETS:
                     ni, nj = i + di, j + dj
-                    if not (0 <= ni < rows and 0 <= nj < cols):
+                    if not (0 <= ni < rows and 0 <= nj < cols):  # BR-026
                         continue
                     neighbour = map_of_squares[ni, nj]
-                    if neighbour.state == StateEnum.free and neighbour.forced_by:
+                    if neighbour.state == StateEnum.free and neighbour.forced_by:  # BR-027
                         item.path_id.add(unique_id((i, j), (rows, cols)))
                         break
 
@@ -705,15 +705,15 @@ def get_blocked_links(m):
     for i in range(rows):
         for j in range(cols):
             A = m[i, j]
-            if not A.path_id:
+            if not A.path_id:  # BR-028
                 continue
             Q = set()
             for di, dj in DIAGONAL_OFFSETS:
                 ni, nj = i + di, j + dj
-                if not (0 <= ni < rows and 0 <= nj < cols):
+                if not (0 <= ni < rows and 0 <= nj < cols):  # BR-029
                     continue
                 neighbour = m[ni, nj]
-                if neighbour.path_id:
+                if neighbour.path_id:  # BR-030
                     Q |= neighbour.path_id
             p |= (Q & A.path_id)
     return p
@@ -775,7 +775,7 @@ def set_blocked_links(m, p):
     to_clear = []
     for i in range(rows):
         for j in range(cols):
-            if unique_id((i, j), (rows, cols)) in p:
+            if unique_id((i, j), (rows, cols)) in p:  # BR-031
                 m[i, j].blocked_tmp = True
                 m[i, j].state = StateEnum.blocked
                 to_clear.append((i, j))
@@ -788,6 +788,184 @@ def set_blocked_links(m, p):
             m[source].forces.discard(pos)
         item.forces = set()
         item.forced_by = set()
+
+
+# -----------------------------------------------------------------------
+# blocked_paths mechanism: an alternative to get_blocked_links/set_blocked_links,
+# split into small, tile/GPU-friendly passes (see do_closure's own "Flagged for
+# rewrite" note) instead of one global id set plus a second full-grid scan to
+# match it. NOT wired into do_closure - it runs entirely on its own fields
+# (SquareItem.blocked_paths/.is_blocked_tmp), untouched by and not touching
+# the original .blocked_tmp/get_blocked_links/set_blocked_links pipeline.
+# -----------------------------------------------------------------------
+
+def seed_blocked_paths(m):
+    """Pass 0: for every diagonally-adjacent pair of cells that share a
+    path_id member, add the shared ids to each side's own .blocked_paths -
+    the same per-cell computation get_blocked_links itself does (each cell's
+    own Q & A.path_id), just assigned onto the cell instead of collapsed into
+    one returned global set. Run once, after assign_paths - not itself looped.
+
+    Inputs: reads .path_id of every cell and its diagonal neighbours.
+
+    Outputs: writes .blocked_paths (assigned, not unioned - see
+    apply_blocked_paths for where union applies) on every cell that has at
+    least one path_id in common with a diagonal neighbour; returns None.
+
+    Scope: local - each cell's own write depends only on its own path_id and
+    its fixed 4-diagonal-neighbour ring, independent of every other cell's
+    outcome (same locality as get_blocked_links's own per-cell loop).
+    """
+    rows, cols = m.shape
+    for i in range(rows):
+        for j in range(cols):
+            A = m[i, j]
+            if not A.path_id:
+                continue
+            Q = set()
+            for di, dj in DIAGONAL_OFFSETS:
+                ni, nj = i + di, j + dj
+                if not (0 <= ni < rows and 0 <= nj < cols):
+                    continue
+                neighbour = m[ni, nj]
+                if neighbour.path_id:
+                    Q |= neighbour.path_id
+            A.blocked_paths = Q & A.path_id
+
+
+def apply_blocked_paths(m):
+    """Pass 1: for every cell B seed_blocked_paths flagged (nonempty
+    .blocked_paths), prune those ids out of B's own path_id, push them
+    forward onto whatever B.forces (B's own consequences also inherit the
+    taint), and push the blocking itself one hop backward onto whatever
+    B.forced_by (the cells that would have to be chosen to force B into
+    contradiction - those are the ones that are actually now impossible to
+    choose). Run once - not itself looped; propagate_blocked_tmp_closed is
+    what carries the backward blocking further than this one hop.
+
+    Snapshot-then-apply: which cells qualify as B, and B's own blocked_paths/
+    path_id values used in every step below, are all taken from the state at
+    the start of this call - so one B's own effect on another cell's
+    blocked_paths (the .forces branch) can never make that cell newly qualify
+    as its own B within this same pass, and B's forced_by cells always see
+    the same, single, consistent version of B's post-prune path_id (not a
+    version some other B already mutated further this pass).
+
+    Inputs: reads every cell's .blocked_paths, .path_id, .forces, .forced_by
+    as they stood before this call.
+
+    Outputs: for every B with nonempty .blocked_paths (as of entry):
+    - B.path_id loses every id in B.blocked_paths;
+    - every A in B.forces gains B's blocked_paths into its own (union);
+    - every C in B.forced_by is set .state = StateEnum.blocked and
+      .is_blocked_tmp = True (nothing is cleared - contrast set_blocked_links,
+      which retracts .forces/.forced_by; here the graph is left intact for
+      propagate_blocked_tmp_closed to walk further, and for callers/tests to
+      still inspect);
+    - every such C also has its .path_id narrowed to its intersection with
+      B's own post-prune path_id (ids C had that B no longer carries are
+      dropped - C's remaining membership is only ever what it still shares
+      with the very cell whose contradiction is what blocked it).
+    Returns None.
+
+    Scope: local-ish - each B's own effect reaches only its fixed .forces/
+    .forced_by neighbours (one hop each), not a board-wide walk; the
+    snapshot discipline above is what keeps that bounded reach well-defined
+    even though several B's can share a forces/forced_by neighbour.
+    """
+    rows, cols = m.shape
+    seeded = []
+    for i in range(rows):
+        for j in range(cols):
+            B = m[i, j]
+            if B.blocked_paths:
+                seeded.append((B, set(B.blocked_paths), set(B.path_id)))
+
+    for B, blocked_paths, path_id_before in seeded:
+        B.path_id -= blocked_paths
+        pruned_path_id = path_id_before - blocked_paths
+
+        for a_pos in B.forces:
+            A = m[a_pos]
+            A.blocked_paths |= blocked_paths
+
+        for c_pos in B.forced_by:
+            C = m[c_pos]
+            C.state = StateEnum.blocked
+            C.is_blocked_tmp = True
+            C.path_id &= pruned_path_id
+
+
+def propagate_blocked_tmp(m):
+    """Pass 2, single hop: for every cell D already flagged .is_blocked_tmp
+    with a still-nonempty .path_id, narrow every E in D.forced_by's own
+    path_id down to its intersection with D's path_id; an E whose path_id
+    actually shrinks that way *and still has something left in it* is, by
+    the same reasoning apply_blocked_paths applies to its own C cells,
+    itself now a genuine impossibility - blocked and flagged in turn, so a
+    later pass (propagate_blocked_tmp_closed) can carry the same narrowing
+    one hop further back from E.
+
+    Both guards exist to stop a real, observed runaway cascade: without
+    them, the first D whose path_id narrows all the way to empty would wipe
+    every E in its .forced_by to empty too (intersecting against an empty
+    set is always empty), flag every one of them blocked regardless of
+    whether they ever shared anything real with D, and those newly-empty E's
+    would then do the same to *their* own forced_by in the next pass -
+    cascading through the whole reachable graph rather than stopping at
+    genuine contradictions (confirmed on the get_and_set_blocked_links_marks_
+    blocked_tmp board: 48 cells wrongly blocked instead of the correct 6). An
+    empty path_id carries no specific contradiction left to push forward, so
+    a D with one is skipped outright rather than treated as a source; an E
+    whose intersection empties out is left untouched rather than being
+    narrowed and flagged - narrowing to nothing is not itself evidence E was
+    part of D's contradiction, only that this hop found no overlap.
+
+    Inputs: reads every cell's .is_blocked_tmp, .path_id, .forced_by.
+
+    Outputs: for every E reached this way whose .path_id changes to a
+    nonempty result: .path_id is narrowed in place, .state =
+    StateEnum.blocked, .is_blocked_tmp = True. Nothing is cleared (same as
+    apply_blocked_paths - see its own docstring).
+    Returns True if at least one cell changed this way, False otherwise.
+
+    Scope: local per hop - each D only ever reaches its own .forced_by
+    neighbours - but a D newly flagged earlier in this same scan is visible
+    to a later iteration of this same pass (row-major order), so one call can
+    already carry a chain more than one hop; propagate_blocked_tmp_closed's
+    looping is what guarantees the rest, regardless of scan order.
+    """
+    rows, cols = m.shape
+    changed = False
+    for i in range(rows):
+        for j in range(cols):
+            D = m[i, j]
+            if not D.is_blocked_tmp or not D.path_id:
+                continue
+            for e_pos in D.forced_by:
+                E = m[e_pos]
+                narrowed = E.path_id & D.path_id
+                if narrowed != E.path_id and narrowed:
+                    E.path_id = narrowed
+                    E.state = StateEnum.blocked
+                    E.is_blocked_tmp = True
+                    changed = True
+    return changed
+
+
+def propagate_blocked_tmp_closed(m):
+    """Run propagate_blocked_tmp to a fixed point: one D can only push the
+    narrowing one hop back per pass at minimum, so keep looping until a full
+    pass finds no further change - same shape as place_square_in_seat_closed
+    looping place_square_in_seat.
+
+    Returns True if at least one cell was newly blocked this way, False
+    otherwise.
+    """
+    changed = False
+    while propagate_blocked_tmp(m):
+        changed = True
+    return changed
 
 
 def do_closure(m, title, show=False, margin=None, roi_margin=0):
