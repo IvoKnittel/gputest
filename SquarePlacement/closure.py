@@ -52,6 +52,7 @@ def find_alerts_set_links(map_of_squares):
             set_alert_blocked(item, ring)
             if item.alert_blocked:
                 set_alert_chosen_set_links(i, j, ring)
+
 def find_secondary_links(map_of_squares):
     """
     A relay on top of find_alerts_set_links: an item C that just became
@@ -117,23 +118,27 @@ def find_secondary_links(map_of_squares):
                     corner.forced_by.add((i, j))
 
 
-def reset_alert_bookkeeping(map_of_squares):
+def clear_all_but_state(map_of_squares):
     """
-    Clear every cell's .alert_blocked, .alert_chosen, .forces, .forced_by,
-    .centrality, .path_id, and .max_id back to their defaults (False, False,
-    set(), set(), -1, set(), -1), map-wide, unconditionally - .state is the
-    only field that starts a round and survives it; everything else is
-    derived fresh from .state each round, so nothing else should carry over.
-    This is what lets find_alerts_set_links/assign_paths run from a clean
-    slate instead of layering new results on top of whatever an earlier round
-    left behind.
+    Clear every cell's .blocked_tmp, .alert_blocked, .alert_chosen, .forces,
+    .forced_by, .centrality, .path_id, and .max_id back to their defaults
+    (False, False, False, set(), set(), -1, set(), -1), map-wide,
+    unconditionally - .state is the only field that starts a round and
+    survives it; everything else is derived fresh from .state each round, so
+    nothing else should carry over. This is what lets find_alerts_set_links/
+    assign_paths run from a clean slate instead of layering new results on
+    top of whatever an earlier round left behind, and it's also the only
+    place .blocked_tmp ever gets cleared: set_blocked_links's own .state
+    write is already permanent the moment it happens (see its docstring), so
+    clearing the flag here is bookkeeping cleanup, not a second finalization
+    step - nothing needs to convert .state from anything to anything else.
 
     Inputs: none - every field is cleared to a fixed default, regardless of
     .state or anything else already on the cell.
 
-    Outputs: writes .alert_blocked, .alert_chosen, .forces, .forced_by,
-    .centrality, .path_id, and .max_id on every cell, unconditionally;
-    returns None.
+    Outputs: writes .blocked_tmp, .alert_blocked, .alert_chosen, .forces,
+    .forced_by, .centrality, .path_id, and .max_id on every cell,
+    unconditionally; returns None.
 
     Scope: local - a pure per-cell reset, no cross-cell read at all.
 
@@ -157,19 +162,18 @@ def reset_alert_bookkeeping(map_of_squares):
     alert bookkeeping from the current board state, not just the newly-placed
     ones.
 
-    .centrality/.max_id belong to find_central_patch_items/find_cycle_patches
-    (driven by resolve_cycles_and_centrality) - a separate path_id/centrality
-    mechanism from the one find_alerts_set_links/assign_paths use, and not one
-    do_closure itself ever calls. Cleared here too regardless, so that on
-    whatever board does run resolve_cycles_and_centrality, a stale value left
-    over from an earlier call can't silently block a cell from being
-    reassigned: find_central_patch_items only ever assigns an item's
-    .centrality once (`if item.centrality != -1: continue`).
+    .centrality and .max_id are both currently dead: they belonged to a
+    separate centrality/path_id mechanism (find_central_patch_items,
+    find_cycle_patches) that has since been removed entirely, and nothing
+    else in the codebase writes or reads either field. Cleared here anyway,
+    same as everything else: a reset should not leave any field depending on
+    what happened to be true before it ran.
     """
     rows, cols = map_of_squares.shape
     for i in range(rows):
         for j in range(cols):
             item = map_of_squares[i, j]
+            item.blocked_tmp = False
             item.alert_blocked = False
             item.alert_chosen = False
             item.forces = set()
@@ -357,269 +361,6 @@ def place_square_in_seat_closed(map_of_squares):
     return changed
 
 
-def find_central_patch_items(map_of_squares, gen):
-    """
-    Assign centrality to alert_chosen items, one generation at a time.
-
-    Inputs: reads .alert_chosen, .forces, .centrality, .path_id of every
-    cell, and the same fields on each cell's own .forces targets (one hop
-    away).
-
-    Outputs: writes .centrality and .path_id (and occasionally clears
-    .forces/.forced_by at a cycle-closing item) on individual cells; returns a
-    bool.
-
-    Scope: local per call - each cell only ever looks one .forces-hop
-    away - but designed to be called repeatedly with increasing gen until it
-    returns False, at which point information has propagated arbitrarily far
-    via that repetition: local-global, the same generation-based shape as
-    find_cycle_patches.
-
-    -------------------------------------------------------------------------
-
-    gen counts how many times this function has already been called for
-    map_of_squares: call it with gen=0 first, then gen=1, 2, ... on each subsequent
-    call. Requires find_alerts_set_links to have already run (.alert_chosen/.forces
-    must be set).
-
-    The function runs over all alert_chosen items, checking every entry in .forces.
-    If gen=0 and the current item has a linked item with no .forces of its own,
-    the linked item is a terminal item, and we set its centrality to 0, and its
-    path_id to a fresh singleton set holding its own flattened index (i * rows + j) -
-    a fresh id for the patch that starts there.
-
-    Each later call looks at every alert_chosen item that doesn't have a centrality
-    yet: if any of its linked items has centrality gen-1, the current item's
-    centrality becomes gen (an item is only ever assigned a centrality once - a
-    second linked item resolving at some bigger gen in a later call can't clobber
-    it). So centrality ends up measuring how many .forces hops an item sits from the
-    nearest terminal - one hop more with each generation.
-
-    In that same step, item picks up its path_id alongside its centrality: item
-    follows its own .forces - the causal, forward direction - to the linked item,
-    whose centrality (gen-1) is lower, since centrality decreases going forward
-    along .forces, down to 0 exactly at a terminal -
-      - if the current item has no path_id yet (empty set), it adopts a copy of the
-        linked item's,
-      - if it already has a *different* one (two patches have merged here), an item
-        can now belong to more than one patch at once, so the two id sets are
-        unioned together rather than picking one via a tie-break,
-      - if it already has the *same* one, this item has already been reached by this
-        patch once before - the only way that happens is by looping back around a
-        cycle - so instead of reassigning, the current item's own .forces is cut
-        (cleared to set()) to stop the patch from being retraced forever - retracting
-        this item's own position from each old link's .forced_by first (see
-        SquareItem.forced_by), so nothing downstream keeps listing it as a
-        forcer it no longer is.
-
-    A merge like that only fixes the path_id of the item sitting at the merge point
-    itself - everything closer to the terminal on the losing patch was already given
-    the smaller id set in some earlier call, before the merge was even discovered, and
-    that's stale now (missing whatever the merge just added). So on every call, every
-    item that already has a path_id additionally checks every one of its own .forces
-    targets: whatever id each target now holds that this item doesn't yet have is
-    unioned in. Sets are only partially ordered - two force targets can each hold ids
-    the other lacks without either being a superset of the other - so unioning in
-    everything new from every target is the correct generalization of a single
-    "biggest wins" tie-break: picking just one target's addition would silently drop
-    whatever the others had. Doing this every call lets a correction move backward,
-    one .forced_by hop at a time (from a target back to whatever forces it), until the
-    whole patch shares the same, converged id set - which is what makes path_id
-    double as a stable per-patch identifier in the end, without needing a separate
-    pass to compute one: no additional "kernel calls" beyond the ones this function
-    already needs for centrality.
-
-    Reads for this correction step are all taken before any of its writes are
-    applied (same snapshot-then-apply discipline as find_cycle_patches), so a
-    path_id correction can only move one hop per call, regardless of
-    iteration order.
-
-    Returns found: True if this call assigned a centrality, or propagated a
-    path_id correction, to at least one item, False otherwise - callers can
-    loop, incrementing gen, until found comes back False to know everything
-    reachable by .forces chains has fully converged.
-    """
-    rows, cols = map_of_squares.shape
-    found = False
-    for i in range(1, rows - 1):
-        for j in range(1, cols - 1):
-            item = map_of_squares[i, j]
-            if not (item.alert_chosen and item.forces):
-                continue
-
-            if gen == 0:
-                for target_pos in item.forces:
-                    linked = map_of_squares[target_pos]
-                    if not linked.forces:
-                        linked.centrality = 0
-                        li, lj = target_pos
-                        linked.path_id = {unique_id((li,lj), (rows, cols))}
-                        found = True
-                continue
-
-            if item.centrality != -1:
-                continue
-
-            for target_pos in item.forces:
-                linked = map_of_squares[target_pos]
-                if linked.centrality != gen - 1:
-                    continue
-                item.centrality = gen
-                found = True
-
-                p = linked.path_id
-                q = item.path_id
-                if not q:
-                    item.path_id = set(p)          # copy, don't alias
-                elif p != q:
-                    item.path_id = q | p           # union instead of max() tie-break
-                else:
-                    for old_force in item.forces:
-                        old_force_item = map_of_squares[old_force]
-                        old_force_item.forced_by.discard((i, j))
-                    item.forces = set()
-                break
-
-    corrections = {}
-    for i in range(1, rows - 1):
-        for j in range(1, cols - 1):
-            item = map_of_squares[i, j]
-            if not (item.alert_chosen and item.forces and item.path_id):
-                continue
-            addition = set()
-            for target_pos in item.forces:
-                addition |= map_of_squares[target_pos].path_id - item.path_id
-            if addition:
-                corrections[i, j] = item.path_id | addition
-
-    for pos, value in corrections.items():
-        map_of_squares[pos].path_id = value
-    if corrections:
-        found = True
-
-    return found
-
-def find_cycle_patches(map_of_squares, gen):
-    """
-    Ring leader election: find a parallel-safe break point for pure rings -
-    patches with no terminal anywhere, so find_central_patch_items never assigns
-    them a real centrality or path_id.
-
-    Inputs: reads .alert_chosen, .forces, .centrality, .max_id of every
-    cell, and the same fields on each cell's single .forces target.
-
-    Outputs: writes .max_id (and occasionally clears .forces/.forced_by at a
-    cut point); returns None.
-
-    Scope: local per call - a one-hop relay each generation - but
-    local-global overall, since resolve_cycles_and_centrality calls it
-    across many generations to let a candidate id travel all the way around
-    a ring before anything is decided.
-
-    -------------------------------------------------------------------------
-
-    Every link is treated identically here - there's no reliance on visit order or
-    which item happens to run first, only on each item's unique_id: its own
-    flattened index (i * rows + j), the same convention find_central_patch_items
-    uses to seed a terminal's path_id.
-
-    -- Known gap: fan-in candidates can still crowd each other out --
-    More than one item can point at the same target via the (arbitrary) .forces
-    entry this function reads - fan-in, the same shape SquareItem.forces
-    exists to support - so more than one candidate id can arrive at the same
-    node in the same generation, with at most one of them actually sitting on
-    that node's own ring and the rest merely tail branches feeding into it.
-    max_id is a single scalar, so only one of several simultaneous candidates
-    survives each generation; this gap is currently unaddressed.
-
-    All reads below see map_of_squares exactly as it was at the start of this call
-    - writes are collected and only applied once every edge has been evaluated, the
-    same synchronisation a genuinely parallel pass over the ring would need before
-    moving on to the next step. That's what makes "after m steps [m = ring size]
-    there's only one [survivor]" a real guarantee: a candidate can move at most one
-    edge per call, regardless of iteration order.
-
-    For the current item A (a = A's unique_id, at position (i, j)) and its linked
-    item B (B = map_of_squares[next(iter(A.forces))], an arbitrary but - for the
-    duration of one call - stable pick since .forces isn't mutated mid-call):
-
-    - If either A or B already has a real centrality, this pair isn't part of a
-      pure ring (it's on a tree or a tadpole's tail) - max_id has no meaning there,
-      so any max_id already sitting on either one is cleared back to -1.
-
-    - gen == 0 (seed): every item sends its own identity one step along the ring -
-      B.max_id = a. From here, that value either gets deleted somewhere along the
-      way, or survives a full lap and lands back on the item it started from.
-
-    - gen > 0, once A actually has a candidate sitting on it (A.max_id != -1),
-      A compares that candidate against its own identity a:
-        * a > A.max_id: A's own identity beats the incoming candidate - it dies,
-          A.max_id is cleared.
-        * a == A.max_id: the candidate is exactly A's own id, having survived a
-          full lap of the ring back to where it started. Because every smaller
-          candidate gets deleted somewhere along the way (a node with a bigger id
-          is always encountered eventually), only the true maximum's own candidate
-          can ever come back around - so this is the leader, confirmed. A.forces is
-          cleared, opening the ring right here: A becomes an ordinary terminal
-          (something points at it, it points at nothing), which is exactly what
-          find_central_patch_items needs to seed centrality/path_id from - once
-          called again after the ring has been opened. Clearing A.forces also
-          retracts A's own position from the .forced_by of each item A used to
-          point at (see SquareItem.forced_by), so nothing downstream still lists A
-          as a forcer it no longer is.
-        * A.max_id > a: the candidate is still ahead of A - A does not beat it, so
-          it moves on: A.max_id is cleared and B.max_id takes the value A had.
-    """
-    rows, cols = map_of_squares.shape
-    resets = []
-    seeds = []
-    cuts = []
-    propagations = []
-
-    for i in range(1, rows - 1):
-        for j in range(1, cols - 1):
-            A = map_of_squares[i, j]
-            if not (A.alert_chosen and A.forces):
-                continue
-            B = map_of_squares[next(iter(A.forces))]
-
-            if A.centrality != -1 or B.centrality != -1:
-                if A.max_id != -1:
-                    resets.append(A)
-                if B.max_id != -1:
-                    resets.append(B)
-                continue
-
-            a = unique_id((i,j), (rows, cols))
-
-            if gen == 0:
-                seeds.append((B, a))
-                continue
-
-            if A.max_id == -1:
-                continue
-
-            if a > A.max_id:
-                resets.append(A)
-            elif a == A.max_id:
-                cuts.append((i, j, A))
-            else:  # A.max_id > a
-                resets.append(A)
-                propagations.append((B, A.max_id))
-
-    for target in resets:
-        target.max_id = -1
-    for target, value in seeds:
-        target.max_id = value
-    for i, j, target in cuts:
-        for old_force in target.forces:
-            old_force_item = map_of_squares[old_force]
-            old_force_item.forced_by.discard((i, j))
-        target.forces = set()
-    for target, value in propagations:
-        target.max_id = value
-
-
 def propagate_path_id_from_entries(map_of_squares):
     """
     Union every self-seeded item's path_id forward, via .forces, into
@@ -767,39 +508,6 @@ def assign_paths(map_of_squares):
     propagate_path_id_from_entries(map_of_squares)
 
 
-def resolve_cycles_and_centrality(m, max_gens=20):
-    """
-    Run find_cycle_patches then find_central_patch_items to convergence on m,
-    then propagate_path_id_from_entries, in place.
-
-    Inputs: none of its own - delegates entirely to find_cycle_patches,
-    find_central_patch_items, and propagate_path_id_from_entries.
-
-    Outputs: same as those three, applied in sequence; returns None.
-
-    Scope: global - orchestrates two generation-based local-global mechanisms
-    plus one explicit whole-graph walk.
-
-    -------------------------------------------------------------------------
-
-    Fails for some graph types - parts of the graph will not be discovered.
-
-    find_cycle_patches doesn't report whether it changed anything (unlike
-    find_central_patch_items), so it's simply called a generous, fixed number of
-    times (max_gens) rather than looped to a real convergence check - a
-    stopgap, not a guarantee, matching this whole workaround's "lazy for now"
-    scope.
-    """
-    for gen in range(max_gens):
-        find_cycle_patches(m, gen)
-
-    gen = 0
-    while find_central_patch_items(m, gen):
-        gen += 1
-
-    propagate_path_id_from_entries(m)
-
-
 def forced_closure(map_of_squares, position):
     """
     position itself, plus every position transitively forced by its own
@@ -826,9 +534,9 @@ def forced_closure(map_of_squares, position):
     one: an item can force more than one other at once (see .forces'
     docstring), and only following a single arbitrary entry would silently
     drop a real obligation. Makes no
-    assumption that find_cycle_patches has already run - a forces chain can
-    still loop back on itself at this stage - so each position is only ever
-    visited once.
+    assumption that a pure .forces cycle has been broken anywhere else - a
+    forces chain can still loop back on itself - so each position is only
+    ever visited once.
 
     A pure read - does not place anything itself. The caller places every
     position in the result, position included (see place_squares) - every
@@ -883,7 +591,7 @@ def get_blocked_links(m):
     for any pair sharing an id where at least one side is free, that pair
     gets caught from whichever side is free, regardless of the other side's
     state. In every current call site, a non-empty .path_id already implies
-    free anyway - reset_alert_bookkeeping clears .path_id unconditionally, and
+    free anyway - clear_all_but_state clears .path_id unconditionally, and
     nothing changes any cell's .state between assign_paths and this function
     running - so this symmetry isn't actually exercised on a non-free A today.
     It costs nothing to leave the check out rather than assume that, though:
@@ -895,7 +603,7 @@ def get_blocked_links(m):
     Two diagonal neighbours that are both already permanently blocked, and
     happen to share an id, are invisible to this function regardless of the
     change above - neither can ever satisfy "shares an id AND its partner is
-    free", from either side. (Given reset_alert_bookkeeping's unconditional
+    free", from either side. (Given clear_all_but_state's unconditional
     clear, this specific pair is also currently unreachable in practice, for
     the same reason noted above - but that's an artifact of today's call
     sequence, not a structural guarantee.) Whether that pair should count as a
@@ -948,39 +656,42 @@ def get_blocked_links(m):
 def set_blocked_links(m, p):
     """
     Set every cell whose own unique_id is in p (see get_blocked_links) to
-    StateEnum.blocked_tmp - the origin cell of each self-contradicting path,
-    not every cell that happens to carry one of its ids downstream - and
-    clean up both consequences of p being self-contradicting.
+    StateEnum.blocked, with its .blocked_tmp flag raised to mark it as the
+    origin of a self-contradicting path - not every cell that happens to
+    carry one of its ids downstream - and clean up both consequences of p
+    being self-contradicting.
 
     Inputs: reads p (a global set of ids, from get_blocked_links) against
     every cell's position, plus .path_id (to subtract p from), and .forces/
     .forced_by of every flagged cell and of everything they point to or are
-    pointed from. 
+    pointed from.
 
-    Outputs: writes .state (free->blocked_tmp on flagged cells) - a state
-    change to chosen/blocked/blocked_tmp goes with deleting that cell's own
-    .path_id and .forces/.forced_by, so that part needs no separate mention.
-    Distinct from that: subtracts p from every cell's .path_id map-wide,
-    including cells that never change state at all - that part is a real,
-    separate effect this function has. Returns None.
+    Outputs: writes .state (free->blocked on flagged cells) and .blocked_tmp
+    (False->True on the same cells) - a state change to chosen/blocked goes
+    with deleting that cell's own .path_id and .forces/.forced_by, so that
+    part needs no separate mention. Distinct from that: subtracts p from
+    every cell's .path_id map-wide, including cells that never change state
+    at all - that part is a real, separate effect this function has. Returns
+    None.
 
     Scope: global - p is itself a whole-board-scope value with no positional
     information, so resolving which cells it names requires scanning every
     cell against it (see get_blocked_links's own "Flagged for rewrite" note).
 
     -------------------------------------------------------------------------
-    
+
     First, every cell's own path_id has every id in p removed, regardless of
-    whether that cell itself ends up blocked_tmp: a self-contradicting path
+    whether that cell itself ends up flagged: a self-contradicting path
     is broken, so nothing should still claim membership in it.
 
-    Then, every newly-marked cell has its .forces/.forced_by cleared
+    Then, every newly-flagged cell has its .forces/.forced_by cleared
     entirely: retracted from every other
     item's .forces/.forced_by first, so nothing downstream is left pointing
     at or from a role this cell no longer plays, then its own two sets
-    emptied. A blocked_tmp cell ends up structurally indistinguishable from a
-    genuinely StateEnum.blocked one - no dangling links - just a different
-    .state value so display/debugging can still tell the two apart.
+    emptied. Once that's done, a .blocked_tmp cell is structurally
+    indistinguishable from a cell that was always blocked - no dangling
+    links, real StateEnum.blocked .state already in place - .blocked_tmp is
+    purely an extra marker so display/debugging can still tell the two apart.
 
     Snapshot-then-apply for the marking step, same reason as
     get_blocked_links's own docstring: which cells qualify is decided by
@@ -999,7 +710,8 @@ def set_blocked_links(m, p):
     for i in range(rows):
         for j in range(cols):
             if unique_id((i, j), (rows, cols)) in p:
-                m[i, j].state = StateEnum.blocked_tmp
+                m[i, j].blocked_tmp = True
+                m[i, j].state = StateEnum.blocked
                 to_clear.append((i, j))
 
     for pos in to_clear:
@@ -1012,38 +724,11 @@ def set_blocked_links(m, p):
         item.forced_by = set()
 
 
-def finalize_blocked_tmp(m):
-    """
-    Convert every StateEnum.blocked_tmp cell to StateEnum.blocked.
-
-    Inputs: reads .state of every cell.
-
-    Outputs: writes .state (blocked_tmp->blocked); returns None.
-
-    Scope: local - a pure per-cell transformation, no cross-cell read at all.
-
-    -------------------------------------------------------------------------
-
-    set_blocked_links's own marking is provisional - "tmp" in the name is
-    literal, it's a working flag for whatever inspects/reacts to a
-    self-contradicting path, not a final verdict. Once nothing further is
-    going to change based on that flag, this makes it permanent: a
-    blocked_tmp cell already has empty .forces/.forced_by (set_blocked_links
-    cleared those), so by this point the only thing distinguishing it from a
-    cell that was always blocked is the .state value itself.
-    """
-    rows, cols = m.shape
-    for i in range(rows):
-        for j in range(cols):
-            if m[i, j].state == StateEnum.blocked_tmp:
-                m[i, j].state = StateEnum.blocked
-
-
 def do_closure(m, title, show=False, margin=None):
     """
     Run one full round of the closure pipeline, twice (see below for why
     twice), in place: find_alerts_set_links, assign_paths, get_blocked_links/
-    set_blocked_links, finalize_blocked_tmp, place_square_in_seat_closed.
+    set_blocked_links, place_square_in_seat_closed.
 
     Inputs: none of its own - delegates entirely to the stages it calls, in
     sequence.
@@ -1060,7 +745,7 @@ def do_closure(m, title, show=False, margin=None):
     -- Flagged for rewrite: cell-by-cell Python loops, not GPU-style tiles --
     Every stage this orchestrates (find_alerts_set_links, assign_paths,
     get_blocked_links, set_blocked_links, place_square_in_seat,
-    check_tiling_invariant, reset_alert_bookkeeping) is its own independent `for i in
+    check_tiling_invariant, clear_all_but_state) is its own independent `for i in
     range(rows): for j in range(cols):` scan over every cell in plain Python.
     image_to_squares.py's insert_tile/image_squares_select_single already
     show the shape this should take instead - one "kernel call" per disjoint
@@ -1086,29 +771,31 @@ def do_closure(m, title, show=False, margin=None):
     diagonal-chosen conflict can still be present on a show=False run, just
     undetected by do_closure itself either way.
 
-    finalize_blocked_tmp and place_square_in_seat_closed both follow
-    set_blocked_links because a cell get_blocked_links flags is a genuine, permanent impossibility (see
+    place_square_in_seat_closed follows set_blocked_links because a cell
+    get_blocked_links flags is a genuine, permanent impossibility (see
     test_get_and_set_blocked_links_marks_blocked_tmp's (5, 2) case - blocked
     on path_id grounds alone, with no diagonal-blocking neighbour to ever
-    give it away locally), so blocked_tmp is finalized to a real
-    StateEnum.blocked immediately, and place_square_in_seat_closed then fills
-    in whatever seats that newly-permanent blocking completes - some of those
-    same cells turn out to also be locally confirmed this way, but that's a
-    bonus, not a requirement: the ones that aren't (like (5, 2)) are exactly
-    the point of doing this at all.
+    give it away locally) - set_blocked_links already writes the real
+    StateEnum.blocked immediately (.blocked_tmp is just a marker alongside
+    it, not a separate pending state), so place_square_in_seat_closed can
+    fill in whatever seats that newly-permanent blocking completes right
+    away, no finalization step needed in between. Some of those same cells
+    turn out to also be locally confirmed this way, but that's a bonus, not a
+    requirement: the ones that aren't (like (5, 2)) are exactly the point of
+    doing this at all.
 
     Runs the whole sequence twice: once with the optional display (so a
     caller sees the board after this round's own discoveries, before the
     next round's bookkeeping reset clears the alert/path state that produced
-    them), then once more, silently, after reset_alert_bookkeeping - so that a
+    them), then once more, silently, after clear_all_but_state - so that a
     round placing more than one square at once still gets a fully
     re-evaluated alert/link/path pass before it settles.
 
     check_tiling_invariant runs once, at the very end, after both rounds,
     raising loudly (InvalidTilingError) rather than leaving an impossible
     2x2-all-blocked board go unnoticed. Confirmed this can actually
-    happen: finalize_blocked_tmp/place_square_in_seat_closed can complete
-    several seats in one batch (place_square_in_seat_closed's own scan-then-
+    happen: place_square_in_seat_closed can complete
+    several seats in one batch (its own scan-then-
     place-all-at-once discipline) without the per-placement re-scan that
     would otherwise catch a forming pinwheel - see the (2, 2)/(2, 3)/(3, 2)/
     (3, 3) case surfaced by test_margin_free_5x5realmap's very first round.
@@ -1116,7 +803,6 @@ def do_closure(m, title, show=False, margin=None):
     find_alerts_set_links(m)
     assign_paths(m)
     set_blocked_links(m, get_blocked_links(m))
-    finalize_blocked_tmp(m)
     place_square_in_seat_closed(m)
     if show:
         colormap = np.zeros((*m.shape, 3))
@@ -1126,10 +812,9 @@ def do_closure(m, title, show=False, margin=None):
             raise InvalidTilingError(
                 f"{title}: real_space_map found a diagonal-chosen conflict - "
                 f"see the map_of_squares panel just shown for which cells")
-    reset_alert_bookkeeping(m)
+    clear_all_but_state(m)
     find_alerts_set_links(m)
     assign_paths(m)
     set_blocked_links(m, get_blocked_links(m))
-    finalize_blocked_tmp(m)
     place_square_in_seat_closed(m)
     check_tiling_invariant(m)

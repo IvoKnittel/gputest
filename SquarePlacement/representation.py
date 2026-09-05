@@ -47,10 +47,10 @@ def build_free_margin_map(n):
     interest just sits centred with a FREE_MARGIN_PADDING-cell buffer of
     ordinary free cells on every side.
 
-    find_alerts_set_links/find_central_patch_items/find_cycle_patches all skip the
+    find_alerts_set_links skips the
     array's own outermost ring (range(1, rows - 1)), so an n x n region
     placed flush against the real array boundary would leave its own edge
-    cells invisible to them. A 1-cell buffer would fix that for the region
+    cells invisible to it. A 1-cell buffer would fix that for the region
     itself, but not for the buffer ring immediately around it - if the
     region's own edge ever forces a buffer cell into the graph, that cell
     needs to be examined too, which needs its own neighbours in loop bounds.
@@ -212,19 +212,17 @@ def place_blocked_squares(map_of_squares, positions):
 # display
 
 def display_map_of_squares_3States(map_of_squares):
-    """Collapse each cell's .state into a display value: chosen=1, blocked=-1,
-    blocked_tmp=2, free=0."""
+    """Collapse each cell's .state (plus .blocked_tmp) into a display value:
+    chosen=1, blocked=-1, blocked (with .blocked_tmp raised)=2, free=0."""
     rows, cols = map_of_squares.shape
     display = np.zeros((rows, cols), dtype=float)
     for i in range(rows):
         for j in range(cols):
-            state = map_of_squares[i, j].state
-            if state == StateEnum.chosen:
+            item = map_of_squares[i, j]
+            if item.state == StateEnum.chosen:
                 display[i, j] = 1.0
-            elif state == StateEnum.blocked:
-                display[i, j] = -1.0
-            elif state == StateEnum.blocked_tmp:
-                display[i, j] = 2.0
+            elif item.state == StateEnum.blocked:
+                display[i, j] = 2.0 if item.blocked_tmp else -1.0
     return display
 
 
@@ -396,15 +394,15 @@ def colorize_with_alerts(map_of_squares):
     alert flags are visible on top of, rather than instead of, the underlying
     placement state.
 
-    StateEnum.blocked_tmp is the one exception: closure.set_blocked_links
-    sets it without clearing whatever .alert_chosen/.alert_blocked a cell
-    was still carrying from find_alerts_set_links (do_closure doesn't call
-    reset_alert_bookkeeping until after its own display), so a blocked_tmp
-    cell can easily still have both flags raised - the overlay would then
-    paint ALERT_BOTH_COLOR (green) squarely over what should read as
-    blocked_tmp's red, hiding a real .state behind stale alert bookkeeping.
-    blocked_tmp is excluded from the overlay entirely so it always shows
-    through.
+    A cell with its .blocked_tmp flag raised is the one exception:
+    closure.set_blocked_links sets that flag (alongside .state =
+    StateEnum.blocked) without clearing whatever .alert_chosen/.alert_blocked
+    a cell was still carrying from find_alerts_set_links (do_closure doesn't
+    call clear_all_but_state until after its own display), so such a cell can
+    easily still have both flags raised - the overlay would then paint
+    ALERT_BOTH_COLOR (green) squarely over what should read as blocked_tmp's
+    red, hiding a real .state behind stale alert bookkeeping. A .blocked_tmp
+    cell is excluded from the overlay entirely so it always shows through.
     """
     state_display = display_map_of_squares_3States(map_of_squares)
     rgb = colorize(state_display, {0: FREE_COLOR, 1: CHOSEN_COLOR, -1: BLOCKED_COLOR,
@@ -462,8 +460,7 @@ def display_closure_step(m, title, show_links=False, show_real=False,
 
     show_entries_terminals=True additionally draws a filled dot on every cell
     that is a terminal or an entry: blue for a terminal (item.alert_chosen and
-    not item.forces - nothing left for it to force, the same condition
-    find_central_patch_items uses to seed its walk, evaluated directly on
+    not item.forces - nothing left for it to force - evaluated directly on
     every cell here rather than only on cells reached via someone else's
     .forces) and red for an entry (item.forces and not item.forced_by -
     nothing forces this item, but it forces something onward - evaluated on

@@ -2,7 +2,7 @@ import numpy as np
 
 from map_of_squares import StateEnum
 from representation import map_of_squares_from_array, place_blocked_squares, display_closure_step
-from closure import reset_alert_bookkeeping, find_alerts_set_links, assign_paths, get_blocked_links, set_blocked_links, finalize_blocked_tmp, place_square_in_seat_closed, check_tiling_invariant, do_closure
+from closure import clear_all_but_state, find_alerts_set_links, assign_paths, get_blocked_links, set_blocked_links, place_square_in_seat_closed, check_tiling_invariant, do_closure
 
 def test_two_forced_cells_block_each_other():
     """A 12x12 map: a 1-cell blocked margin wrapped around the 10x10 area that used
@@ -57,7 +57,6 @@ def test_two_forced_cells_block_each_other():
     assign_paths(m)
 
     set_blocked_links(m, get_blocked_links(m))
-    finalize_blocked_tmp(m)
 
     place_square_in_seat_closed(m)
     # The two hand-placed dominoes survive, plus five seats that newly-
@@ -72,7 +71,7 @@ def test_two_forced_cells_block_each_other():
     display_closure_step(m, 'after', show_links=True, show_real=True, colormap=colormap)
 
     state_before_redo = [[m[i, j].state for j in range(size)] for i in range(size)]
-    reset_alert_bookkeeping(m)
+    clear_all_but_state(m)
 
     find_alerts_set_links(m)
     assign_paths(m)
@@ -81,7 +80,6 @@ def test_two_forced_cells_block_each_other():
     # clean bookkeeping slate finds no further contradictions.
     assert p2 == set()
     set_blocked_links(m, p2)
-    finalize_blocked_tmp(m)
     place_square_in_seat_closed(m)
 
     state_after_redo = [[m[i, j].state for j in range(size)] for i in range(size)]
@@ -100,7 +98,7 @@ def test_get_and_set_blocked_links_marks_blocked_tmp():
     assign_paths, do_closure's own order) - calling get_blocked_links straight
     after find_alerts_set_links, without assign_paths in between, leaves every path_id
     empty and returns an empty set too, not because nothing is wrong but
-    because there was nothing yet for it to check. Every StateEnum.blocked_tmp
+    because there was nothing yet for it to check. Every .blocked_tmp-flagged
     cell shows up red.
 
     get_blocked_links(m) returns {26, 33, 62, 64, 90, 117} - six
@@ -109,8 +107,10 @@ def test_get_and_set_blocked_links_marks_blocked_tmp():
     unique_id, shared with one of its own free diagonal neighbours: e.g. 64
     is (5, 4)'s own id - one of its diagonal neighbours ((4, 5), (6, 5), or
     (6, 3), all three) carries 64 too, so choosing (5, 4) would block a
-    fellow member of its own path. set_blocked_links then marks each id's
-    origin cell (the one whose own unique_id it is) blocked_tmp:
+    fellow member of its own path. set_blocked_links then flags each id's
+    origin cell (the one whose own unique_id it is) .blocked_tmp, and sets
+    its .state to the real StateEnum.blocked right there, no separate
+    finalization step needed:
     (2, 2), (2, 9), (5, 2), (5, 4), (7, 6), (9, 9) - clears every one of
     those six cells' own .forces/.forced_by so they end up structurally
     indistinguishable from a genuinely blocked cell, retracts them from
@@ -154,10 +154,11 @@ def test_get_and_set_blocked_links_marks_blocked_tmp():
     set_blocked_links(m, p)
 
     blocked_tmp = {(i, j) for i in range(size) for j in range(size)
-                   if m[i, j].state == StateEnum.blocked_tmp}
+                   if m[i, j].blocked_tmp}
     assert blocked_tmp == {(2, 2), (2, 9), (5, 2), (5, 4), (7, 6), (9, 9)}
 
     for pos in blocked_tmp:
+        assert m[pos].state == StateEnum.blocked
         assert m[pos].forces == set()
         assert m[pos].forced_by == set()
 
@@ -175,15 +176,11 @@ def test_get_and_set_blocked_links_marks_blocked_tmp():
     display_closure_step(m, 'get_blocked_links/set_blocked_links: blocked_tmp in red',
                           show_links=True, show_real=True, colormap=colormap)
 
-    # 1. blocked_tmp is provisional - make it permanent now that nothing
-    # further will change based on the flag.
-    finalize_blocked_tmp(m)
-    assert not any(m[i, j].state == StateEnum.blocked_tmp
-                   for i in range(size) for j in range(size))
-
-    # 2-3. find every seat (three corners blocked, one free) that a newly-
-    # permanent blocked cell may have completed, and place a square there -
-    # place_square_in_seat_closed does both, looped to a fixed point.
+    # set_blocked_links already wrote the real StateEnum.blocked on each of
+    # these six cells above, no separate finalization step needed - so this
+    # just finds every seat (three corners blocked, one free) that a newly-
+    # permanent blocked cell may have completed, and places a square there,
+    # looped to a fixed point.
     place_square_in_seat_closed(m)
 
     # (5, 2) is the one self-contradicting cell with no local corroboration
@@ -201,5 +198,5 @@ def test_get_and_set_blocked_links_marks_blocked_tmp():
 
     # 4. clear every round's worth of stale bookkeeping and run the real
     # pipeline again from scratch on the resulting board.
-    reset_alert_bookkeeping(m)
-    do_closure(m, 'after finalizing blocked_tmp and filling seats', show=True)
+    clear_all_but_state(m)
+    do_closure(m, 'after blocking self-contradicting cells and filling seats', show=True)

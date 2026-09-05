@@ -11,7 +11,6 @@ class StateEnum(Enum):
     free = 0
     chosen = 1
     blocked = 2
-    blocked_tmp = 3
 
 
 @dataclass
@@ -20,6 +19,13 @@ class SquareItem:
 
     quality:    score used to rank candidate placements.
     state:      current placement state (free / chosen / blocked).
+    blocked_tmp: True on a cell closure.set_blocked_links has flagged as the
+                origin of a self-contradicting path. Not a distinct state -
+                .state is already the real StateEnum.blocked the moment this
+                is set (see set_blocked_links) - just a marker so display can
+                colour a genuine-but-just-discovered block differently from
+                one that was always blocked. Cleared back to False by
+                closure.clear_all_but_state, along with everything else.
     alert_chosen:  raised by a neighbouring tile's placement pass instead of writing
                    .state directly; resolved into real state via forced_closure +
                    place_squares (see test_utils.place_and_chase).
@@ -38,8 +44,9 @@ class SquareItem:
                 neighbour of several different alert_blocked centres at once (see
                 test_complex_graphs.test_tree_fan_out), or a single centre can have
                 more than one corner of its own - and none of them should be
-                silently discarded in favour of another. A cut (find_central_patch_items,
-                find_cycle_patches) clears this back to set(), severing the pairing
+                silently discarded in favour of another. set_blocked_links is
+                the only place this gets cut back to set() now, when setting a
+                cell's .blocked_tmp flag, severing the pairing
                 entirely. Where code needs just one representative target (e.g. to
                 walk a single chain for display, or to check "does this reach a
                 terminal") it takes an arbitrary entry (next(iter(...))) - stable for
@@ -50,38 +57,32 @@ class SquareItem:
                 alongside it wherever a .forces entry is created (set_alert_chosen_set_links,
                 representation.set_link) so it's always available without
                 needing a separate reversed copy of the map to look it up.
-                Also a set, for the same reason .forces is. A .forces cut
-                (find_central_patch_items, find_cycle_patches) does not retract,
-                though - a stale entry can still be left behind that way.
+                Also a set, for the same reason .forces is. set_blocked_links
+                retracts both directions when it cuts .forces: the cut cell's
+                own .forced_by is cleared too, and it's removed from every one
+                of its former forcers' .forces sets, not just the targets it
+                used to force.
     centrality: distance, in .forces hops, from this item's chain to the closest
-                terminal (no-.forces) item of its patch; assigned by
-                closure.find_central_patch_items one generation at a time, -1
-                while unassigned.
-    path_id:    ids of every patch this item belongs to. A "patch" is a connected
-                group of alert_chosen items linked together - our actual
-                building block once seats start linking squares together, as
-                opposed to a lone square. An item can belong to more than one
-                patch at once (see closure.find_central_patch_items's merge
-                step), so this is a set, not a single scalar. Seeded at a
-                terminal with a singleton set holding its own flattened index;
-                every other item picks its own up by checking its .forces
-                targets - the causal, forward direction - one generation at a
-                time (closure.find_central_patch_items); empty set() while
-                unassigned to any patch. Two patches merging get reconciled by
-                unioning their two id sets together; a patch looping back on
-                its own id instead has its closing .forces cut, so cycles
-                don't propagate forever.
+                terminal (no-.forces) item of its patch - part of a separate
+                centrality/path_id mechanism from the one path_id (below)
+                actually uses; currently unused, since find_central_patch_items,
+                its only writer, has been removed. -1 while unassigned.
+    path_id:    ids of every group of connected alert_chosen items (linked via
+                .forces) this item belongs to - our actual building block once
+                seats start linking squares together, as opposed to a lone
+                square. An item can belong to more than one such group at once,
+                so this is a set, not a single scalar. Seeded by
+                closure.assign_paths at every "entry" (an item with .forces but
+                no .forced_by - nothing causes it) and at every genuine
+                diagonal-blocking pair site, then unioned forward along .forces
+                by closure.propagate_path_id_from_entries; empty set() while
+                unassigned to any group. Two groups merging at some item get
+                reconciled by unioning their two id sets together.
     max_id:     candidate for the largest flattened index among a pure ring's
-                members (one with no terminal anywhere, so centrality/path_id
-                never reach it) - used by closure.find_cycle_patches as a
-                parallel-safe way to agree on a single break point without
-                relying on processing order; -1 while unassigned, and reset
-                back to -1 as soon as this item (or the item it forces) gets a
-                real centrality, since max_id has no meaning outside a pure ring.
-                A single scalar, so more than one item pointing at this one via
-                .forces at once (see .forces above)
-                can still have one candidate crowd out another here - see the
-                "Known gap" note on find_cycle_patches.
+                members - part of the same now-removed centrality/path_id
+                mechanism as .centrality (find_cycle_patches was its only
+                reader/writer, and has itself been removed); currently unused.
+                -1 while unassigned.
     rectangle:  (row, col) index of the direct neighbour this item has been
                 paired with into a domino, or (-1, -1) while unpaired. Set by
                 set_square_chosen: when an item is chosen, the first direct
@@ -93,6 +94,7 @@ class SquareItem:
     """
     quality: float = -1.0
     state: StateEnum = StateEnum.free
+    blocked_tmp: bool = False
     alert_chosen: bool = False
     alert_blocked: bool = False
     forces: set = field(default_factory=set)
