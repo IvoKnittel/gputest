@@ -177,25 +177,19 @@ def find_secondary_links(map_of_squares):
 
 def clear_all_but_state(map_of_squares):
     """
-    Clear every cell's .blocked_tmp, .alert_blocked, .alert_chosen, .forces,
-    .forced_by, .centrality, .path_id, and .max_id back to their defaults
-    (False, False, False, set(), set(), -1, set(), -1), map-wide,
-    unconditionally - .state is the only field that starts a round and
-    survives it; everything else is derived fresh from .state each round, so
-    nothing else should carry over. This is what lets find_alerts_set_links/
-    assign_paths run from a clean slate instead of layering new results on
-    top of whatever an earlier round left behind, and it's also the only
-    place .blocked_tmp ever gets cleared: set_blocked_links's own .state
-    write is already permanent the moment it happens (see its docstring), so
-    clearing the flag here is bookkeeping cleanup, not a second finalization
-    step - nothing needs to convert .state from anything to anything else.
+    Clear every cell's .alert_blocked, .alert_chosen, .forces, .forced_by,
+    and .path_id back to their defaults (False, False, set(), set(), set()),
+    map-wide, unconditionally - .state is the only field that starts a round
+    and survives it; everything else is derived fresh from .state each
+    round, so nothing else should carry over. This is what lets
+    find_alerts_set_links/assign_paths run from a clean slate instead of
+    layering new results on top of whatever an earlier round left behind.
 
     Inputs: none - every field is cleared to a fixed default, regardless of
     .state or anything else already on the cell.
 
-    Outputs: writes .blocked_tmp, .alert_blocked, .alert_chosen, .forces,
-    .forced_by, .centrality, .path_id, and .max_id on every cell,
-    unconditionally; returns None.
+    Outputs: writes .alert_blocked, .alert_chosen, .forces, .forced_by, and
+    .path_id on every cell, unconditionally; returns None.
 
     Scope: local - a pure per-cell reset, no cross-cell read at all.
 
@@ -218,26 +212,16 @@ def clear_all_but_state(map_of_squares):
     state in the same round, so the safe thing is to recompute every cell's
     alert bookkeeping from the current board state, not just the newly-placed
     ones.
-
-    .centrality and .max_id are both currently dead: they belonged to a
-    separate centrality/path_id mechanism (find_central_patch_items,
-    find_cycle_patches) that has since been removed entirely, and nothing
-    else in the codebase writes or reads either field. Cleared here anyway,
-    same as everything else: a reset should not leave any field depending on
-    what happened to be true before it ran.
     """
     rows, cols = map_of_squares.shape
     for i in range(rows):
         for j in range(cols):
             item = map_of_squares[i, j]
-            item.blocked_tmp = False
             item.alert_blocked = False
             item.alert_chosen = False
             item.forces = set()
             item.forced_by = set()
-            item.centrality = -1
             item.path_id = set()
-            item.max_id = -1
 
 
 def check_tiling_invariant(map_of_squares):
@@ -361,8 +345,8 @@ def place_square_in_seat(map_of_squares):
     are mutually diagonal - shouldn't be reachable in the first place: this
     function's own docstring already flags it as "independent of .alert_chosen
     bookkeeping", i.e. it bypasses the whole find_alerts_set_links/assign_paths/
-    get_blocked_links/set_blocked_links promise-and-contradiction system (see
-    get_blocked_links's docstring) that exists specifically to catch a
+    get_blocked_links/dissolve_blocked_paths promise-and-contradiction system
+    (see get_blocked_links's docstring) that exists specifically to catch a
     self-contradicting pair *before* it calcifies into two simultaneously-forced
     cells. The real fix belongs upstream of this function, not inside it - not
     attempted here.
@@ -593,7 +577,7 @@ def forced_closure(map_of_squares, position):
     -------------------------------------------------------------------------
 
     This is the "actually commit to it" counterpart to find_alerts_set_links/
-    get_blocked_links/set_blocked_links, which only ever *record* what
+    get_blocked_links/dissolve_blocked_paths, which only ever *record* what
     choosing an item would oblige - nothing before this walks the recorded
     chain to say which positions that obligation actually reaches. Follows
     every entry in .forces, not just
@@ -647,8 +631,8 @@ def get_blocked_links(m):
     path. Every id any cell's own S contributes goes into the one set this
     function returns, regardless of how many different cells separately flag
     it - so the result names which paths are contradictory, not which cells
-    witnessed the contradiction (see set_blocked_links for what happens with
-    that set).
+    witnessed the contradiction (see dissolve_blocked_paths for what happens
+    with that set).
 
     The neighbour side has no .state check, only a .path_id check - deliberate,
     not a simplification that changes what this function is documented to
@@ -681,12 +665,12 @@ def get_blocked_links(m):
     side effect. Not attempted here.
 
     A pure read - .path_id/.state are only ever looked at, never written, so
-    unlike set_blocked_links this needs no snapshot-then-apply discipline of
-    its own: nothing here can invalidate an earlier read.
+    this needs no snapshot-then-apply discipline of its own: nothing here
+    can invalidate an earlier read.
 
     -- Flagged for rewrite: global id set + a second full-grid scan to match it --
     This function's whole output is a set of ids with no positional
-    information; set_blocked_links then has to re-scan every cell
+    information; dissolve_blocked_paths then has to re-scan every cell
     (`unique_id((i, j), ...) in p`) just to find which cells those ids
     actually belong to. That round trip through unique_id/a global set
     works, but it's not in place: propagating
@@ -694,11 +678,14 @@ def get_blocked_links(m):
     (the same links assign_paths/propagate_path_id_from_entries already walk)
     instead of round-tripping through a global id set would let get_blocked_links
     mark the origin cells itself, with no second grid-wide scan needed. Not
-    done yet: noted here as a target, not attempted.
+    done yet: noted here as a target, not attempted - the blocked_paths
+    mechanism below (seed_blocked_paths/apply_blocked_paths/
+    propagate_blocked_tmp_closed) is a first attempt at exactly that
+    rewrite, kept separate rather than replacing this pipeline outright.
 
     Also flagged for rewrite: this global id vector, as get_blocked_links's
-    output and set_blocked_links's input, breaks the GPU/tile computing model
-    do_closure's own "Flagged for rewrite" note aims for.
+    output and dissolve_blocked_paths's input, breaks the GPU/tile computing
+    model do_closure's own "Flagged for rewrite" note aims for.
     """
     rows, cols = m.shape
     p = set()
@@ -719,84 +706,66 @@ def get_blocked_links(m):
     return p
 
 
-def set_blocked_links(m, p):
-    """
-    Set every cell whose own unique_id is in p (see get_blocked_links) to
-    StateEnum.blocked, with its .blocked_tmp flag raised to mark it as the
-    origin of a self-contradicting path - not every cell that happens to
-    carry one of its ids downstream - and clean up both consequences of p
-    being self-contradicting.
+def dissolve_blocked_paths(m, p):
+    """Block the one cell per id in p - the cell whose own position hashes to
+    that id via unique_id - and do nothing else. No eager .path_id stripping
+    across the rest of the board, no .forces/.forced_by retraction.
 
-    Inputs: reads p (a global set of ids, from get_blocked_links) against
-    every cell's position, plus .path_id (to subtract p from), and .forces/
-    .forced_by of every flagged cell and of everything they point to or are
-    pointed from.
+    Motivation: that cell was, in the case that actually matters (seeded via
+    assign_paths' "genuine diagonal-blocking pair" rule - .forced_by nonempty
+    and a diagonal neighbour that's independently forced too), itself
+    alert_chosen - the free corner of some other centre's near-seat. Blocking
+    it is then exactly the same move that centre's own alert_blocked flag was
+    already anticipating: one more corner of that 2x2 block goes from free to
+    blocked, which - if that was the block's last free corner besides this
+    one - turns it into a real seat on the spot, for do_closure's very next
+    step (place_square_in_seat_closed) to find and fill, no different in
+    kind from any other seat that step handles. Whatever this leaves
+    dangling (this cell's own now-meaningless .forces/.forced_by, every
+    other cell's now-stale copy of one of these ids in its own .path_id) is
+    picked up for free by do_closure's own second round: clear_all_but_state
+    wipes all of it, and the fresh find_alerts_set_links/assign_paths pass
+    that follows re-derives everything from the current .state alone, in
+    which this cell - no longer free - simply drops out of consideration
+    entirely, the same way any other already-blocked cell does.
 
-    Outputs: writes .state (free->blocked on flagged cells) and .blocked_tmp
-    (False->True on the same cells) - a state change to chosen/blocked goes
-    with deleting that cell's own .path_id and .forces/.forced_by, so that
-    part needs no separate mention. Distinct from that: subtracts p from
-    every cell's .path_id map-wide, including cells that never change state
-    at all - that part is a real, separate effect this function has. Returns
-    None.
+    Caveat this function doesn't resolve on its own: a cell seeded via
+    assign_paths' OTHER rule (a plain multi-target "entry" - .forces
+    nonempty, .forced_by EMPTY by definition) is not alert_chosen (alert_chosen
+    is only ever set alongside a .forced_by entry) - the "this must create a
+    seat" argument above doesn't apply to it. Concretely: (5, 2) in
+    test_get_and_set_blocked_links_marks_blocked_tmp is documented, in that
+    test's own docstring, as exactly this - no new seat borders it. Confirmed
+    empirically that do_closure's second-round re-derivation fully accounts
+    for it anyway: run both ways (full do_closure, this function vs. the
+    original get_blocked_links/set_blocked_links pipeline it replaced) on
+    that same board, the two runs end in byte-identical final states,
+    including (5, 2) itself.
 
-    Scope: global - p is itself a whole-board-scope value with no positional
-    information, so resolving which cells it names requires scanning every
-    cell against it (see get_blocked_links's own "Flagged for rewrite" note).
+    Inputs: reads p (a set of ids, from get_blocked_links) against every
+    cell's position via unique_id.
 
-    -------------------------------------------------------------------------
+    Outputs: writes .state (free -> blocked) on the one cell per id in p
+    whose own unique_id is a member; returns None.
 
-    First, every cell's own path_id has every id in p removed, regardless of
-    whether that cell itself ends up flagged: a self-contradicting path
-    is broken, so nothing should still claim membership in it.
-
-    Then, every newly-flagged cell has its .forces/.forced_by cleared
-    entirely: retracted from every other
-    item's .forces/.forced_by first, so nothing downstream is left pointing
-    at or from a role this cell no longer plays, then its own two sets
-    emptied. Once that's done, a .blocked_tmp cell is structurally
-    indistinguishable from a cell that was always blocked - no dangling
-    links, real StateEnum.blocked .state already in place - .blocked_tmp is
-    purely an extra marker so display/debugging can still tell the two apart.
-
-    Snapshot-then-apply for the marking step, same reason as
-    get_blocked_links's own docstring: which cells qualify is decided by
-    unique_id membership in p alone, not by anything that could change while
-    this runs, so there's no ordering hazard there - but the positions to
-    clear links from are still collected before any clearing starts, so
-    clearing one cell's links can't affect which *other* cells get cleared.
+    Scope: local per id - unique_id is injective, so each id in p names
+    exactly one cell; this is a bounded, single-write-per-id pass, not a
+    board-wide aggregate.
     """
     rows, cols = m.shape
-
     for i in range(rows):
         for j in range(cols):
-            m[i, j].path_id -= p
-
-    to_clear = []
-    for i in range(rows):
-        for j in range(cols):
-            if unique_id((i, j), (rows, cols)) in p:  # BR-031
-                m[i, j].blocked_tmp = True
+            if unique_id((i, j), (rows, cols)) in p:
                 m[i, j].state = StateEnum.blocked
-                to_clear.append((i, j))
-
-    for pos in to_clear:
-        item = m[pos]
-        for target in item.forces:
-            m[target].forced_by.discard(pos)
-        for source in item.forced_by:
-            m[source].forces.discard(pos)
-        item.forces = set()
-        item.forced_by = set()
 
 
 # -----------------------------------------------------------------------
-# blocked_paths mechanism: an alternative to get_blocked_links/set_blocked_links,
+# blocked_paths mechanism: an alternative to get_blocked_links/dissolve_blocked_paths,
 # split into small, tile/GPU-friendly passes (see do_closure's own "Flagged for
 # rewrite" note) instead of one global id set plus a second full-grid scan to
 # match it. NOT wired into do_closure - it runs entirely on its own fields
 # (SquareItem.blocked_paths/.is_blocked_tmp), untouched by and not touching
-# the original .blocked_tmp/get_blocked_links/set_blocked_links pipeline.
+# the get_blocked_links/dissolve_blocked_paths pipeline do_closure actually uses.
 # -----------------------------------------------------------------------
 
 def seed_blocked_paths(m):
@@ -858,10 +827,10 @@ def apply_blocked_paths(m):
     - B.path_id loses every id in B.blocked_paths;
     - every A in B.forces gains B's blocked_paths into its own (union);
     - every C in B.forced_by is set .state = StateEnum.blocked and
-      .is_blocked_tmp = True (nothing is cleared - contrast set_blocked_links,
-      which retracts .forces/.forced_by; here the graph is left intact for
-      propagate_blocked_tmp_closed to walk further, and for callers/tests to
-      still inspect);
+      .is_blocked_tmp = True (nothing is cleared - dissolve_blocked_paths
+      leaves .forces/.forced_by alone too, for the same reason; here the
+      graph stays intact for propagate_blocked_tmp_closed to walk further,
+      and for callers/tests to still inspect);
     - every such C also has its .path_id narrowed to its intersection with
       B's own post-prune path_id (ids C had that B no longer carries are
       dropped - C's remaining membership is only ever what it still shares
@@ -972,7 +941,7 @@ def do_closure(m, title, show=False, margin=None, roi_margin=0):
     """
     Run one full round of the closure pipeline, twice (see below for why
     twice), in place: find_alerts_set_links, assign_paths, get_blocked_links/
-    set_blocked_links, place_square_in_seat_closed.
+    dissolve_blocked_paths, place_square_in_seat_closed.
 
     Inputs: none of its own - delegates entirely to the stages it calls, in
     sequence.
@@ -981,14 +950,14 @@ def do_closure(m, title, show=False, margin=None, roi_margin=0):
     returns None, or raises InvalidTilingError.
 
     Scope: global - includes several explicitly global stages of its own
-    (assign_paths, get_blocked_links/set_blocked_links), so the pipeline as a
-    whole is global regardless of how local its individual stages are.
+    (assign_paths, get_blocked_links/dissolve_blocked_paths), so the pipeline
+    as a whole is global regardless of how local its individual stages are.
 
     -------------------------------------------------------------------------
 
     -- Flagged for rewrite: cell-by-cell Python loops, not GPU-style tiles --
     Every stage this orchestrates (find_alerts_set_links, assign_paths,
-    get_blocked_links, set_blocked_links, place_square_in_seat,
+    get_blocked_links, dissolve_blocked_paths, place_square_in_seat,
     check_tiling_invariant, clear_all_but_state) is its own independent `for i in
     range(rows): for j in range(cols):` scan over every cell in plain Python.
     image_to_squares.py's insert_tile/image_squares_select_single already
@@ -1015,15 +984,15 @@ def do_closure(m, title, show=False, margin=None, roi_margin=0):
     diagonal-chosen conflict can still be present on a show=False run, just
     undetected by do_closure itself either way.
 
-    place_square_in_seat_closed follows set_blocked_links because a cell
+    place_square_in_seat_closed follows dissolve_blocked_paths because a cell
     get_blocked_links flags is a genuine, permanent impossibility (see
     test_get_and_set_blocked_links_marks_blocked_tmp's (5, 2) case - blocked
     on path_id grounds alone, with no diagonal-blocking neighbour to ever
-    give it away locally) - set_blocked_links already writes the real
-    StateEnum.blocked immediately (.blocked_tmp is just a marker alongside
-    it, not a separate pending state), so place_square_in_seat_closed can
-    fill in whatever seats that newly-permanent blocking completes right
-    away, no finalization step needed in between. Some of those same cells
+    give it away locally) - dissolve_blocked_paths already writes the real
+    StateEnum.blocked immediately, not a separate pending state, so
+    place_square_in_seat_closed can fill in whatever seats that
+    newly-permanent blocking completes right away, no finalization step
+    needed in between. Some of those same cells
     turn out to also be locally confirmed this way, but that's a bonus, not a
     requirement: the ones that aren't (like (5, 2)) are exactly the point of
     doing this at all.
@@ -1047,7 +1016,7 @@ def do_closure(m, title, show=False, margin=None, roi_margin=0):
     find_alerts_set_links(m)
     find_secondary_links(m)
     assign_paths(m)
-    set_blocked_links(m, get_blocked_links(m))
+    dissolve_blocked_paths(m, get_blocked_links(m))
     place_square_in_seat_closed(m)
     if show:
         colormap = np.zeros((*m.shape, 3))
@@ -1061,6 +1030,6 @@ def do_closure(m, title, show=False, margin=None, roi_margin=0):
     find_alerts_set_links(m)
     find_secondary_links(m)
     assign_paths(m)
-    set_blocked_links(m, get_blocked_links(m))
+    dissolve_blocked_paths(m, get_blocked_links(m))
     place_square_in_seat_closed(m)
     check_tiling_invariant(m)

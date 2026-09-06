@@ -32,7 +32,7 @@ import numpy as np
 from map_of_squares import StateEnum, InvalidTilingError
 from representation import build_map_of_squares, display_closure_step, RealSpaceMargin
 from closure import (find_alerts_set_links, find_secondary_links, assign_paths,
-                      get_blocked_links, set_blocked_links, place_square_in_seat_closed,
+                      get_blocked_links, dissolve_blocked_paths, place_square_in_seat_closed,
                       clear_all_but_state, check_tiling_invariant)
 '''
 
@@ -105,7 +105,12 @@ def _render_test_body(test_id, sc, display):
         if fn == "get_blocked_links":
             call = "p = get_blocked_links(m)"
         elif fn == "set_blocked_links":
-            call = "set_blocked_links(m, p)"
+            # closure_test_scorecards.json still names this step
+            # "set_blocked_links", recorded when that was do_closure's real
+            # second stage - set_blocked_links itself has since been removed
+            # in favour of dissolve_blocked_paths, which do_closure actually
+            # calls now, so that's what gets emitted here.
+            call = "dissolve_blocked_paths(m, p)"
         elif fn == "display_closure_step":
             call = None  # regenerated via emit_displays(n) below, respecting `display`
         else:

@@ -12,7 +12,7 @@ import numpy as np
 from map_of_squares import StateEnum, InvalidTilingError
 from representation import build_map_of_squares, display_closure_step, RealSpaceMargin
 from closure import (find_alerts_set_links, find_secondary_links, assign_paths,
-                      get_blocked_links, set_blocked_links, place_square_in_seat_closed,
+                      get_blocked_links, dissolve_blocked_paths, place_square_in_seat_closed,
                       clear_all_but_state, check_tiling_invariant,
                       seed_blocked_paths, apply_blocked_paths, propagate_blocked_tmp_closed)
 
@@ -39,20 +39,22 @@ def test_line_generated():
     colormap = np.zeros((*m.shape, 3))
     display_closure_step(m, 'test_line', show_links=True, show_real=True, show_entries_terminals=False, colormap=colormap, margin=None, roi_margin=0)
     # display note: Position is approximate: the ORIGINAL source test displays here after only find_alerts_set_links + assign_paths + get_blocked_links (3 calls) - it never calls find_secondary_links (this scorecard's step 2) before this display. This scorecard's call_sequence is a full do_closure reconstruction run separately on the same initial board, for parity with the other scorecards. Title: 'line (simple chain): alert_blocked=blue, alert_chosen=yellow, both=green'.
-    set_blocked_links(m, p)
+    dissolve_blocked_paths(m, p)
     place_square_in_seat_closed(m)
     clear_all_but_state(m)
     find_alerts_set_links(m)
     find_secondary_links(m)
     assign_paths(m)
     # Hand-edited, diverges from write_generated_test's default rendering of
-    # this call_sequence step: exercises the new, separate blocked_paths
-    # mechanism (closure.seed_blocked_paths/apply_blocked_paths/
+    # this call_sequence step: exercises the separate blocked_paths mechanism
+    # (closure.seed_blocked_paths/apply_blocked_paths/
     # propagate_blocked_tmp_closed) in place of get_blocked_links/
-    # set_blocked_links for this one round. Not do_closure's own pipeline -
-    # do_closure still calls get_blocked_links/set_blocked_links unchanged.
-    # Regenerating this test (write_generated_test('test_line', ...)) will
-    # overwrite this block back to the default rendering.
+    # dissolve_blocked_paths for this one round. Not do_closure's own
+    # pipeline - do_closure calls get_blocked_links/dissolve_blocked_paths
+    # (set_blocked_links, which do_closure used to call, has since been
+    # removed entirely). Regenerating this test
+    # (write_generated_test('test_line', ...)) will overwrite this block
+    # back to the default rendering.
     seed_blocked_paths(m)
     apply_blocked_paths(m)
     propagate_blocked_tmp_closed(m)
@@ -80,14 +82,14 @@ def test_show_other_full_2x2_generated():
     find_secondary_links(m)
     assign_paths(m)
     p = get_blocked_links(m)
-    set_blocked_links(m, p)
+    dissolve_blocked_paths(m, p)
     place_square_in_seat_closed(m)
     clear_all_but_state(m)
     find_alerts_set_links(m)
     find_secondary_links(m)
     assign_paths(m)
     p = get_blocked_links(m)
-    set_blocked_links(m, p)
+    dissolve_blocked_paths(m, p)
     place_square_in_seat_closed(m)
     try:
         check_tiling_invariant(m)
@@ -117,7 +119,7 @@ def test_margin_free_4x4realmap_generated():
     find_secondary_links(m)
     assign_paths(m)
     p = get_blocked_links(m)
-    set_blocked_links(m, p)
+    dissolve_blocked_paths(m, p)
     place_square_in_seat_closed(m)
     colormap = np.zeros((*m.shape, 3))
     display_closure_step(m, 'test_margin_free_4x4realmap', show_links=True, show_real=True, show_entries_terminals=False, colormap=colormap, margin=RealSpaceMargin(width=2, crop=False), roi_margin=1)
@@ -127,7 +129,7 @@ def test_margin_free_4x4realmap_generated():
     find_secondary_links(m)
     assign_paths(m)
     p = get_blocked_links(m)
-    set_blocked_links(m, p)
+    dissolve_blocked_paths(m, p)
     place_square_in_seat_closed(m)
     check_tiling_invariant(m)
     # ASSERT: is_realmap_cover_complete(m, margin=2) is True
@@ -150,12 +152,15 @@ def test_get_and_set_blocked_links_marks_blocked_tmp_generated():
     assign_paths(m)
     p = get_blocked_links(m)
     # ASSERT: get_blocked_links(m) == {26, 33, 62, 64, 90, 117}
-    set_blocked_links(m, p)
-    # ASSERT: blocked_tmp cells == {(2,2),(2,9),(5,2),(5,4),(7,6),(9,9)}, each .state==blocked, .forces==.forced_by==set()
-    # ASSERT: no cell's path_id retains any id in p; no cell's forces/forced_by retains any blocked_tmp position
+    dissolve_blocked_paths(m, p)
+    # NOTE: recorded against the original set_blocked_links, which this step
+    # no longer calls (dissolve_blocked_paths replaced it) - the six cells
+    # {(2,2),(2,9),(5,2),(5,4),(7,6),(9,9)} still end up .state==blocked, but
+    # dissolve_blocked_paths sets no .blocked_tmp, strips no cell's path_id,
+    # and retracts no .forces/.forced_by, unlike set_blocked_links.
     colormap = np.zeros((*m.shape, 3))
     display_closure_step(m, 'test_get_and_set_blocked_links_marks_blocked_tmp', show_links=True, show_real=True, show_entries_terminals=False, colormap=colormap, margin=None, roi_margin=0)
-    # display note: Falls between this scorecard's step 4 (set_blocked_links) and step 5 (place_square_in_seat_closed) - blocked_tmp cells show in red. Title: 'get_blocked_links/set_blocked_links: blocked_tmp in red'. A further do_closure(show=True) call follows (after clear_all_but_state), with its own separate internal display - not represented in this scorecard's 5-step call_sequence.
+    # display note: Falls between this scorecard's step 4 (dissolve_blocked_paths, recorded as set_blocked_links) and step 5 (place_square_in_seat_closed) - originally blocked_tmp cells shown in red, though dissolve_blocked_paths sets no such flag now. Title: 'get_blocked_links/set_blocked_links: blocked_tmp in red' (quoted as originally recorded). A further do_closure(show=True) call follows (after clear_all_but_state), with its own separate internal display - not represented in this scorecard's 5-step call_sequence.
     place_square_in_seat_closed(m)
     # ASSERT: new seats fill 4 of the 6 corroborating positions; (5,2) has no bordering new seat
 # === END GENERATED TEST: test_get_and_set_blocked_links_marks_blocked_tmp ===
@@ -175,14 +180,14 @@ def test_rectangle_generated():
     find_secondary_links(m)
     assign_paths(m)
     p = get_blocked_links(m)
-    set_blocked_links(m, p)
+    dissolve_blocked_paths(m, p)
     place_square_in_seat_closed(m)
     clear_all_but_state(m)
     find_alerts_set_links(m)
     find_secondary_links(m)
     assign_paths(m)
     p = get_blocked_links(m)
-    set_blocked_links(m, p)
+    dissolve_blocked_paths(m, p)
     place_square_in_seat_closed(m)
     check_tiling_invariant(m)
     # ASSERT: check_tiling_invariant(m) does not raise
@@ -208,14 +213,14 @@ def test_tree_fan_out_generated():
     find_secondary_links(m)
     assign_paths(m)
     p = get_blocked_links(m)
-    set_blocked_links(m, p)
+    dissolve_blocked_paths(m, p)
     place_square_in_seat_closed(m)
     clear_all_but_state(m)
     find_alerts_set_links(m)
     find_secondary_links(m)
     assign_paths(m)
     p = get_blocked_links(m)
-    set_blocked_links(m, p)
+    dissolve_blocked_paths(m, p)
     place_square_in_seat_closed(m)
     check_tiling_invariant(m)
     # ASSERT: not m[4,4].alert_chosen and m[4,4].forced_by == set()
@@ -244,14 +249,14 @@ def test_tree_fan_in_generated():
     find_secondary_links(m)
     assign_paths(m)
     p = get_blocked_links(m)
-    set_blocked_links(m, p)
+    dissolve_blocked_paths(m, p)
     place_square_in_seat_closed(m)
     clear_all_but_state(m)
     find_alerts_set_links(m)
     find_secondary_links(m)
     assign_paths(m)
     p = get_blocked_links(m)
-    set_blocked_links(m, p)
+    dissolve_blocked_paths(m, p)
     place_square_in_seat_closed(m)
     check_tiling_invariant(m)
     # ASSERT: m[3,3].alert_chosen and not m[3,3].forces
@@ -281,14 +286,14 @@ def test_line_into_eye_generated():
     find_secondary_links(m)
     assign_paths(m)
     p = get_blocked_links(m)
-    set_blocked_links(m, p)
+    dissolve_blocked_paths(m, p)
     place_square_in_seat_closed(m)
     clear_all_but_state(m)
     find_alerts_set_links(m)
     find_secondary_links(m)
     assign_paths(m)
     p = get_blocked_links(m)
-    set_blocked_links(m, p)
+    dissolve_blocked_paths(m, p)
     place_square_in_seat_closed(m)
     check_tiling_invariant(m)
     # ASSERT: not m[1,4].alert_chosen; m[1,6].alert_chosen; m[1,8].alert_chosen
@@ -319,14 +324,14 @@ def test_eye_outwards_generated():
     find_secondary_links(m)
     assign_paths(m)
     p = get_blocked_links(m)
-    set_blocked_links(m, p)
+    dissolve_blocked_paths(m, p)
     place_square_in_seat_closed(m)
     clear_all_but_state(m)
     find_alerts_set_links(m)
     find_secondary_links(m)
     assign_paths(m)
     p = get_blocked_links(m)
-    set_blocked_links(m, p)
+    dissolve_blocked_paths(m, p)
     place_square_in_seat_closed(m)
     check_tiling_invariant(m)
     colormap = np.zeros((*m.shape, 3))
@@ -354,7 +359,7 @@ def test_seat_from_two_alert_blocked_generated():
     find_secondary_links(m)
     assign_paths(m)
     p = get_blocked_links(m)
-    set_blocked_links(m, p)
+    dissolve_blocked_paths(m, p)
     place_square_in_seat_closed(m)
     colormap = np.zeros((*m.shape, 3))
     display_closure_step(m, 'test_seat_from_two_alert_blocked', show_links=True, show_real=True, show_entries_terminals=False, colormap=colormap, margin=None, roi_margin=0)
@@ -364,7 +369,7 @@ def test_seat_from_two_alert_blocked_generated():
     find_secondary_links(m)
     assign_paths(m)
     p = get_blocked_links(m)
-    set_blocked_links(m, p)
+    dissolve_blocked_paths(m, p)
     place_square_in_seat_closed(m)
     check_tiling_invariant(m)
     # ASSERT: m[7,5].forced_by == {(5,4)}
@@ -389,14 +394,14 @@ def test_frozen_area_generated():
     find_secondary_links(m)
     assign_paths(m)
     p = get_blocked_links(m)
-    set_blocked_links(m, p)
+    dissolve_blocked_paths(m, p)
     place_square_in_seat_closed(m)
     clear_all_but_state(m)
     find_alerts_set_links(m)
     find_secondary_links(m)
     assign_paths(m)
     p = get_blocked_links(m)
-    set_blocked_links(m, p)
+    dissolve_blocked_paths(m, p)
     place_square_in_seat_closed(m)
     check_tiling_invariant(m)
     colormap = np.zeros((*m.shape, 3))
@@ -421,14 +426,14 @@ def test_margin_free_3x3realmap_generated():
     find_secondary_links(m)
     assign_paths(m)
     p = get_blocked_links(m)
-    set_blocked_links(m, p)
+    dissolve_blocked_paths(m, p)
     place_square_in_seat_closed(m)
     clear_all_but_state(m)
     find_alerts_set_links(m)
     find_secondary_links(m)
     assign_paths(m)
     p = get_blocked_links(m)
-    set_blocked_links(m, p)
+    dissolve_blocked_paths(m, p)
     place_square_in_seat_closed(m)
     try:
         check_tiling_invariant(m)

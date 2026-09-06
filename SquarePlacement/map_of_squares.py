@@ -19,13 +19,6 @@ class SquareItem:
 
     quality:    score used to rank candidate placements.
     state:      current placement state (free / chosen / blocked).
-    blocked_tmp: True on a cell closure.set_blocked_links has flagged as the
-                origin of a self-contradicting path. Not a distinct state -
-                .state is already the real StateEnum.blocked the moment this
-                is set (see set_blocked_links) - just a marker so display can
-                colour a genuine-but-just-discovered block differently from
-                one that was always blocked. Cleared back to False by
-                closure.clear_all_but_state, along with everything else.
     alert_chosen:  raised by a neighbouring tile's placement pass instead of writing
                    .state directly; resolved into real state via forced_closure +
                    place_squares (see test_utils.place_and_chase).
@@ -44,29 +37,20 @@ class SquareItem:
                 neighbour of several different alert_blocked centres at once (see
                 test_complex_graphs.test_tree_fan_out), or a single centre can have
                 more than one corner of its own - and none of them should be
-                silently discarded in favour of another. set_blocked_links is
-                the only place this gets cut back to set() now, when setting a
-                cell's .blocked_tmp flag, severing the pairing
-                entirely. Where code needs just one representative target (e.g. to
-                walk a single chain for display, or to check "does this reach a
-                terminal") it takes an arbitrary entry (next(iter(...))) - stable for
-                the duration of one pass since nothing mutates .forces mid-pass, but
-                not any particular "first" one the way a list index would be.
+                silently discarded in favour of another. Nothing in the current
+                pipeline ever cuts this back to a subset - only clear_all_but_state
+                resets it, map-wide, to empty. Where code needs just one
+                representative target (e.g. to walk a single chain for display,
+                or to check "does this reach a terminal") it takes an arbitrary
+                entry (next(iter(...))) - stable for the duration of one pass
+                since nothing mutates .forces mid-pass, but not any particular
+                "first" one the way a list index would be.
     forced_by:  every (row, col) index that has ever forced this item - i.e. the
                 other side of the same relationship .forces records, filled
                 alongside it wherever a .forces entry is created
                 (set_alert_chosen_set_links) so it's always available without
                 needing a separate reversed copy of the map to look it up.
-                Also a set, for the same reason .forces is. set_blocked_links
-                retracts both directions when it cuts .forces: the cut cell's
-                own .forced_by is cleared too, and it's removed from every one
-                of its former forcers' .forces sets, not just the targets it
-                used to force.
-    centrality: distance, in .forces hops, from this item's chain to the closest
-                terminal (no-.forces) item of its patch - part of a separate
-                centrality/path_id mechanism from the one path_id (below)
-                actually uses; currently unused, since find_central_patch_items,
-                its only writer, has been removed. -1 while unassigned.
+                Also a set, for the same reason .forces is.
     path_id:    ids of every group of connected alert_chosen items (linked via
                 .forces) this item belongs to - our actual building block once
                 seats start linking squares together, as opposed to a lone
@@ -78,11 +62,6 @@ class SquareItem:
                 by closure.propagate_path_id_from_entries; empty set() while
                 unassigned to any group. Two groups merging at some item get
                 reconciled by unioning their two id sets together.
-    max_id:     candidate for the largest flattened index among a pure ring's
-                members - part of the same now-removed centrality/path_id
-                mechanism as .centrality (find_cycle_patches was its only
-                reader/writer, and has itself been removed); currently unused.
-                -1 while unassigned.
     rectangle:  (row, col) index of the direct neighbour this item has been
                 paired with into a domino, or (-1, -1) while unpaired. Set by
                 set_square_chosen: when an item is chosen, the first direct
@@ -97,30 +76,30 @@ class SquareItem:
                 collapsed into one global id set, plus one hop of forward
                 propagation along .forces (see closure.apply_blocked_paths).
                 Belongs to a separate, not-yet-wired-in alternative to
-                get_blocked_links/set_blocked_links (closure.seed_blocked_paths/
-                apply_blocked_paths/propagate_blocked_tmp_closed) - do_closure
-                itself still runs the original get_blocked_links/set_blocked_links
+                get_blocked_links/dissolve_blocked_paths
+                (closure.seed_blocked_paths/apply_blocked_paths/
+                propagate_blocked_tmp_closed) - do_closure itself still runs
+                the original get_blocked_links/dissolve_blocked_paths
                 pipeline; nothing here is read or written by that path. Empty
                 set() while unassigned.
     is_blocked_tmp: this mechanism's own marker for "just discovered
-                permanently blocked by a path contradiction" - the counterpart
-                to blocked_tmp above, but for the blocked_paths mechanism, kept
-                as a distinct field so the two mechanisms never read or write
-                each other's bookkeeping. Unlike set_blocked_links, nothing in
-                this mechanism clears .forces/.forced_by/.path_id when it flags
-                a cell - see apply_blocked_paths/propagate_blocked_tmp_closed's
-                own docstrings. False while unassigned.
+                permanently blocked by a path contradiction", kept as its own
+                field so the blocked_paths mechanism never reads or writes the
+                get_blocked_links/dissolve_blocked_paths pipeline's own
+                bookkeeping (dissolve_blocked_paths sets no comparable flag -
+                see its own docstring). Unlike dissolve_blocked_paths, nothing
+                in this mechanism clears .forces/.forced_by/.path_id when it
+                flags a cell - see apply_blocked_paths/
+                propagate_blocked_tmp_closed's own docstrings. False while
+                unassigned.
     """
     quality: float = -1.0
     state: StateEnum = StateEnum.free
-    blocked_tmp: bool = False
     alert_chosen: bool = False
     alert_blocked: bool = False
     forces: set = field(default_factory=set)
     forced_by: set = field(default_factory=set)
-    centrality: int = -1
     path_id: set = field(default_factory=set)
-    max_id: int = -1
     rectangle: tuple = (-1, -1)
     blocked_paths: set = field(default_factory=set)
     is_blocked_tmp: bool = False

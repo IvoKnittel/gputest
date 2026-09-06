@@ -12,6 +12,7 @@ from representation import (build_map_of_squares,
                              map_of_squares_from_array,
                              display_closure_step)
 from closure import (find_alerts_set_links,
+                      find_secondary_links,
                       assign_paths,
                       get_blocked_links,
                       do_closure,
@@ -37,7 +38,7 @@ def test_line():
     place_squares(m, positions)
 
     find_alerts_set_links(m)
-
+    find_secondary_links(m)
     alert_chosen_positions_asserted = [(9, 1), (7, 3), (5, 5), (3, 7)]
 
     chain = [alert_chosen_positions_asserted[0]]

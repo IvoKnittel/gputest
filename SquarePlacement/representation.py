@@ -195,8 +195,8 @@ def place_blocked_squares(map_of_squares, positions):
 # display
 
 def display_map_of_squares_3States(map_of_squares):
-    """Collapse each cell's .state (plus .blocked_tmp) into a display value:
-    chosen=1, blocked=-1, blocked (with .blocked_tmp raised)=2, free=0."""
+    """Collapse each cell's .state into a display value: chosen=1, blocked=-1,
+    free=0."""
     rows, cols = map_of_squares.shape
     display = np.zeros((rows, cols), dtype=float)
     for i in range(rows):
@@ -205,19 +205,18 @@ def display_map_of_squares_3States(map_of_squares):
             if item.state == StateEnum.chosen:
                 display[i, j] = 1.0
             elif item.state == StateEnum.blocked:
-                display[i, j] = 2.0 if item.blocked_tmp else -1.0
+                display[i, j] = -1.0
     return display
 
 
 # Fixed colour scheme for every display in this module: free=white, chosen=cyan,
-# blocked=gray, blocked_tmp=red. Grid lines (drawn separately, e.g. by a grid_on
+# blocked=gray. Grid lines (drawn separately, e.g. by a grid_on
 # helper) are black. margin=light grey - for the space around an axes' actual
 # cells when its extent is inset within a shared, larger frame (e.g.
 # map_of_squares next to real_space_map).
 FREE_COLOR = (1, 1, 1)
 CHOSEN_COLOR = (0, 1, 1)
 BLOCKED_COLOR = (0.5, 0.5, 0.5)
-BLOCKED_TMP_COLOR = (1, 0, 0)
 MARGIN_COLOR = (0.9, 0.9, 0.9)
 
 # alert_blocked/alert_chosen overlay colours - see colorize_with_alerts. A cell can
@@ -377,25 +376,24 @@ def colorize_with_alerts(map_of_squares):
     alert flags are visible on top of, rather than instead of, the underlying
     placement state.
 
-    A cell with its .blocked_tmp flag raised is the one exception:
-    closure.set_blocked_links sets that flag (alongside .state =
-    StateEnum.blocked) without clearing whatever .alert_chosen/.alert_blocked
-    a cell was still carrying from find_alerts_set_links (do_closure doesn't
-    call clear_all_but_state until after its own display), so such a cell can
-    easily still have both flags raised - the overlay would then paint
-    ALERT_BOTH_COLOR (green) squarely over what should read as blocked_tmp's
-    red, hiding a real .state behind stale alert bookkeeping. A .blocked_tmp
-    cell is excluded from the overlay entirely so it always shows through.
+    A non-free cell is excluded from the overlay entirely, regardless of
+    whatever .alert_chosen/.alert_blocked it may still be carrying, so a
+    chosen or blocked cell always shows through as its own plain state
+    colour rather than being painted over by a stale alert colour: alert
+    flags are only ever meaningful on a free cell to begin with (
+    find_alerts_set_links skips any cell whose .state isn't StateEnum.free),
+    so once a cell is placed or blocked, whatever alert bookkeeping it still
+    carries from an earlier round is stale by definition, not a fact about
+    its current state worth drawing.
     """
     state_display = display_map_of_squares_3States(map_of_squares)
-    rgb = colorize(state_display, {0: FREE_COLOR, 1: CHOSEN_COLOR, -1: BLOCKED_COLOR,
-                                    2: BLOCKED_TMP_COLOR})
+    rgb = colorize(state_display, {0: FREE_COLOR, 1: CHOSEN_COLOR, -1: BLOCKED_COLOR})
 
     alert_display = display_map_of_squares_alerts(map_of_squares)
-    not_blocked_tmp = state_display != 2
-    rgb[(alert_display == -1) & not_blocked_tmp] = ALERT_BLOCKED_COLOR
-    rgb[(alert_display == 1) & not_blocked_tmp] = ALERT_CHOSEN_COLOR
-    rgb[(alert_display == 2) & not_blocked_tmp] = ALERT_BOTH_COLOR
+    is_free = state_display == 0 
+    rgb[(alert_display == -1) & is_free] = ALERT_BLOCKED_COLOR
+    rgb[(alert_display == 1) & is_free] = ALERT_CHOSEN_COLOR
+    rgb[(alert_display == 2) & is_free] = ALERT_BOTH_COLOR
     return rgb
 
 
