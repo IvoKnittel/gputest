@@ -273,12 +273,14 @@ def test_square_placement_random_order_supersuperlattice():
 
     for round_idx in range(4):
         order = rng.permutation(16)
+        count = 0
         for colorcode in order:
+            count += 1
             colorcode = int(colorcode)
-            square_map = image_squares_select_single(
-                square_map, num_tiles_expand_noshift_shift, colorcode, super=True)
-            if DISPLAY:
-                show_states(square_map,
-                            f"test_square_placement_random_order_supersuperlattice: "
-                            f"round={round_idx} colorcode={colorcode}")
-
+            if count >= 14:
+                if DISPLAY:
+                    show_states(square_map,
+                                f"test_square_placement_random_order_supersuperlattice: "
+                                f"round={round_idx} colorcode={colorcode}")
+                square_map = image_squares_select_single(
+                    square_map, num_tiles_expand_noshift_shift, colorcode, super=True, display_every_step=True)

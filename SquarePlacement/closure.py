@@ -292,85 +292,47 @@ def place_squares(map_of_squares, positions):
                     and map_of_squares[ni, nj].state == StateEnum.free):  # BR-015
                 map_of_squares[ni, nj].state = StateEnum.blocked
 
-
 def place_square_in_seat(map_of_squares):
     """
     Scan every 2x2 block of adjacent map_of_squares cells (same scan as
     check_tiling_invariant) for a seat - three corners blocked, one free (see
-    find_alerts_set_links's docstring) - and place a square at the free corner:
-    the only alternative, letting that corner end up blocked too, is exactly the
-    fully-blocked 2x2 check_tiling_invariant forbids.
+    find_alerts_set_links's docstring) - and return every seat's free corner
+    found in this one scan. A pure read: does NOT place anything itself - see
+    place_square_in_seat_closed for why, and for what used to happen here
+    instead.
 
     Inputs: reads .state of every 2x2 block of adjacent cells.
 
-    Outputs: writes .state (free->chosen, plus diagonal blocking via
-    place_squares) at every seat found; returns a bool.
+    Outputs: returns a list of positions (each a seat's free corner); writes
+    nothing.
 
     Scope: local - each block's own check reads only its own 4 cells; every
-    seat found across the whole scan is collected before any of them is
-    placed (see below for why), but that collection is still a plain
-    local-per-block result, not a graph walk or a global-identity aggregate
-    the way get_blocked_links's return value is.
+    seat found across the whole scan is collected into one list, but that
+    collection is still a plain local-per-block result, not a graph walk or
+    a global-identity aggregate the way get_blocked_links's return value is.
 
     -------------------------------------------------------------------------
 
     A direct state scan, independent of .alert_chosen bookkeeping - finds a
     seat wherever one currently exists on the board, not just where
-    find_alerts_set_links already flagged one. Every seat found is placed in one batch (place_squares)
-    rather than one at a time, so an earlier placement's diagonal-blocking
-    side effect can't change a later seat's free corner out from under it
-    mid-scan.
+    find_alerts_set_links already flagged one.
 
-    -- Known gap: two seats in the same scan can be mutually diagonal --
-    Confirmed by direct repro (build a margin-blocked board, run real square
-    placement through it - see Quality/test_image_to_squares.py's
-    test_square_placement_random_order_supersuperlattice): two 2x2 blocks found
-    as seats in the *same* scan can themselves be diagonal neighbours of each
-    other. When that happens there is no locally-correct resolution:
-
-    - Choosing both (today's behaviour) violates the no-diagonal-chosen-pair
-      invariant real_space_map enforces - check_tiling_invariant doesn't catch
-      this, since it only checks for a fully-blocked 2x2.
-    - Blocking either one instead immediately turns THAT one's own
-      already-3-blocked 2x2 fully blocked, tripping check_tiling_invariant
-      directly.
-    - Deferring one and protecting it from the other's diagonal-blocking step
-      only postpones the same conflict: nothing else
-      in this pipeline stops a later round from choosing a free cell whose
-      diagonal neighbour is already chosen, so the deferred seat gets chosen on
-      its own a few rounds later and the exact same violation reappears.
-
-    Every local fix attempted here changes *which* invariant breaks, never
-    prevents both. That means this state - two independently-forced seats that
-    are mutually diagonal - shouldn't be reachable in the first place: this
-    function's own docstring already flags it as "independent of .alert_chosen
-    bookkeeping", i.e. it bypasses the whole find_alerts_set_links/assign_paths/
-    get_blocked_links/dissolve_blocked_paths promise-and-contradiction system
-    (see get_blocked_links's docstring) that exists specifically to catch a
-    self-contradicting pair *before* it calcifies into two simultaneously-forced
-    cells. The real fix belongs upstream of this function, not inside it - not
-    attempted here.
-
-    test_sudden_appearance.py used to be concrete evidence of exactly that
-    bypass - test_seat_from_two_alert_blocked and test_frozen_area each
-    placed one square and showed a *different*, distant cell end up
-    StateEnum.chosen with an empty .forced_by throughout, chosen purely by
-    this function's own scan, never recorded by find_alerts_set_links/
-    assign_paths at all. find_secondary_links (closure.py) now catches both
-    of those two specific cases - see its own docstring for how - so those
-    two tests now assert a real .forced_by instead. The general gap above is
-    still open, though: find_secondary_links only catches a seat that forms
-    by combining one alert_blocked item's own diagonal-blocking footprint
-    with a corner it already promises - not every way a seat can form
-    without either corner being locally visible beforehand. get_blocked_links
-    only ever checks path_id membership, so a cell chosen this function's own
-    way - no path_id, no .forced_by - is still invisible to it whenever
-    find_secondary_links doesn't happen to cover the shape. Two such choices
-    happening to be diagonal neighbours of each other is exactly the gap
-    above, and it doesn't currently have a live repro in the suite.
-
-    Returns True if a seat was found (and placed), False otherwise -
-    place_square_in_seat_closed loops on this until a call changes nothing.
+    -- Formerly here, now moved to place_square_in_seat_closed: the
+    mutually-diagonal-seats gap --
+    This function used to place every seat it found in one batch
+    (place_squares), all at once, rather than one at a time - collected
+    first specifically so an earlier placement's diagonal-blocking side
+    effect couldn't change a later seat's free corner out from under it
+    mid-scan. That batching is exactly what let two seats found in the same
+    scan, but themselves diagonal neighbours of each other, both get chosen
+    at once with nothing to stop it (confirmed by direct repro - see
+    Quality/test_image_to_squares.py's
+    test_square_placement_random_order_supersuperlattice, and
+    SquarePlacement/test_impossible.py's test_mutually_diagonal_seats/
+    test_mutually_diagonal_seats_from_real_placement for a minimal one).
+    Now that this function only ever returns positions rather than placing
+    them, place_square_in_seat_closed places (and fully re-evaluates) one at
+    a time instead - see its own docstring for how that closes the gap.
     """
     rows, cols = map_of_squares.shape
     seats = set()
@@ -380,34 +342,73 @@ def place_square_in_seat(map_of_squares):
             states = [map_of_squares[p].state for p in corners]
             if states.count(StateEnum.blocked) == 3 and states.count(StateEnum.free) == 1:  # BR-016
                 seats.add(corners[states.index(StateEnum.free)])
-
-    if not seats:  # BR-017
-        return False
-    place_squares(map_of_squares, list(seats))
-    return True
+    return list(seats)
 
 
 def place_square_in_seat_closed(map_of_squares):
     """
-    Run place_square_in_seat to a fixed point: placing a square in one seat
-    can block a diagonal neighbour that completes another 2x2 block into a
-    fresh seat, so keep looping until a full call finds none left.
+    Place every seat place_square_in_seat finds, to a fixed point - but one
+    seat at a time, running do_closure's own full re-evaluation after each
+    single placement, instead of placing every seat found in one scan
+    together the way this used to. Restores, specifically for seat-filling,
+    the "one placement, then one find_alerts_set_links pass" incremental
+    discipline clear_all_but_state's own docstring already assumes for the
+    rest of this pipeline - seat-filling used to be the one place that
+    violated it.
 
-    Inputs: none of its own - delegates entirely to place_square_in_seat.
+    Inputs: none of its own - delegates entirely to place_square_in_seat and
+    do_closure.
 
-    Outputs: same as place_square_in_seat, applied repeatedly; returns a bool.
+    Outputs: same net effect as before (every seat filled, looped to a fixed
+    point, since placing one square can block a diagonal neighbour that
+    completes another 2x2 block into a fresh seat, or open up new
+    consequences of its own via do_closure's own pipeline); returns a bool.
+    Every position place_square_in_seat found this pass is re-checked for
+    StateEnum.free immediately before it's placed - an earlier position in
+    the very same pass may already have resolved a later one (blocked it via
+    diagonal side effect, or chosen it via do_closure's own cascading
+    effects) - place_squares would otherwise raise on an already-non-free
+    cell.
 
-    Scope: local-global - each place_square_in_seat call is a local scan, but
-    looping it to a fixed point is what lets one placement's diagonal-blocking
-    side effect reach a seat anywhere else on the board.
+    Scope: global - each individual placement is local, but do_closure
+    itself is global (see its own docstring), and this function now calls
+    do_closure once per seat placed, not once per whole pass.
 
     -------------------------------------------------------------------------
 
-    Returns True if at least one seat was placed, False otherwise.
+    This closes the mutually-diagonal-seats gap place_square_in_seat's own
+    docstring used to document as open: two seats found in the same scan
+    can no longer both get chosen in one undetected batch, because they're
+    no longer placed in a batch at all - the first one placed gets a full
+    do_closure pass (find_alerts_set_links through check_tiling_invariant)
+    before the second is ever touched. If the two seats' free corners were
+    genuinely diagonal neighbours, placing the first one blocks the second's
+    free corner as an ordinary diagonal-blocking side effect
+    (place_squares), the same way any other diagonal neighbour would be
+    blocked - turning what would have been a silent diagonal-chosen conflict
+    into an ordinary blocked cell instead, visible to (and, if it happens to
+    complete a fully-blocked 2x2, caught by) the very next do_closure pass,
+    not hidden from every check the way the old batching left it.
+
+    Recursive: do_closure is one of this function's own callers (do_closure
+    calls place_square_in_seat_closed twice, once per round), and this
+    function now calls do_closure again for every single seat it places.
+    Terminates regardless: every do_closure call here places at least the
+    one square just given to it, strictly shrinking the board's free-cell
+    count - finite and monotonic, so the recursion bottoms out even though
+    it's no longer bounded by a fixed number of rounds the way a plain loop
+    would be.
     """
     changed = False
-    while place_square_in_seat(map_of_squares):
+    seats = place_square_in_seat(map_of_squares)
+    while seats:
         changed = True
+        for pos in seats:
+            if map_of_squares[pos].state != StateEnum.free:  # BR-037
+                continue
+            place_squares(map_of_squares, [pos])
+            do_closure(map_of_squares, "")
+        seats = place_square_in_seat(map_of_squares)
     return changed
 
 
@@ -746,17 +747,22 @@ def dissolve_blocked_paths(m, p):
     cell's position via unique_id.
 
     Outputs: writes .state (free -> blocked) on the one cell per id in p
-    whose own unique_id is a member; returns None.
+    whose own unique_id is a member; returns True if at least one cell was
+    blocked this way, False otherwise (e.g. do_closure uses this to decide
+    whether its own round actually changed anything worth displaying).
 
     Scope: local per id - unique_id is injective, so each id in p names
     exactly one cell; this is a bounded, single-write-per-id pass, not a
     board-wide aggregate.
     """
     rows, cols = m.shape
+    changed = False
     for i in range(rows):
         for j in range(cols):
             if unique_id((i, j), (rows, cols)) in p:
                 m[i, j].state = StateEnum.blocked
+                changed = True
+    return changed
 
 
 # -----------------------------------------------------------------------
@@ -937,6 +943,33 @@ def propagate_blocked_tmp_closed(m):
     return changed
 
 
+def has_alert_bookkeeping(m):
+    """True if any cell carries .alert_blocked, .alert_chosen, or a nonempty
+    .forces - i.e. find_alerts_set_links/find_secondary_links/assign_paths
+    actually found or established something this pass, as opposed to a
+    board with nothing free left to flag. Used by do_closure to decide
+    whether its own post-assign_paths display is worth showing: those three
+    functions never touch .state, so "did the map change" doesn't apply to
+    them the way it does to dissolve_blocked_paths/place_square_in_seat_closed
+    - this is the equivalent question for bookkeeping-only steps.
+
+    Inputs: reads .alert_blocked, .alert_chosen, .forces of every cell.
+
+    Outputs: returns a bool; writes nothing.
+
+    Scope: global in principle (scans every cell), but stops at the first
+    hit - typically a small, cheap prefix of the full scan on any board
+    where this is actually True.
+    """
+    rows, cols = m.shape
+    for i in range(rows):
+        for j in range(cols):
+            item = m[i, j]
+            if item.alert_blocked or item.alert_chosen or item.forces:
+                return True
+    return False
+
+
 def do_closure(m, title, show=False, margin=None, roi_margin=0):
     """
     Run one full round of the closure pipeline, twice (see below for why
@@ -973,16 +1006,31 @@ def do_closure(m, title, show=False, margin=None, roi_margin=0):
     forwarded as-is to display_closure_step's own margin/roi_margin arguments
     when show=True - see their docstrings; ignored when show=False.
 
-    show=True's display (after the first pass, before the bookkeeping reset -
-    see below) also raises InvalidTilingError if it finds two chosen squares
-    that are diagonal neighbours - display_closure_step's show_real=True panel
-    reports that via its own return value (real_space_map does not raise
-    it directly, see its docstring), and this is the one place that turns it
-    back into a raise, matching check_tiling_invariant's already-loud handling
-    of the other kind of invalid board (a fully-blocked 2x2). show=False skips
-    this check entirely, the same way it skips the display itself - a
-    diagonal-chosen conflict can still be present on a show=False run, just
-    undetected by do_closure itself either way.
+    show=True's up-to-three displays (after the first pass, before the
+    bookkeeping reset - see below) each also raise InvalidTilingError if
+    they find two chosen squares that are diagonal neighbours -
+    display_closure_step's show_real=True panel reports that via its own
+    return value (real_space_map does not raise it directly, see its
+    docstring), and this is the one place that turns it back into a raise,
+    matching check_tiling_invariant's already-loud handling of the other
+    kind of invalid board (a fully-blocked 2x2). show=False skips every one
+    of these checks entirely, the same way it skips the displays themselves -
+    a diagonal-chosen conflict can still be present on a show=False run,
+    just undetected by do_closure itself either way.
+
+    Each of the three displays is conditional on show=True *and* its own
+    preceding step having actually found or changed something - not shown
+    unconditionally just because show=True:
+    - after assign_paths: only if has_alert_bookkeeping(m) - find_alerts_
+      set_links/find_secondary_links/assign_paths never touch .state, so
+      "did the map change" doesn't apply to them; this is the equivalent
+      question for a bookkeeping-only step.
+    - after dissolve_blocked_paths: only if it returned True (it blocked at
+      least one cell this round).
+    - after place_square_in_seat_closed: only if it returned True (it placed
+      at least one seat this round).
+    A round that finds nothing new at some stage skips that stage's own
+    display rather than showing an unchanged board.
 
     place_square_in_seat_closed follows dissolve_blocked_paths because a cell
     get_blocked_links flags is a genuine, permanent impossibility (see
@@ -1016,11 +1064,29 @@ def do_closure(m, title, show=False, margin=None, roi_margin=0):
     find_alerts_set_links(m)
     find_secondary_links(m)
     assign_paths(m)
-    dissolve_blocked_paths(m, get_blocked_links(m))
-    place_square_in_seat_closed(m)
-    if show:
+    if show and has_alert_bookkeeping(m):
         colormap = np.zeros((*m.shape, 3))
-        error = display_closure_step(m, title, show_links=True, show_real=True, colormap=colormap,
+        error = display_closure_step(m, "after assign_paths", show_links=True, show_real=True, colormap=colormap,
+                                    margin=margin, roi_margin=roi_margin)
+        if error:
+            raise InvalidTilingError(
+                    f"{title}: real_space_map found a diagonal-chosen conflict - "
+                    f"see the map_of_squares panel just shown for which cells")
+
+    blocked_something = dissolve_blocked_paths(m, get_blocked_links(m))
+    if show and blocked_something:
+        colormap = np.zeros((*m.shape, 3))
+        error = display_closure_step(m, "after dissolve_blocked_paths", show_links=True, show_real=True, colormap=colormap,
+                                        margin=margin, roi_margin=roi_margin)
+        if error:
+            raise InvalidTilingError(
+                f"{title}: real_space_map found a diagonal-chosen conflict - "
+                f"see the map_of_squares panel just shown for which cells")
+
+    placed_something = place_square_in_seat_closed(m)
+    if show and placed_something:
+        colormap = np.zeros((*m.shape, 3))
+        error = display_closure_step(m, "after place_square_in_seat_closed", show_links=True, show_real=True, colormap=colormap,
                                       margin=margin, roi_margin=roi_margin)
         if error:
             raise InvalidTilingError(

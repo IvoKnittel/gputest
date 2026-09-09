@@ -3,6 +3,8 @@ from item import Item
 from map_of_squares import SquareItem, StateEnum
 from test_utils import place_and_chase
 from quality_test_utils import image_generator
+from closure import forced_closure, place_squares, clear_all_but_state, do_closure
+from representation import display_closure_step
 
 # Axis name constants: v = vertical (row), h = horizontal (column).
 v = 0
@@ -123,12 +125,59 @@ def best_allowed(map_of_squares, core_range):
     return best_idx is not None, best_idx
 
 
-def insert_best(square_storage_location_map, upper_left_idx, show=False):
+def insert_best(square_storage_location_map, upper_left_idx, show=False, display_every_step=False):
     """Place the single highest-quality free SquareItem in the tile's 3x3 core at
-    upper_left_idx, then run the closure it triggers."""
+    upper_left_idx, then run the closure it triggers.
+
+    show=True: display the board once, after the full closure settles - what
+    this delegates to place_and_chase for when display_every_step=False,
+    matching its own show flag exactly.
+
+    display_every_step=True: run do_closure itself with show=True instead, so
+    every intermediate step of do_closure's own pipeline is shown (after
+    round 1's own discoveries, before the round-2 bookkeeping reset - see
+    do_closure's own docstring), not just the final settled board. For
+    watching exactly where a diagonal-chosen conflict or a fully-blocked 2x2
+    actually forms - see place_square_in_seat's "Known gap" docstring in
+    closure.py and test_square_placement_random_order_supersuperlattice,
+    which is the confirmed repro of that gap. Bypasses place_and_chase
+    entirely in this case, since place_and_chase always calls do_closure with
+    show=False - inlines the same forced_closure/place_squares/
+    clear_all_but_state/do_closure sequence, with do_closure's own show wired
+    to `display_every_step` instead. show and display_every_step are
+    independent: with both True, do_closure's own step-by-step display runs
+    first, then the usual post-settle display afterward, same as
+    place_and_chase would show on its own.
+    """
     found, best_idx = best_allowed(square_storage_location_map, core_range_for_tile(upper_left_idx))
     if found:
-        place_and_chase(square_storage_location_map, best_idx, f"select_single_{best_idx}", show)
+        title = f"select_single_{best_idx}"
+        if display_every_step:
+            # Placed one at a time, with a full do_closure after each -
+            # not all of forced_closure's result in one place_squares batch -
+            # for the same reason place_square_in_seat_closed no longer
+            # batches every seat it finds in one scan: two members of this
+            # same forced group could in principle be diagonal neighbours of
+            # each other, and a single simultaneous place_squares call can't
+            # catch that (see place_square_in_seat's own docstring). Unlike
+            # that fix, nothing here is skipped as unnecessary - every member
+            # of the forced group still gets placed, just sequenced instead
+            # of committed as one atomic batch, so each placement's diagonal-
+            # blocking side effect - and do_closure's own re-evaluation - has
+            # a chance to run before the next one is touched.
+            for pos in forced_closure(square_storage_location_map, best_idx):
+                if square_storage_location_map[pos].state != StateEnum.free:
+                    continue
+                place_squares(square_storage_location_map, [pos])
+                do_closure(square_storage_location_map, title, show=True)
+            clear_all_but_state(square_storage_location_map)
+            do_closure(square_storage_location_map, title, show=True)
+            if show:
+                colormap = np.zeros((*square_storage_location_map.shape, 3))
+                display_closure_step(square_storage_location_map, title, show_links=True,
+                                      show_real=True, colormap=colormap)
+        else:
+            place_and_chase(square_storage_location_map, best_idx, title, show)
     return found
 
 def tile_upper_left_indices(num_tiles_expand_noshift_shift, colorcode, super=False):
@@ -158,9 +207,15 @@ def tile_upper_left_indices(num_tiles_expand_noshift_shift, colorcode, super=Fal
             yield shift[v]*sz_halftile + sz_tile * I, shift[h]*sz_halftile + sz_tile * J
 
 
-def image_squares_select_single(square_storage_location_map, num_tiles_expand_noshift_shift, colorcode, super=False, show=False):
+def image_squares_select_single(square_storage_location_map, num_tiles_expand_noshift_shift, colorcode, super=False, show=False, display_every_step=False):
+    """Run insert_best over every tile colorcode's kernel call covers (see
+    tile_upper_left_indices). show/display_every_step are forwarded to
+    insert_best as-is - see its own docstring for what each one does;
+    display_every_step=True is the one that shows every step do_closure
+    itself takes, not just the settled board after each tile's placement.
+    """
     for i, j in tile_upper_left_indices(num_tiles_expand_noshift_shift, colorcode, super):
-        insert_best(square_storage_location_map, (i, j), show)
+        insert_best(square_storage_location_map, (i, j), show, display_every_step)
     return square_storage_location_map
 
 

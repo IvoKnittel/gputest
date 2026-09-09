@@ -2,10 +2,10 @@
 """
 import numpy as np
 
-from map_of_squares import InvalidTilingError
-from representation import build_map_of_squares, display_closure_step
-from closure import do_closure, place_squares
-from test_utils import place_and_chase 
+from map_of_squares import InvalidTilingError, StateEnum
+from representation import build_map_of_squares, display_closure_step, place_blocked_squares, real_space_map
+from closure import do_closure, place_squares, place_square_in_seat, place_square_in_seat_closed, forced_closure, clear_all_but_state
+from test_utils import place_and_chase
 
 def test_pinwheel():
     """Try to build the pinwheel with a single central element. Four chosen squares, arranged in a 90-degree-rotated
@@ -48,6 +48,55 @@ def test_show_other_full_2x2():
         title = f'next state (rejected - {e})'
     colormap = np.zeros((*m.shape, 3))
     display_closure_step(m, title, show_links=True, show_real=True, colormap=colormap)
+
+def test_corner_and_interior_dominoes():
+    """(0,0)/(1,0) is a domino sitting right at the board's own corner - a
+    cell find_alerts_set_links never scans as the item under consideration
+    (its own loop is range(1, rows-1)/range(1, cols-1), interior only), only
+    ever read as a ring neighbour of something else. (5,4)/(5,5) is an
+    ordinary interior domino. do_closure resolves this cleanly either way
+    (verified with show=True too, so the diagonal-chosen-conflict check runs)
+    - no known gap demonstrated here, just what the smallest edge-adjacent
+    input produces.
+    """
+    m = build_map_of_squares(9, 9)
+    place_squares(m, [(0, 0), (1, 0), (5, 4), (5, 5)])
+    colormap = np.zeros((*m.shape, 3))
+    display_closure_step(m, 'initial state', show_links=True, show_real=True, colormap=colormap)
+    try:
+        do_closure(m, '')
+        title = 'next state'
+    except InvalidTilingError as e:
+        title = f'next state (rejected - {e})'
+    colormap = np.zeros((*m.shape, 3))
+    display_closure_step(m, title, show_links=True, show_real=True, colormap=colormap)
+
+def test_mutually_diagonal_seats_from_real_placement():
+    # same two chosen dominoes as test_corner_and_interior_dominoes - their
+    # ordinary diagonal-blocking side effect is what produces (1,1)/(2,1) and
+    # (4,3)/(4,4) blocked, not a hand-declared .state assignment
+    m = build_map_of_squares(8, 8)
+    place_squares(m, [(0, 0), (1, 0), (5, 4), (5, 5)])
+    do_closure(m, 'trigger placement', show=False)
+    colormap = np.zeros((*m.shape, 3))
+    display_closure_step(m, 'original map', show_links=True, show_real=True, colormap=colormap)
+
+    try:
+        # inlines place_and_chase's own sequence, since it always calls
+        # do_closure with show=False - show=True here is what displays every
+        # intermediate step do_closure itself takes, not just the final state
+        forced = forced_closure(m, (2, 3))
+        place_squares(m, list(forced))
+        clear_all_but_state(m)
+        colormap = np.zeros((*m.shape, 3))
+        display_closure_step(m, 'original map + (2,3)', show_links=False, show_real=True, colormap=colormap)
+
+        do_closure(m, 'trigger placement', show=True)
+    except InvalidTilingError:
+        colormap = np.zeros((*m.shape, 3))
+        display_closure_step(m, 'trigger placement rejected', show_links=True, show_real=True, colormap=colormap)
+        raise
+
 
 def test_try_3x3_hole1():
     m = build_map_of_squares(12, 12)
