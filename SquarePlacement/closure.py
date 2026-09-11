@@ -1,3 +1,5 @@
+import copy
+
 import numpy as np
 
 from map_of_squares import StateEnum, InvalidTilingError, set_square_chosen
@@ -105,8 +107,8 @@ def find_secondary_links(map_of_squares):
     exactly what P's own alert_blocked/alert_chosen pass linked every such
     neighbour to), so a can already reach that corner in two hops via
     whichever b forces it - linking a to it directly would be a redundant
-    edge, true but adding no reachability forced_closure didn't already have,
-    and it only clutters the display. This one-hop-from-B check isn't a
+    edge, true but adding no reachability the .forces chain didn't already
+    have, and it only clutters the display. This one-hop-from-B check isn't a
     complete reachability test (a corner could be several hops past some b
     with nothing directly linking them), but it's cheap and catches the
     common case without turning this function's otherwise fixed-radius
@@ -197,7 +199,7 @@ def clear_all_but_state(map_of_squares):
 
     find_alerts_set_links only ever adds: it skips any cell whose .state
     isn't StateEnum.free, so once a cell is placed (e.g. as part of a
-    forced_closure chase), whatever .alert_chosen/.alert_blocked/.forces/
+    do_closure chase), whatever .alert_chosen/.alert_blocked/.forces/
     .forced_by it was carrying from an earlier round is never cleared - it just
     sits there, stale. That's silently wrong for display: colorize_with_alerts
     overlays alert_chosen/alert_blocked colour on top of the plain state colour,
@@ -206,7 +208,7 @@ def clear_all_but_state(map_of_squares):
     actually placed (cyan) - and a stale .forces/.forced_by entry pointing at or
     from a no-longer-free cell is a dangling reference into a role that cell no
     longer plays. Needed whenever a round places more than one square at once
-    (e.g. after chasing a forced_closure): the incremental single-step
+    (e.g. across a multi-round do_closure chase): the incremental single-step
     discipline the rest of closure.py assumes - one placement, then one
     find_alerts_set_links pass - no longer applies once several cells change
     state in the same round, so the safe thing is to recompute every cell's
@@ -254,24 +256,22 @@ def check_tiling_invariant(map_of_squares):
                 raise InvalidTilingError(f"2x2 all-blocked block at ({i}, {j})")
 
 
-def place_squares(map_of_squares, positions):
+def place_square(map_of_squares, position):
     """
-    Set every (i, j) in positions to StateEnum.chosen on map_of_squares, in
-    place, via set_square_chosen (so each one gets a chance to pair into a
-    rectangle with an already-chosen direct neighbour). positions is expected
-    to start out entirely free - e.g. a fresh map from build_map_of_squares -
-    so no diagonal-neighbour pair among them can already be blocked as a side
-    effect of some earlier placement.
+    Set position to StateEnum.chosen on map_of_squares, in place, via
+    set_square_chosen (so it gets a chance to pair into a rectangle with an
+    already-chosen direct neighbour), then block every diagonal neighbour of
+    position that is still free. position is expected to start out free -
+    e.g. a fresh cell from build_map_of_squares.
 
-    Inputs: reads .state of each diagonal neighbour of each position (to
-    check it's still free before blocking it).
+    Inputs: reads .state of each diagonal neighbour of position (to check
+    it's still free before blocking it).
 
     Outputs: writes .state (free->chosen, plus .rectangle pairing via
-    set_square_chosen) on positions, and .state (free->blocked) on their
+    set_square_chosen) on position, and .state (free->blocked) on its
     diagonal neighbours; returns None.
 
-    Scope: local - each position's effect is confined to its own
-    fixed 1-hop neighbourhood, independent of every other position passed in.
+    Scope: local - confined to position's own fixed 1-hop neighbourhood.
 
     -------------------------------------------------------------------------
 
@@ -280,17 +280,25 @@ def place_squares(map_of_squares, positions):
     (choosing an item blocks its four diagonal neighbours) - so a placed
     square's blocked neighbours show up on display_map_of_squares_3States too,
     not just the chosen square itself.
-    """
-    for i, j in positions:
-        set_square_chosen(map_of_squares, (i, j))
 
+    Takes a single position, not a list: placing more than one position at
+    once - without a do_closure re-evaluation between them - is exactly the
+    batching discipline that let two mutually-diagonal seats both get chosen
+    undetected (see place_square_in_seat's docstring and
+    place_square_in_seat_closed's fix). A caller that needs several positions
+    placed calls this once per position, with do_closure in between when the
+    positions could be mutually obligating; a caller building an unrelated,
+    non-adjacent fixture (e.g. several disjoint test squares at once) simply
+    loops over them directly.
+    """
+    set_square_chosen(map_of_squares, position)
+    i, j = position
     rows, cols = map_of_squares.shape
-    for i, j in positions:
-        for di, dj in DIAGONAL_OFFSETS:
-            ni, nj = i + di, j + dj
-            if (0 <= ni < rows and 0 <= nj < cols
-                    and map_of_squares[ni, nj].state == StateEnum.free):  # BR-015
-                map_of_squares[ni, nj].state = StateEnum.blocked
+    for di, dj in DIAGONAL_OFFSETS:
+        ni, nj = i + di, j + dj
+        if (0 <= ni < rows and 0 <= nj < cols
+                and map_of_squares[ni, nj].state == StateEnum.free):  # BR-015
+            map_of_squares[ni, nj].state = StateEnum.blocked
 
 def place_square_in_seat(map_of_squares):
     """
@@ -320,7 +328,7 @@ def place_square_in_seat(map_of_squares):
     -- Formerly here, now moved to place_square_in_seat_closed: the
     mutually-diagonal-seats gap --
     This function used to place every seat it found in one batch
-    (place_squares), all at once, rather than one at a time - collected
+    (place_square), all at once, rather than one at a time - collected
     first specifically so an earlier placement's diagonal-blocking side
     effect couldn't change a later seat's free corner out from under it
     mid-scan. That batching is exactly what let two seats found in the same
@@ -367,7 +375,7 @@ def place_square_in_seat_closed(map_of_squares):
     StateEnum.free immediately before it's placed - an earlier position in
     the very same pass may already have resolved a later one (blocked it via
     diagonal side effect, or chosen it via do_closure's own cascading
-    effects) - place_squares would otherwise raise on an already-non-free
+    effects) - place_square would otherwise raise on an already-non-free
     cell.
 
     Scope: global - each individual placement is local, but do_closure
@@ -384,7 +392,7 @@ def place_square_in_seat_closed(map_of_squares):
     before the second is ever touched. If the two seats' free corners were
     genuinely diagonal neighbours, placing the first one blocks the second's
     free corner as an ordinary diagonal-blocking side effect
-    (place_squares), the same way any other diagonal neighbour would be
+    (place_square), the same way any other diagonal neighbour would be
     blocked - turning what would have been a silent diagonal-chosen conflict
     into an ordinary blocked cell instead, visible to (and, if it happens to
     complete a fully-blocked 2x2, caught by) the very next do_closure pass,
@@ -406,8 +414,8 @@ def place_square_in_seat_closed(map_of_squares):
         for pos in seats:
             if map_of_squares[pos].state != StateEnum.free:  # BR-037
                 continue
-            place_squares(map_of_squares, [pos])
-            do_closure(map_of_squares, "")
+            place_square(map_of_squares, pos)
+            do_closure_intern(map_of_squares, "", show_on_error=False)
         seats = place_square_in_seat(map_of_squares)
     return changed
 
@@ -558,52 +566,6 @@ def assign_paths(map_of_squares):
 
     propagate_path_id_from_entries(map_of_squares)
 
-
-def forced_closure(map_of_squares, position):
-    """
-    position itself, plus every position transitively forced by its own
-    .forces (see SquareItem.forces): position's direct forces, plus whatever
-    those force in turn, and so on, until every chain reaches a terminal
-    (forces == set()) or loops back onto something already collected.
-
-    Inputs: reads .forces of position and of every cell transitively
-    reached via .forces.
-
-    Outputs: returns a set of positions; writes nothing to the map (a pure
-    read).
-
-    Scope: global - an explicit BFS across .forces, unbounded in reach, the
-    same shape as propagate_path_id_from_entries.
-
-    -------------------------------------------------------------------------
-
-    This is the "actually commit to it" counterpart to find_alerts_set_links/
-    get_blocked_links/dissolve_blocked_paths, which only ever *record* what
-    choosing an item would oblige - nothing before this walks the recorded
-    chain to say which positions that obligation actually reaches. Follows
-    every entry in .forces, not just
-    one: an item can force more than one other at once (see .forces'
-    docstring), and only following a single arbitrary entry would silently
-    drop a real obligation. Makes no
-    assumption that a pure .forces cycle has been broken anywhere else - a
-    forces chain can still loop back on itself - so each position is only
-    ever visited once.
-
-    A pure read - does not place anything itself. The caller places every
-    position in the result, position included (see place_squares) - every
-    call site does this as `place_squares(m, list(forced_closure(m, pos)))`,
-    with no separate `+ [pos]`.
-    """
-    to_visit = list(map_of_squares[position].forces)
-    forced = set()
-    forced.add(position)
-    while to_visit:
-        pos = to_visit.pop()
-        if pos in forced:
-            continue
-        forced.add(pos)
-        to_visit.extend(map_of_squares[pos].forces)
-    return forced
 
 def get_blocked_links(m):
     """
@@ -970,11 +932,17 @@ def has_alert_bookkeeping(m):
     return False
 
 
-def do_closure(m, title, show=False, margin=None, roi_margin=0):
+def do_closure_intern(m, title, show=False, margin=None, roi_margin=0, show_on_error=True):
     """
     Run one full round of the closure pipeline, twice (see below for why
     twice), in place: find_alerts_set_links, assign_paths, get_blocked_links/
     dissolve_blocked_paths, place_square_in_seat_closed.
+
+    Named do_closure_intern, not do_closure: do_closure itself is now a thin
+    wrapper around this function (see its own docstring) that adds one more
+    summary display, highlighting whatever changed this call, on top of
+    (or instead of) this function's own show=True per-step displays - most
+    callers should call do_closure, not this one, directly.
 
     Inputs: none of its own - delegates entirely to the stages it calls, in
     sequence.
@@ -1060,6 +1028,16 @@ def do_closure(m, title, show=False, margin=None, roi_margin=0):
     place-all-at-once discipline) without the per-placement re-scan that
     would otherwise catch a forming pinwheel - see the (3, 3)/(3, 4)/(4, 3)/
     (4, 4) case surfaced by test_margin_free_5x5realmap's very first round.
+
+    This final check_tiling_invariant sits after the second, silent pass, so
+    without its own safety net a failure here would raise with no display
+    ever having shown the board that triggered it - the case show_on_error
+    (default True) exists for: if the invariant check raises, and
+    show_on_error is True, display the board (independent of `show`) before
+    re-raising the same exception. show_on_error=False skips that display
+    and just re-raises, for callers (like do_closure's own except block, or
+    place_square_in_seat_closed's per-seat re-evaluation calls) that already
+    handle showing the failure themselves.
     """
     find_alerts_set_links(m)
     find_secondary_links(m)
@@ -1098,4 +1076,137 @@ def do_closure(m, title, show=False, margin=None, roi_margin=0):
     assign_paths(m)
     dissolve_blocked_paths(m, get_blocked_links(m))
     place_square_in_seat_closed(m)
-    check_tiling_invariant(m)
+    try:
+        check_tiling_invariant(m)
+    except InvalidTilingError:
+        if show_on_error:
+            colormap = np.zeros((*m.shape, 3))
+            display_closure_step(m, f"ERROR: {title}: check_tiling_invariant failed", show_links=True,
+                                  show_real=True, colormap=colormap, margin=margin, roi_margin=roi_margin,
+                                  title_color='red')
+        raise
+
+
+def eval_map(m_before, m_after):
+    """Compare two same-shape map_of_squares arrays cell by cell, and report
+    every position whose .state became StateEnum.blocked, or became
+    StateEnum.chosen, going from m_before to m_after.
+
+    Inputs: reads .state of every cell in both maps.
+
+    Outputs: returns (newly_blocked, newly_chosen) - two lists of (row, col)
+    positions; writes nothing to either map.
+
+    Scope: local - each newly_chosen position's own comparison depends only
+    on that same position in both maps; newly_blocked additionally checks
+    each of its own candidates against every newly_chosen position's fixed
+    diagonal neighbourhood (see below) - still a bounded, fixed-radius check
+    per candidate, not a graph walk.
+
+    -------------------------------------------------------------------------
+
+    "Became" means the position's state differs between the two maps and the
+    *new* value is the state being asked about - not "was free, now X",
+    though in practice those coincide here: nothing in this pipeline ever
+    moves a cell away from StateEnum.chosen or StateEnum.blocked once it
+    reaches one (see place_square/dissolve_blocked_paths/
+    place_square_in_seat), so the only real transition either list can ever
+    report is free -> blocked or free -> chosen. Written as a plain
+    inequality check anyway, rather than assuming that invariant holds.
+
+    newly_blocked excludes every position that is a diagonal neighbour of
+    some newly_chosen position: place_square's own diagonal-blocking side
+    effect (see its docstring) blocks those unconditionally, so they're not
+    an independent event worth its own yellow frame - the newly_chosen
+    frame already explains them. What's left in newly_blocked is only the
+    "isolated" blocks with no chosen neighbour of their own to explain them
+    - i.e. dissolve_blocked_paths's own path-id-contradiction blocking (see
+    its docstring), the one kind of blocking this round that a viewer
+    couldn't already infer just from looking at newly_chosen.
+    """
+    rows, cols = m_after.shape
+    newly_blocked = []
+    newly_chosen = []
+    for i in range(rows):
+        for j in range(cols):
+            before_state = m_before[i, j].state
+            after_state = m_after[i, j].state
+            if after_state == before_state:
+                continue
+            if after_state == StateEnum.blocked:
+                newly_blocked.append((i, j))
+            elif after_state == StateEnum.chosen:
+                newly_chosen.append((i, j))
+
+    chosen_diagonal_neighbours = {(i + di, j + dj) for i, j in newly_chosen
+                                   for di, dj in DIAGONAL_OFFSETS}
+    newly_blocked = [pos for pos in newly_blocked if pos not in chosen_diagonal_neighbours]
+    return newly_blocked, newly_chosen
+
+
+def do_closure(m, title, show=True, margin=None, roi_margin=0, show_all=False, show_on_error=True):
+    """Wrapper around do_closure_intern - what every caller should use
+    instead of calling that one directly. Runs the real closure pipeline on
+    m in place exactly as before (do_closure_intern is unchanged, just
+    renamed), then adds one more summary display of its own: everything this
+    call changed, each such cell framed in yellow, regardless of which of
+    do_closure_intern's own several stages was responsible.
+
+    show_all: forwarded as do_closure_intern's own `show` - unchanged
+    behaviour, its existing per-stage displays (after assign_paths/
+    dissolve_blocked_paths/place_square_in_seat_closed, each already
+    conditional on that stage having found or changed something - see
+    do_closure_intern's own docstring). Independent of, and unrelated to,
+    this wrapper's own `show` below - the two can be combined freely (e.g.
+    show_all=True to watch every stage plus show=True for the final
+    highlighted summary), or either used alone.
+
+    show: this wrapper's own flag, controlling only its own summary display -
+    not forwarded anywhere. A copy of m is taken before do_closure_intern
+    runs (copy.deepcopy - a real, independent snapshot, not a view), and
+    eval_map compares it against m after do_closure_intern finishes (or
+    raises - see below) to get the newly_blocked/newly_chosen lists.
+    display_closure_step then gets both lists as its own newly_blocked/
+    newly_chosen arguments: if show=True but eval_map found nothing changed
+    at all (both lists empty), display_closure_step's own contract for that
+    case is to display nothing, not an empty round for nothing - see its own
+    docstring. show=False skips computing or showing any of this, exactly as
+    if this wrapper's own logic wasn't there at all.
+
+    If do_closure_intern raises InvalidTilingError, this wrapper still shows
+    its own summary display first (if show_on_error=True, the default) -
+    whatever changed before the failure is exactly the interesting part of
+    the board to be looking at - then re-raises the same exception
+    unchanged, so a caller of do_closure still sees the same failure
+    do_closure_intern itself would have raised. That on-error display is
+    gated by show_on_error rather than show, so a caller with show=False can
+    still see the failing board, and a caller (like test_margins.py) that
+    already handles the expected-to-raise case itself can pass
+    show_on_error=False to suppress it and avoid a duplicate display.
+    show_on_error is also forwarded to do_closure_intern's own call, as its
+    safety net around check_tiling_invariant (see that function's
+    docstring). Either on-error display's title is title (do_closure's own)
+    or do_closure_intern's own title, prefixed with "ERROR: " and coloured
+    red (display_closure_step's title_color), so an error panel is visibly
+    distinct from a normal one even sitting among several plot windows.
+    """
+    m_before = copy.deepcopy(m)
+    try:
+        do_closure_intern(m, title, show=show_all, margin=margin, roi_margin=roi_margin,
+                           show_on_error=show_on_error)
+    except InvalidTilingError:
+        if show_on_error:
+            newly_blocked, newly_chosen = eval_map(m_before, m)
+            colormap = np.zeros((*m.shape, 3))
+            display_closure_step(m, f"ERROR: {title}", show_links=True, show_real=True, colormap=colormap,
+                                  margin=margin, roi_margin=roi_margin,
+                                  newly_blocked=newly_blocked, newly_chosen=newly_chosen,
+                                  title_color='red')
+        raise
+
+    if show:
+        newly_blocked, newly_chosen = eval_map(m_before, m)
+        colormap = np.zeros((*m.shape, 3))
+        display_closure_step(m, title, show_links=True, show_real=True, colormap=colormap,
+                              margin=margin, roi_margin=roi_margin,
+                              newly_blocked=newly_blocked, newly_chosen=newly_chosen)

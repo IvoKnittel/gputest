@@ -16,8 +16,7 @@ from closure import (find_alerts_set_links,
                       assign_paths,
                       get_blocked_links,
                       do_closure,
-                      forced_closure,
-                      place_squares)
+                      place_square)
 
 from test_utils import place_and_chase 
 
@@ -35,7 +34,8 @@ def test_line():
     """
     m = build_map_of_squares(11, 10)
     positions = [(6, 1), (9, 4), (4, 3), (7, 6), (2, 5), (5, 8)]
-    place_squares(m, positions)
+    for pos in positions:
+        place_square(m, pos)
 
     find_alerts_set_links(m)
     find_secondary_links(m)
@@ -121,14 +121,16 @@ def test_tree_fan_in():
     assert m[3, 3].alert_chosen and not m[3, 3].forces
     assert {(2, 1), (4, 1), (4, 3), (4, 5)} <= m[3, 3].forced_by
 
-    place_squares(m, list(forced_closure(m, (6, 4))))
+    place_square(m, (6, 4))
+    do_closure(m, '', show=False)
     assert m[3, 3].state == StateEnum.chosen
     colormap = np.zeros((*m.shape, 3))
     display_closure_step(m, 'fan-in forced via (6, 4)', show_links=True, show_real=True, colormap=colormap)
 
     m = map_of_squares_from_array(grid)
     do_closure(m, '')
-    place_squares(m, list(forced_closure(m, (2, 1))))
+    place_square(m, (2, 1))
+    do_closure(m, '', show=False)
     assert m[3, 3].state == StateEnum.chosen
     colormap = np.zeros((*m.shape, 3))
     display_closure_step(m, 'fan-in forced via (2, 1)', show_links=True, show_real=True, colormap=colormap)
@@ -149,7 +151,7 @@ def test_line_into_eye():
     the other - the 2-cycle "into" which this line feeds.
 
     Demonstrated by actually placing (1, 4): both cycle cells end up chosen
-    too, forced_closure's own chain reaching all the way round the pair, and
+    too, do_closure's own chase reaching all the way round the pair, and
     nothing beyond those three cells does.
     """
     grid = [[0, 0, 0, 0, 0, 0, 1, 0, 0, 0],
@@ -188,7 +190,8 @@ def test_line_into_eye():
     display_closure_step(m, 'line into cycle: before placing (1, 4)',
                           show_links=True, show_real=True, colormap=colormap)
 
-    place_squares(m, list(forced_closure(m, (1, 4))))
+    place_square(m, (1, 4))
+    do_closure(m, '', show=False)
 
     chosen_after = {(i, j) for i in range(rows) for j in range(cols)
                      if m[i, j].state == StateEnum.chosen}
@@ -220,7 +223,8 @@ def test_eye_outwards():
     display_closure_step(m, 'cycle line outwards: before placing (1, 2)',
                           show_links=True, show_real=True, colormap=colormap)
 
-    place_squares(m, list(forced_closure(m, (1, 2))))
+    place_square(m, (1, 2))
+    do_closure(m, '', show=False)
     colormap = np.zeros((*m.shape, 3))
     display_closure_step(m, 'cycle line outwards: after placing (1, 2)',
                           show_links=True, show_real=True, colormap=colormap)

@@ -3,7 +3,7 @@ import numpy as np
 from map_of_squares import StateEnum
 from representation import build_map_of_squares, map_of_squares_from_array, place_blocked_squares, display_closure_step
 from test_utils  import  place_and_chase
-from closure import do_closure, forced_closure
+from closure import do_closure
 
 def test_seat_from_two_alert_blocked():
     """(7, 5) used to end up StateEnum.chosen with an empty .forced_by
@@ -45,7 +45,6 @@ def test_seat_from_two_alert_blocked():
     m = map_of_squares_from_array(grid)
     do_closure(m, 'initial', show=True)
     assert m[7,5].forced_by == {(5, 4)}
-    assert forced_closure(m, (5, 4)) == {(5, 4), (7, 3), (7, 5)}
     place_and_chase(m, (5, 4), "round 1: (5,4) placed")
     assert m[7,5].state == StateEnum.chosen
 
@@ -67,6 +66,5 @@ def test_frozen_area():
     place_and_chase(m, (4, 4), "round 1: (4,4) placed")
     place_and_chase(m, (5, 4), "round 2: (5,4) placed")
     assert m[8,7].forced_by == {(6, 7), (6, 8)}
-    assert (8, 7) in forced_closure(m, (6, 7))
     place_and_chase(m, (6, 7), "round 3: (6,7) placed")
     assert m[8,7].state == StateEnum.chosen

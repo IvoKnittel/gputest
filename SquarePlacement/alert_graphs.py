@@ -103,7 +103,7 @@ def set_alert_chosen_set_links(i, j, ring):
             ring[c_idx].forced_by.add(d_pos)
 
 
-# The four diagonal neighbours - the ones a chosen item blocks (see closure.place_squares)
+# The four diagonal neighbours - the ones a chosen item blocks (see closure.place_square)
 # - as a subset of RING_OFFSETS (ring indices 0, 2, 4, 6).
 DIAGONAL_OFFSETS = [RING_OFFSETS[k] for k in (0, 2, 4, 6)]
 

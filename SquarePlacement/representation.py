@@ -15,6 +15,7 @@ from dataclasses import dataclass
 
 import numpy as np
 import matplotlib.pyplot as plt
+from matplotlib.patches import Rectangle
 
 from map_of_squares import SquareItem, StateEnum, InvalidTilingError, set_square_chosen, DIRECT_OFFSETS
 
@@ -61,7 +62,7 @@ def build_margin_free_map(n):
     return map_of_squares_from_array(grid)
 
 
-# The four diagonal offsets a chosen item blocks (see closure.place_squares).
+# The four diagonal offsets a chosen item blocks (see closure.place_square).
 DIAGONAL_OFFSETS = ((-1, -1), (-1, 1), (1, -1), (1, 1))
 
 
@@ -70,7 +71,7 @@ def map_of_squares_from_array(state_grid):
     or a numpy array): 0 = free, 1 = chosen.
 
     Every diagonal neighbour of a chosen cell is set to blocked, matching the
-    invariant closure.place_squares enforces elsewhere (choosing an item blocks
+    invariant closure.place_square enforces elsewhere (choosing an item blocks
     its four diagonal neighbours) - an already-chosen cell is never overwritten
     to blocked, and diagonal neighbours that fall outside the grid are simply
     skipped, since this builder doesn't assume any padding margin around it.
@@ -181,10 +182,10 @@ def place_blocked_squares(map_of_squares, positions):
     """Set every (i, j) in positions to StateEnum.blocked on map_of_squares, in
     place - for hand-building a scenario directly from blocked cells (e.g. the
     side effect two chosen squares elsewhere would have left behind), instead of
-    only ever meeting blocked cells as a derived effect of place_squares/
+    only ever meeting blocked cells as a derived effect of place_square/
     map_of_squares_from_array.
 
-    Unlike place_squares, a blocked cell has no diagonal-neighbour side effect of
+    Unlike place_square, a blocked cell has no diagonal-neighbour side effect of
     its own to apply - blocking only ever radiates out from a *chosen* square,
     never from another blocked one - so this is a direct, unconditional write.
     """
@@ -419,7 +420,8 @@ def grid_on(ax, rows, cols, offset=-0.5):
 
 def display_closure_step(m, title, show_links=False, show_real=False,
                           show_entries_terminals=False, ax=None, colormap=None,
-                          margin=None, roi_margin=0):
+                          margin=None, roi_margin=0, newly_blocked=None, newly_chosen=None,
+                          title_color=None):
     """Show a single map_of_squares panel coloured via colorize_with_alerts, so
     alert_blocked (blue), alert_chosen (yellow), and both-at-once (green) are
     visible on top of the plain free/chosen/blocked colours.
@@ -517,16 +519,46 @@ def display_closure_step(m, title, show_links=False, show_real=False,
     nobody asked to see, and paint that would otherwise cover over margin's
     own colouring wherever the two overlap.
 
+    newly_blocked/newly_chosen: optional lists of (row, col) positions - see
+    closure.eval_map, which is what do_closure's own wrapper uses to compute
+    them (comparing a copy of the map from before its call to
+    do_closure_intern against the map after). When given, every position in
+    either list gets a yellow frame drawn around it on the map_of_squares
+    panel, on top of everything else - a visual "this is what changed this
+    round" overlay, independent of show_links/show_entries_terminals.
+    Skipped (cropped out, like every other overlay) for a position inside
+    the roi_margin ring.
+
+    Both default to None, not an empty list, specifically so plain omission
+    (every call site that predates this feature) is distinguishable from a
+    caller that actively checked and found nothing changed: if at least one
+    of the two is not None (the caller computed them) and both end up empty,
+    this function draws nothing at all and returns False immediately -
+    there's nothing to show, not even the plain board, since the caller's
+    entire reason for calling was "show me if this round changed anything".
+    Passing neither (the default) skips this check entirely and displays
+    normally, exactly as before this parameter pair existed.
+
+    title_color: forwarded as-is to ax.set_title's own color argument -
+    None (the default) leaves the title in matplotlib's normal colour.
+    do_closure passes 'red' here for its own on-error display, alongside an
+    "ERROR: " prefix on title itself (see do_closure's docstring) - this
+    parameter only controls colour, it does not add the prefix.
+
     Returns error: True if show_real=True and real_space_map reported a
     diagonal-chosen conflict (the real-space panel is skipped in that case -
     there's no valid footprint to draw - the map_of_squares panel on the left
     is still drawn as usual), False otherwise (including whenever
-    show_real=False, since nothing was checked). real_space_map itself no
-    longer raises on this - see its own docstring - so a caller that wants the
-    old always-raise behaviour needs to check this return value and raise
-    InvalidTilingError itself; do_closure's own show=True path does exactly
-    that.
+    show_real=False, since nothing was checked, and whenever the
+    newly_blocked/newly_chosen "nothing changed" early return above fires).
+    real_space_map itself no longer raises on this - see its own docstring -
+    so a caller that wants the old always-raise behaviour needs to check this
+    return value and raise InvalidTilingError itself; do_closure's own
+    show=True path does exactly that.
     """
+    if (newly_blocked is not None or newly_chosen is not None) and not (newly_blocked or newly_chosen):
+        return False
+
     rows, cols = m.shape
     error = False
     if show_real:
@@ -546,7 +578,10 @@ def display_closure_step(m, title, show_links=False, show_real=False,
     if w:
         rgb = rgb[w:rows - w, w:cols - w]
     ax.imshow(rgb)
-    ax.set_title(title)
+    if title_color is not None:
+        ax.set_title(title, color=title_color)
+    else:
+        ax.set_title(title)
     ax.axis('on')
     grid_on(ax, rows - 2 * w, cols - 2 * w)
 
@@ -599,6 +634,12 @@ def display_closure_step(m, title, show_links=False, show_real=False,
                     ax.plot(j - w, i - w, 'o', markersize=10, color='blue', zorder=5)
                 elif item.forces and not item.forced_by:
                     ax.plot(j - w, i - w, 'o', markersize=10, color='red', zorder=5)
+
+    for i, j in (newly_blocked or []) + (newly_chosen or []):
+        if not (w <= i < rows - w and w <= j < cols - w):
+            continue
+        ax.add_patch(Rectangle((j - w - 0.5, i - w - 0.5), 1, 1, linewidth=2,
+                                edgecolor='yellow', facecolor='none', zorder=6))
 
     if show_real:
         real_display, error = real_space_map(m)
