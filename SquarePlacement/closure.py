@@ -8,9 +8,36 @@ from alert_graphs import (RING_OFFSETS,
                            iter_alert_thirds,
                            set_alert_blocked,
                            set_alert_chosen_set_links)
-from representation import display_closure_step
+from representation import display_closure_step, margin_ring_positions
 
-def find_alerts_set_links(map_of_squares):
+
+def _call_step_asserts(m, asserts_single, step_name):
+    """Shared implementation behind every pipeline function's own `asserts`
+    parameter (find_alerts_set_links, find_secondary_links, assign_paths,
+    get_blocked_links, dissolve_blocked_paths, place_square_in_seat_closed):
+    look up step_name (that function's own name, matching one of
+    test_utils.DoClosureSteps' member names) in DoClosureSteps, find the
+    (step, fn) pair in asserts_single.asserts (a
+    test_utils.DoClosureAssertsSingle) whose step matches, and call fn(m).
+    Does nothing if asserts_single carries no entry for this step.
+
+    test_utils.DoClosureSteps is imported here, locally, rather than at this
+    module's own top level: test_utils already imports do_closure/
+    place_square from closure.py, so importing test_utils back at closure.py's
+    own module level would form a cycle. A caller can only ever reach this
+    function with a real DoClosureAssertsSingle in hand (constructed via
+    test_utils), which means test_utils is already fully loaded by the time
+    this runs - so the local import here is always safe, just deferred.
+    """
+    from test_utils import DoClosureSteps
+    step = DoClosureSteps[step_name]
+    for candidate_step, fn in asserts_single.asserts:
+        if candidate_step == step:
+            fn(m)
+            return
+
+
+def find_alerts_set_links(map_of_squares, asserts=None):
     """
     A seat (team term - see docs/rose_cascades_and_holes/README.md - for what this
     function's own name calls an "alert" as a noun) is a 2x2 block with three items
@@ -23,6 +50,12 @@ def find_alerts_set_links(map_of_squares):
 
     Outputs: writes .alert_blocked (on the free cell itself) and
     .alert_chosen/.forces/.forced_by (on ring neighbours); returns None.
+    asserts (a test_utils.DoClosureAssertsSingle, or None) is looked up via
+    _call_step_asserts once this function's own work is done, under this
+    function's own DoClosureSteps entry - see _call_step_asserts' and
+    do_closure's own docstrings for why (a caller that needs do_closure's
+    display but also wants to check an intermediate state uses this hook
+    instead of hand-running the pipeline itself).
 
     Scope: local - every cell's read and write is confined to its own fixed
     1-ring neighbourhood, independent of every other cell's outcome.
@@ -54,8 +87,10 @@ def find_alerts_set_links(map_of_squares):
             set_alert_blocked(item, ring)
             if item.alert_blocked:  # BR-002
                 set_alert_chosen_set_links(i, j, ring)
+    if asserts is not None:
+        _call_step_asserts(map_of_squares, asserts, 'find_alerts_set_links')
 
-def find_secondary_links(map_of_squares):
+def find_secondary_links(map_of_squares, asserts=None):
     """
     A relay on top of find_alerts_set_links: for each alert_blocked item P,
     simulate each candidate placement a (a free diagonal neighbour of P - the
@@ -71,7 +106,8 @@ def find_secondary_links(map_of_squares):
     every 2x2 block touching one of those.
 
     Outputs: writes .forces (on a), .forced_by and .alert_chosen (on each
-    newly-linked corner); returns None.
+    newly-linked corner); returns None. asserts - see find_alerts_set_links's
+    own docstring for the contract.
 
     Scope: local - a fixed, bounded-radius simulation per (P, a) pair (P's
     ring, a's diagonal footprint, each corner's diagonal footprint, and the
@@ -175,6 +211,8 @@ def find_secondary_links(map_of_squares):
                         a_item.forces.add(corner_pos)
                         corner_item.forced_by.add(a_pos)
                         corner_item.alert_chosen = True
+    if asserts is not None:
+        _call_step_asserts(map_of_squares, asserts, 'find_secondary_links')
 
 
 def clear_all_but_state(map_of_squares):
@@ -300,6 +338,37 @@ def place_square(map_of_squares, position):
                 and map_of_squares[ni, nj].state == StateEnum.free):  # BR-015
             map_of_squares[ni, nj].state = StateEnum.blocked
 
+
+def add_margin_ring(map_of_squares):
+    """Apply build_margin_free_map's own margin convention
+    (representation.margin_ring_positions) to an existing map, in place,
+    instead of building a fresh one - so whatever's already on it (e.g.
+    .quality, from Quality.image_to_squares.build_quality_map) survives,
+    unlike building a fresh map would. Chooses the same ring positions
+    margin_ring_positions computes for this map's own shape, one at a time
+    via place_square, so each one's diagonal-blocking side effect lands
+    exactly as build_margin_free_map's own construction would (the ring's
+    own corner-adjacent skip - see margin_ring_positions' docstring - means
+    no two ring positions are ever diagonal neighbours of each other, so
+    placement order among them doesn't matter).
+
+    Inputs: reads .state of every ring position's diagonal neighbours (via
+    place_square).
+
+    Outputs: writes .state (free->chosen on the ring, free->blocked on each
+    ring cell's still-free diagonal neighbours); returns map_of_squares, for
+    convenience chaining the same way the outdated add_blocked_margin (see
+    Quality/test_image_to_squares.py) it replaces did.
+
+    Scope: local - each ring position's own effect is confined to its own
+    fixed 1-hop diagonal neighbourhood, the same as place_square itself.
+    """
+    rows, cols = map_of_squares.shape
+    for pos in margin_ring_positions(rows, cols):
+        place_square(map_of_squares, pos)
+    return map_of_squares
+
+
 def place_square_in_seat(map_of_squares):
     """
     Scan every 2x2 block of adjacent map_of_squares cells (same scan as
@@ -353,7 +422,7 @@ def place_square_in_seat(map_of_squares):
     return list(seats)
 
 
-def place_square_in_seat_closed(map_of_squares):
+def place_square_in_seat_closed(map_of_squares, asserts=None):
     """
     Place every seat place_square_in_seat finds, to a fixed point - but one
     seat at a time, running do_closure's own full re-evaluation after each
@@ -371,6 +440,7 @@ def place_square_in_seat_closed(map_of_squares):
     point, since placing one square can block a diagonal neighbour that
     completes another 2x2 block into a fresh seat, or open up new
     consequences of its own via do_closure's own pipeline); returns a bool.
+    asserts - see find_alerts_set_links's own docstring for the contract.
     Every position place_square_in_seat found this pass is re-checked for
     StateEnum.free immediately before it's placed - an earlier position in
     the very same pass may already have resolved a later one (blocked it via
@@ -417,6 +487,8 @@ def place_square_in_seat_closed(map_of_squares):
             place_square(map_of_squares, pos)
             do_closure_intern(map_of_squares, "", show_on_error=False)
         seats = place_square_in_seat(map_of_squares)
+    if asserts is not None:
+        _call_step_asserts(map_of_squares, asserts, 'place_square_in_seat_closed')
     return changed
 
 
@@ -499,7 +571,7 @@ def unique_id(pos, size):
         return pos[0] * rows + pos[1]
     return pos[0] * cols + pos[1]
 
-def assign_paths(map_of_squares):
+def assign_paths(map_of_squares, asserts=None):
     """
     Seed every entry, and every blocking-pair site, with its own path_id,
     then call propagate_path_id_from_entries to spread each seed forward
@@ -511,7 +583,8 @@ def assign_paths(map_of_squares):
 
     Outputs: writes .path_id (seeds), then calls
     propagate_path_id_from_entries (a global write - see its own header);
-    returns None.
+    returns None. asserts - see find_alerts_set_links's own docstring for
+    the contract.
 
     Scope: global - the seeding loop here is local (one hop), but the
     function always finishes by invoking that board-wide walk, so the
@@ -565,9 +638,11 @@ def assign_paths(map_of_squares):
                         break
 
     propagate_path_id_from_entries(map_of_squares)
+    if asserts is not None:
+        _call_step_asserts(map_of_squares, asserts, 'assign_paths')
 
 
-def get_blocked_links(m):
+def get_blocked_links(m, asserts=None):
     """
     Return the set of path ids flagged as self-contradicting by any cell -
     ids, not positions. Run after assign_paths, not before: path_id has to
@@ -576,7 +651,8 @@ def get_blocked_links(m):
     Inputs: reads .path_id map-wide (plus positions, to look up each cell's
     diagonal neighbours - no other field).
 
-    Outputs: returns a set of path ids; writes nothing to the map.
+    Outputs: returns a set of path ids; writes nothing to the map. asserts -
+    see find_alerts_set_links's own docstring for the contract.
 
     Scope: global - each cell's own Q/S computation only ever looks at its
     own 4 diagonal neighbours (a local read), but the return value collapses
@@ -666,10 +742,12 @@ def get_blocked_links(m):
                 if neighbour.path_id:  # BR-030
                     Q |= neighbour.path_id
             p |= (Q & A.path_id)
+    if asserts is not None:
+        _call_step_asserts(m, asserts, 'get_blocked_links')
     return p
 
 
-def dissolve_blocked_paths(m, p):
+def dissolve_blocked_paths(m, p, asserts=None):
     """Block the one cell per id in p - the cell whose own position hashes to
     that id via unique_id - and do nothing else. No eager .path_id stripping
     across the rest of the board, no .forces/.forced_by retraction.
@@ -712,6 +790,7 @@ def dissolve_blocked_paths(m, p):
     whose own unique_id is a member; returns True if at least one cell was
     blocked this way, False otherwise (e.g. do_closure uses this to decide
     whether its own round actually changed anything worth displaying).
+    asserts - see find_alerts_set_links's own docstring for the contract.
 
     Scope: local per id - unique_id is injective, so each id in p names
     exactly one cell; this is a bounded, single-write-per-id pass, not a
@@ -724,6 +803,8 @@ def dissolve_blocked_paths(m, p):
             if unique_id((i, j), (rows, cols)) in p:
                 m[i, j].state = StateEnum.blocked
                 changed = True
+    if asserts is not None:
+        _call_step_asserts(m, asserts, 'dissolve_blocked_paths')
     return changed
 
 
@@ -932,7 +1013,7 @@ def has_alert_bookkeeping(m):
     return False
 
 
-def do_closure_intern(m, title, show=False, margin=None, roi_margin=0, show_on_error=True):
+def do_closure_intern(m, title, show=False, margin=None, roi_margin=0, show_on_error=True, asserts=None):
     """
     Run one full round of the closure pipeline, twice (see below for why
     twice), in place: find_alerts_set_links, assign_paths, get_blocked_links/
@@ -1038,50 +1119,60 @@ def do_closure_intern(m, title, show=False, margin=None, roi_margin=0, show_on_e
     and just re-raises, for callers (like do_closure's own except block, or
     place_square_in_seat_closed's per-seat re-evaluation calls) that already
     handle showing the failure themselves.
+
+    asserts (a test_utils.DoClosureAsserts, or None): .first_pass is
+    forwarded as every pipeline function's own `asserts` in the first,
+    displayed round above; .second_pass likewise for the second, silent
+    round - each independently None-able (skips that round's hooks only).
+    See find_alerts_set_links's own docstring for what a pipeline function
+    does with the DoClosureAssertsSingle it's given.
     """
-    find_alerts_set_links(m)
-    find_secondary_links(m)
-    assign_paths(m)
+    first_pass = asserts.first_pass if asserts is not None else None
+    second_pass = asserts.second_pass if asserts is not None else None
+
+    find_alerts_set_links(m, asserts=first_pass)
+    find_secondary_links(m, asserts=first_pass)
+    assign_paths(m, asserts=first_pass)
     if show and has_alert_bookkeeping(m):
         colormap = np.zeros((*m.shape, 3))
-        error = display_closure_step(m, "after assign_paths", show_links=True, show_real=True, colormap=colormap,
+        error = display_closure_step(m, title="after assign_paths", show_links=True, show_real=True, colormap=colormap,
                                     margin=margin, roi_margin=roi_margin)
         if error:
             raise InvalidTilingError(
                     f"{title}: real_space_map found a diagonal-chosen conflict - "
                     f"see the map_of_squares panel just shown for which cells")
 
-    blocked_something = dissolve_blocked_paths(m, get_blocked_links(m))
+    blocked_something = dissolve_blocked_paths(m, get_blocked_links(m, asserts=first_pass), asserts=first_pass)
     if show and blocked_something:
         colormap = np.zeros((*m.shape, 3))
-        error = display_closure_step(m, "after dissolve_blocked_paths", show_links=True, show_real=True, colormap=colormap,
+        error = display_closure_step(m, title="after dissolve_blocked_paths", show_links=True, show_real=True, colormap=colormap,
                                         margin=margin, roi_margin=roi_margin)
         if error:
             raise InvalidTilingError(
                 f"{title}: real_space_map found a diagonal-chosen conflict - "
                 f"see the map_of_squares panel just shown for which cells")
 
-    placed_something = place_square_in_seat_closed(m)
+    placed_something = place_square_in_seat_closed(m, asserts=first_pass)
     if show and placed_something:
         colormap = np.zeros((*m.shape, 3))
-        error = display_closure_step(m, "after place_square_in_seat_closed", show_links=True, show_real=True, colormap=colormap,
+        error = display_closure_step(m, title="after place_square_in_seat_closed", show_links=True, show_real=True, colormap=colormap,
                                       margin=margin, roi_margin=roi_margin)
         if error:
             raise InvalidTilingError(
                 f"{title}: real_space_map found a diagonal-chosen conflict - "
                 f"see the map_of_squares panel just shown for which cells")
     clear_all_but_state(m)
-    find_alerts_set_links(m)
-    find_secondary_links(m)
-    assign_paths(m)
-    dissolve_blocked_paths(m, get_blocked_links(m))
-    place_square_in_seat_closed(m)
+    find_alerts_set_links(m, asserts=second_pass)
+    find_secondary_links(m, asserts=second_pass)
+    assign_paths(m, asserts=second_pass)
+    dissolve_blocked_paths(m, get_blocked_links(m, asserts=second_pass), asserts=second_pass)
+    place_square_in_seat_closed(m, asserts=second_pass)
     try:
         check_tiling_invariant(m)
     except InvalidTilingError:
         if show_on_error:
             colormap = np.zeros((*m.shape, 3))
-            display_closure_step(m, f"ERROR: {title}: check_tiling_invariant failed", show_links=True,
+            display_closure_step(m, title=f"ERROR: {title}: check_tiling_invariant failed", show_links=True,
                                   show_real=True, colormap=colormap, margin=margin, roi_margin=roi_margin,
                                   title_color='red')
         raise
@@ -1144,13 +1235,29 @@ def eval_map(m_before, m_after):
     return newly_blocked, newly_chosen
 
 
-def do_closure(m, title, show=True, margin=None, roi_margin=0, show_all=False, show_on_error=True):
+def do_closure(m, pos=None, title="", show=True, margin=None, roi_margin=0, show_all=False, show_on_error=True,
+                asserts=None):
     """Wrapper around do_closure_intern - what every caller should use
     instead of calling that one directly. Runs the real closure pipeline on
     m in place exactly as before (do_closure_intern is unchanged, just
     renamed), then adds one more summary display of its own: everything this
     call changed, each such cell framed in yellow, regardless of which of
     do_closure_intern's own several stages was responsible.
+
+    pos: an optional (row, col) position to place (via place_square) before
+    anything else this call does - the common "place one square, then let
+    do_closure chase whatever it obligates" pattern (see test_utils.
+    place_and_chase), folded into do_closure itself instead of a separate
+    place_square call before it. Called before m_before is captured (see
+    below), so the placement itself is never part of what eval_map reports
+    changed - only genuine consequences of the closure pipeline are (a
+    seat that gets filled, a path that gets blocked). The placement is
+    still shown, though: both of this wrapper's own display_closure_step
+    calls (success and on-error) get pos forwarded as their own `pos`
+    argument, framing the placed cell in red - distinct from a yellow
+    newly_blocked/newly_chosen frame, which marks a consequence, not the
+    placement that triggered it. None (the default) places nothing, exactly
+    as before this parameter existed.
 
     show_all: forwarded as do_closure_intern's own `show` - unchanged
     behaviour, its existing per-stage displays (after assign_paths/
@@ -1189,17 +1296,23 @@ def do_closure(m, title, show=True, margin=None, roi_margin=0, show_all=False, s
     or do_closure_intern's own title, prefixed with "ERROR: " and coloured
     red (display_closure_step's title_color), so an error panel is visibly
     distinct from a normal one even sitting among several plot windows.
+
+    asserts (a test_utils.DoClosureAsserts, or None) is forwarded as-is to
+    do_closure_intern's own `asserts` argument - see its own docstring for
+    how .first_pass/.second_pass reach each pipeline stage.
     """
+    if pos is not None:
+        place_square(m, pos)
     m_before = copy.deepcopy(m)
     try:
         do_closure_intern(m, title, show=show_all, margin=margin, roi_margin=roi_margin,
-                           show_on_error=show_on_error)
+                           show_on_error=show_on_error, asserts=asserts)
     except InvalidTilingError:
         if show_on_error:
             newly_blocked, newly_chosen = eval_map(m_before, m)
             colormap = np.zeros((*m.shape, 3))
-            display_closure_step(m, f"ERROR: {title}", show_links=True, show_real=True, colormap=colormap,
-                                  margin=margin, roi_margin=roi_margin,
+            display_closure_step(m, pos=pos, title=f"ERROR: {title}", show_links=True, show_real=True,
+                                  colormap=colormap, margin=margin, roi_margin=roi_margin,
                                   newly_blocked=newly_blocked, newly_chosen=newly_chosen,
                                   title_color='red')
         raise
@@ -1207,6 +1320,6 @@ def do_closure(m, title, show=True, margin=None, roi_margin=0, show_all=False, s
     if show:
         newly_blocked, newly_chosen = eval_map(m_before, m)
         colormap = np.zeros((*m.shape, 3))
-        display_closure_step(m, title, show_links=True, show_real=True, colormap=colormap,
+        display_closure_step(m, pos=pos, title=title, show_links=True, show_real=True, colormap=colormap,
                               margin=margin, roi_margin=roi_margin,
                               newly_blocked=newly_blocked, newly_chosen=newly_chosen)

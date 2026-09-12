@@ -43,8 +43,9 @@ def test_seat_from_two_alert_blocked():
             [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]]
 
     m = map_of_squares_from_array(grid)
-    do_closure(m, 'initial', show=True)
+    do_closure(m, title='initial', show=True)
     assert m[7,5].forced_by == {(5, 4)}
+
     place_and_chase(m, (5, 4), "round 1: (5,4) placed")
     assert m[7,5].state == StateEnum.chosen
 

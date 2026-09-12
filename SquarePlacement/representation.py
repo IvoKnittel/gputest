@@ -29,36 +29,50 @@ def build_map_of_squares(rows, cols):
             m[i, j] = SquareItem()
     return m
 
+def margin_ring_positions(rows, cols):
+    """Every (row, col) position build_margin_free_map's outermost margin
+    ring chooses, for a rows x cols board - factored out of
+    build_margin_free_map so a caller that needs this same margin convention
+    applied to an existing map (e.g. closure.add_margin_ring), rather than a
+    fresh one built from scratch, can reuse the exact same ring shape.
+
+    The ring is NOT a full closed rectangular outline - that would be
+    self-contradictory: turning a corner with unit-wide chosen cells always
+    puts two chosen cells (the row-arm's and column-arm's immediate corner
+    neighbours, e.g. (0, 1) and (1, 0)) diagonal to each other, which is
+    itself an invalid diagonal-chosen conflict (see real_space_map), baked
+    into the board before any placement even starts. Both full top/bottom
+    rows are included, but each side column only for its own interior rows
+    (2 .. rows-3) - skipping exactly the one row next to each corner (row 1
+    and row rows-2) that would otherwise conflict with the corner's own
+    row-arm cell. Nothing is lost by the skip: that ring position (e.g.
+    (1, 1)) still ends up blocked anyway, via the corner cell itself (e.g.
+    (0, 0), diagonal to (1, 1) regardless of what column 0 does at row 1).
+    """
+    positions = [(0, j) for j in range(cols)] + [(rows - 1, j) for j in range(cols)]
+    positions += [(i, 0) for i in range(2, rows - 2)] + [(i, cols - 1) for i in range(2, rows - 2)]
+    return positions
+
+
 def build_margin_free_map(n):
-    """(n+4) x (n+4) map, built by choosing its outermost 1-cell ring rather
-    than blocking anything directly: map_of_squares_from_array's own
-    diagonal-blocking side effect then blocks the ring just inside that
-    chosen one, leaving an n x n free core untouched at (2, 2) .. (n+1, n+1).
+    """(n+4) x (n+4) map, built by choosing its outermost 1-cell ring
+    (margin_ring_positions) rather than blocking anything directly:
+    map_of_squares_from_array's own diagonal-blocking side effect then
+    blocks the ring just inside that chosen one, leaving an n x n free core
+    untouched at (2, 2) .. (n+1, n+1).
 
     The region anyone actually wants to look at - that blocked ring plus the
     free core, matching what this function used to build directly as a plain
     (n+2) x (n+2) field - is (1, 1) .. (n+2, n+2); the outermost chosen ring
     itself is a construction detail, not part of the board. See
     display_closure_step's roi_margin argument for cropping it back off
-    before display.
-
-    The chosen ring is NOT a full closed rectangular outline - that would be
-    self-contradictory: turning a corner with unit-wide chosen cells always
-    puts two chosen cells (the row-arm's and column-arm's immediate corner
-    neighbours, e.g. (0, 1) and (1, 0)) diagonal to each other, which is
-    itself an invalid diagonal-chosen conflict (see real_space_map), baked
-    into the board before any placement even starts. Both full top/bottom
-    rows are chosen, but each side column is chosen only for its own interior
-    rows (2 .. size-3) - skipping exactly the one row next to each corner
-    (row 1 and row size-2) that would otherwise conflict with the corner's
-    own row-arm cell. Nothing is lost by the skip: that ring position (e.g.
-    (1, 1)) is still blocked anyway, via the corner cell itself (e.g. (0, 0),
-    diagonal to (1, 1) regardless of what column 0 does at row 1).
+    before display. See margin_ring_positions' own docstring for why the
+    ring is shaped the way it is (the corner-adjacent skip).
     """
     size = n + 4
     grid = np.zeros((size, size), dtype=int)
-    grid[0, :] = grid[-1, :] = 1
-    grid[2:-2, 0] = grid[2:-2, -1] = 1
+    for i, j in margin_ring_positions(size, size):
+        grid[i, j] = 1
     return map_of_squares_from_array(grid)
 
 
@@ -418,8 +432,8 @@ def grid_on(ax, rows, cols, offset=-0.5):
     ax.hlines(y_lines, x_lines[0], x_lines[-1], color='black', linewidth=1)
 
 
-def display_closure_step(m, title, show_links=False, show_real=False,
-                          show_entries_terminals=False, ax=None, colormap=None,
+def display_closure_step(m, pos=None, title="", show_links=False, show_real=False,
+                          ax=None, colormap=None,
                           margin=None, roi_margin=0, newly_blocked=None, newly_chosen=None,
                           title_color=None):
     """Show a single map_of_squares panel coloured via colorize_with_alerts, so
@@ -445,18 +459,6 @@ def display_closure_step(m, title, show_links=False, show_real=False,
     position from its own link (`if c_idx == d_idx: continue`), so this should
     only ever show up in a hand-built scenario, not one produced by
     find_alerts_set_links.
-
-    show_entries_terminals=True additionally draws a filled dot on every cell
-    that is a terminal or an entry: blue for a terminal (item.alert_chosen and
-    not item.forces - nothing left for it to force - evaluated directly on
-    every cell here rather than only on cells reached via someone else's
-    .forces) and red for an entry (item.forces and not item.forced_by -
-    nothing forces this item, but it forces something onward - evaluated on
-    every cell regardless of .alert_chosen, since that flag is a separate
-    bookkeeping detail, not a property of the link structure itself). The two
-    conditions can't both hold for the same item - a terminal has no .forces,
-    an entry requires some - so there's no overlap to resolve between the two
-    colours.
 
     show_real=True additionally draws the real-space map (real_space_map) in a
     second panel to the right, so a placement's actual physical footprint is
@@ -498,8 +500,8 @@ def display_closure_step(m, title, show_links=False, show_real=False,
     stamped last wins that shared strip; only an actual .rectangle pairing
     guarantees a seamless colour across it.
 
-    roi_margin=0 (default): the map_of_squares panel (and its show_links/
-    show_entries_terminals overlays) draws every cell of m, unchanged.
+    roi_margin=0 (default): the map_of_squares panel (and its show_links
+    overlay) draws every cell of m, unchanged.
     roi_margin=w>0 instead crops w outer rings off that panel before display -
     for a board like build_margin_free_map's, built with an artificial
     outermost ring purely to seed a blocked ring just inside it via that
@@ -525,19 +527,35 @@ def display_closure_step(m, title, show_links=False, show_real=False,
     do_closure_intern against the map after). When given, every position in
     either list gets a yellow frame drawn around it on the map_of_squares
     panel, on top of everything else - a visual "this is what changed this
-    round" overlay, independent of show_links/show_entries_terminals.
+    round" overlay, independent of show_links.
     Skipped (cropped out, like every other overlay) for a position inside
     the roi_margin ring.
 
     Both default to None, not an empty list, specifically so plain omission
     (every call site that predates this feature) is distinguishable from a
     caller that actively checked and found nothing changed: if at least one
-    of the two is not None (the caller computed them) and both end up empty,
-    this function draws nothing at all and returns False immediately -
-    there's nothing to show, not even the plain board, since the caller's
-    entire reason for calling was "show me if this round changed anything".
-    Passing neither (the default) skips this check entirely and displays
-    normally, exactly as before this parameter pair existed.
+    of the two is not None (the caller computed them) and both end up empty
+    AND pos is also None, this function draws nothing at all and returns
+    False immediately - there's nothing to show, not even the plain board,
+    since the caller's entire reason for calling was "show me if this round
+    changed anything". pos overrides this skip: do_closure always computes
+    real (possibly empty) newly_blocked/newly_chosen lists on its own
+    success path, so without this override, a do_closure(m, pos, ...) call
+    whose placement didn't cascade into anything else would silently show
+    nothing at all - exactly the placement pos exists to make visible.
+    Passing neither newly_blocked/newly_chosen nor pos (the default) skips
+    this check entirely and displays normally, exactly as before this
+    parameter pair existed.
+
+    pos: an optional (row, col) position, framed in red on the
+    map_of_squares panel, on top of everything else (including a yellow
+    newly_blocked/newly_chosen frame on the same cell, if any - red draws
+    last). do_closure passes its own `pos` argument here (see its own
+    docstring): the cell it placed before running the closure pipeline -
+    distinct from newly_blocked/newly_chosen's yellow frames, which mark
+    consequences the pipeline itself produced, not the placement that
+    triggered them. None (the default) draws nothing. Skipped (cropped out,
+    like every other overlay) for a position inside the roi_margin ring.
 
     title_color: forwarded as-is to ax.set_title's own color argument -
     None (the default) leaves the title in matplotlib's normal colour.
@@ -556,7 +574,7 @@ def display_closure_step(m, title, show_links=False, show_real=False,
     return value and raise InvalidTilingError itself; do_closure's own
     show=True path does exactly that.
     """
-    if (newly_blocked is not None or newly_chosen is not None) and not (newly_blocked or newly_chosen):
+    if (newly_blocked is not None or newly_chosen is not None) and not (newly_blocked or newly_chosen) and pos is None:
         return False
 
     rows, cols = m.shape
@@ -626,20 +644,17 @@ def display_closure_step(m, title, show_links=False, show_real=False,
                                                  connectionstyle='arc3,rad=0.15'),
                                 zorder=3)
 
-    if show_entries_terminals:
-        for i in range(w, rows - w):
-            for j in range(w, cols - w):
-                item = m[i, j]
-                if item.alert_chosen and not item.forces:
-                    ax.plot(j - w, i - w, 'o', markersize=10, color='blue', zorder=5)
-                elif item.forces and not item.forced_by:
-                    ax.plot(j - w, i - w, 'o', markersize=10, color='red', zorder=5)
-
     for i, j in (newly_blocked or []) + (newly_chosen or []):
         if not (w <= i < rows - w and w <= j < cols - w):
             continue
         ax.add_patch(Rectangle((j - w - 0.5, i - w - 0.5), 1, 1, linewidth=2,
                                 edgecolor='yellow', facecolor='none', zorder=6))
+
+    if pos is not None:
+        i, j = pos
+        if w <= i < rows - w and w <= j < cols - w:
+            ax.add_patch(Rectangle((j - w - 0.5, i - w - 0.5), 1, 1, linewidth=2,
+                                    edgecolor='red', facecolor='none', zorder=7))
 
     if show_real:
         real_display, error = real_space_map(m)

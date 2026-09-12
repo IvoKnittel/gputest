@@ -15,9 +15,10 @@ happens.
 
 n=3 and n=5 (4x4 and 6x6 cores) run do_closure once, then up to
 MAX_RANDOM_PLACEMENTS rounds of picking a random still-free cell
-(place_random_free_cell), placing it (place_square) and letting do_closure
-chase whatever it obligates - stopping early, before running out of rounds,
-once is_realmap_cover_complete confirms the real-space map has no gap left.
+(place_random_free_cell) and handing it to do_closure as its own `pos`
+argument, which places it and chases whatever it obligates - stopping
+early, before running out of rounds, once is_realmap_cover_complete
+confirms the real-space map has no gap left.
 """
 
 import random
@@ -25,18 +26,18 @@ import random
 import numpy as np
 
 from map_of_squares import StateEnum, InvalidTilingError
-from representation import (build_margin_free_map, RealSpaceMargin,
+from representation import (build_margin_free_map,
                              display_closure_step, is_realmap_cover_complete)
-from closure import (do_closure, place_square)
+from closure import do_closure
+from test_utils import ROI_MARGIN, MARGIN
 
 MAX_RANDOM_PLACEMENTS = 8
-ROI_MARGIN = 1
-MARGIN = RealSpaceMargin(width=2)
 
 def place_random_free_cell(m):
     """Pick one random still-free cell - does not place it, the caller does
-    (place_square, then do_closure to chase whatever it obligates). Returns
-    (False, (-1, -1)) if no free cell is left.
+    (do_closure, given this as its own `pos` argument, places it and chases
+    whatever it obligates). Returns (False, (-1, -1)) if no free cell is
+    left.
     """
     rows, cols = m.shape
     free_positions = [(i, j) for i in range(rows) for j in range(cols)
@@ -51,14 +52,14 @@ def test_margin_free_3x3realmap():
     n=2
     m = build_margin_free_map(n)
     try:
-        do_closure(m, f'margin {n}x{n}: initial closure', margin=MARGIN, roi_margin=ROI_MARGIN,
+        do_closure(m, title=f'margin {n}x{n}: initial closure', margin=MARGIN, roi_margin=ROI_MARGIN,
                    show_on_error=False)
         raised = False
     except InvalidTilingError as e:
         raised = True
         colormap = np.zeros((*m.shape, 3))
         title = f'margin {n}x{n}: - {e}'
-        display_closure_step(m, f"ERROR: {title}",
+        display_closure_step(m, title=f"ERROR: {title}",
                               show_links=True, show_real=True, colormap=colormap,
                               margin=MARGIN, roi_margin=ROI_MARGIN, title_color='red')
     assert raised, "initial closure should be rejected outright now"
@@ -69,13 +70,12 @@ def test_margin_free_4x4realmap():
     m = build_margin_free_map(n)
     success=False
 
-    do_closure(m, '', show=True, margin=MARGIN, roi_margin=ROI_MARGIN,
+    do_closure(m, show=True, margin=MARGIN, roi_margin=ROI_MARGIN,
                show_on_error=False)
     for k in range(MAX_RANDOM_PLACEMENTS):
         found, pos = place_random_free_cell(m)
         if found:
-            place_square(m, pos)
-            do_closure(m, f'margin {n}x{n}: random placement {k + 1}', show=True,
+            do_closure(m, pos, f'margin {n}x{n}: random placement {k + 1}', show=True,
                    margin=MARGIN, roi_margin=ROI_MARGIN, show_on_error=False)
         else:
             break
@@ -90,14 +90,14 @@ def test_margin_free_5x5realmap():
     n=4
     m = build_margin_free_map(n)
     try:
-        do_closure(m, f'margin {n}x{n}: initial closure', margin=MARGIN, roi_margin=ROI_MARGIN,
+        do_closure(m, title=f'margin {n}x{n}: initial closure', margin=MARGIN, roi_margin=ROI_MARGIN,
                    show_on_error=False)
         raised = False
     except InvalidTilingError as e:
         raised = True
         colormap = np.zeros((*m.shape, 3))            
         title = f'margin {n}x{n}: {e}'
-        display_closure_step(m, f"ERROR: {title}",
+        display_closure_step(m, title=f"ERROR: {title}",
                               show_links=True, show_real=True, colormap=colormap,
                               margin=MARGIN, roi_margin=ROI_MARGIN, title_color='red')
     assert raised, "initial closure should be rejected outright now"
@@ -106,13 +106,12 @@ def test_margin_free_6x6realmap():
     n=5
     m = build_margin_free_map(n)
     success=False
-    do_closure(m, f'margin {n}x{n}: initial closure', margin=MARGIN, roi_margin=ROI_MARGIN,
+    do_closure(m, title=f'margin {n}x{n}: initial closure', margin=MARGIN, roi_margin=ROI_MARGIN,
                show_on_error=False)
     for k in range(MAX_RANDOM_PLACEMENTS):
         found, pos = place_random_free_cell(m)
         if found:
-            place_square(m, pos)
-            do_closure(m, f'margin {n}x{n}: random placement {k + 1}', show=True,
+            do_closure(m, pos, f'margin {n}x{n}: random placement {k + 1}', show=True,
                    margin=MARGIN, roi_margin=ROI_MARGIN, show_on_error=False)
         else:
             break
@@ -121,6 +120,6 @@ def test_margin_free_6x6realmap():
             break
 
     colormap = np.zeros((*m.shape, 3))
-    display_closure_step(m, f'margin {n}x{n}: final map', show_links=True, show_real=True,
+    display_closure_step(m, title=f'margin {n}x{n}: final map', show_links=True, show_real=True,
                           colormap=colormap, margin=MARGIN, roi_margin=ROI_MARGIN)
     assert success==True

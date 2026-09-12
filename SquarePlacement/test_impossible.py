@@ -24,7 +24,7 @@ def test_pinwheel():
     except InvalidTilingError as e:
         raised = True
         colormap = np.zeros((*m.shape, 3))
-        display_closure_step(m, f"round 4: placing_square at (5,2) rejected - {e}",
+        display_closure_step(m, title=f"round 4: placing_square at (5,2) rejected - {e}",
                               show_links=True, show_real=False, colormap=colormap)
     assert raised, "(5,2) should be rejected outright now"
        
@@ -41,14 +41,14 @@ def test_show_other_full_2x2():
     for pos in [(3, 3), (4, 3), (5, 6), (6, 6)]:
         place_square(m, pos)
     colormap = np.zeros((*m.shape, 3))
-    display_closure_step(m, 'initial state', show_links=True, show_real=True, colormap=colormap)
+    display_closure_step(m, title='initial state', show_links=True, show_real=True, colormap=colormap)
     try:
-        do_closure(m, '')
+        do_closure(m)
         title = 'next state'
     except InvalidTilingError as e:
         title = f'next state (rejected - {e})'
     colormap = np.zeros((*m.shape, 3))
-    display_closure_step(m, title, show_links=True, show_real=True, colormap=colormap)
+    display_closure_step(m, title=title, show_links=True, show_real=True, colormap=colormap)
 
 def test_corner_and_interior_dominoes():
     """(0,0)/(1,0) is a domino sitting right at the board's own corner - a
@@ -64,14 +64,14 @@ def test_corner_and_interior_dominoes():
     for pos in [(0, 0), (1, 0), (5, 4), (5, 5)]:
         place_square(m, pos)
     colormap = np.zeros((*m.shape, 3))
-    display_closure_step(m, 'initial state', show_links=True, show_real=True, colormap=colormap)
+    display_closure_step(m, title='initial state', show_links=True, show_real=True, colormap=colormap)
     try:
-        do_closure(m, '')
+        do_closure(m)
         title = 'next state'
     except InvalidTilingError as e:
         title = f'next state (rejected - {e})'
     colormap = np.zeros((*m.shape, 3))
-    display_closure_step(m, title, show_links=True, show_real=True, colormap=colormap)
+    display_closure_step(m, title=title, show_links=True, show_real=True, colormap=colormap)
 
 
 def test_try_3x3_hole1():
@@ -98,15 +98,15 @@ def test_try_3x3_hole2():
 
 def test_try_3x3_hole3():
     m = build_map_of_squares(12, 12)
-    place_and_chase(m, (3, 5), "round 1: (3,5) placed", False, show_entries_terminals=True)
-    place_and_chase(m, (6, 2), "round 2: (6,2) placed", False, show_entries_terminals=True)
-    place_and_chase(m, (5, 8), "round 3: (5,8) placed", False, show_entries_terminals=True)
-    place_and_chase(m, (9, 5), "round 4: (9,5) placed", False, show_entries_terminals=True)
+    place_and_chase(m, (3, 5), "round 1: (3,5) placed", False)
+    place_and_chase(m, (6, 2), "round 2: (6,2) placed", False)
+    place_and_chase(m, (5, 8), "round 3: (5,8) placed", False)
+    place_and_chase(m, (9, 5), "round 4: (9,5) placed", False)
 
-    place_and_chase(m, (5, 2), "round 5: (5,2) placed", False, show_entries_terminals=True)
-    place_and_chase(m, (3, 6), "round 6: (3,6) placed", False, show_entries_terminals=True)
-    place_and_chase(m, (9, 4), "round 7: (9,4) placed", show_entries_terminals=True)
-    place_and_chase(m, (6, 8), "round 8: (6,8) placed", show_entries_terminals=True)
+    place_and_chase(m, (5, 2), "round 5: (5,2) placed", False)
+    place_and_chase(m, (3, 6), "round 6: (3,6) placed", False)
+    place_and_chase(m, (9, 4), "round 7: (9,4) placed")
+    place_and_chase(m, (6, 8), "round 8: (6,8) placed")
 
     #place_and_chase(m, (8, 7), "round 9: (8,7) placed")
-    place_and_chase(m, (7, 5), "round 9: (7,5) placed", show_entries_terminals=True)
+    place_and_chase(m, (7, 5), "round 9: (7,5) placed")

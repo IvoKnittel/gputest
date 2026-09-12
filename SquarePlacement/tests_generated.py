@@ -37,7 +37,7 @@ def test_line_generated():
     p = get_blocked_links(m)
     # ASSERT: get_blocked_links(m) == set() (no self-contradicting path)
     colormap = np.zeros((*m.shape, 3))
-    display_closure_step(m, 'test_line', show_links=True, show_real=True, show_entries_terminals=False, colormap=colormap, margin=None, roi_margin=0)
+    display_closure_step(m, title='test_line', show_links=True, show_real=True, colormap=colormap, margin=None, roi_margin=0)
     # display note: Position is approximate: the ORIGINAL source test displays here after only find_alerts_set_links + assign_paths + get_blocked_links (3 calls) - it never calls find_secondary_links (this scorecard's step 2) before this display. This scorecard's call_sequence is a full do_closure reconstruction run separately on the same initial board, for parity with the other scorecards. Title: 'line (simple chain): alert_blocked=blue, alert_chosen=yellow, both=green'.
     dissolve_blocked_paths(m, p)
     place_square_in_seat_closed(m)
@@ -76,7 +76,7 @@ def test_show_other_full_2x2_generated():
         m[tuple(pos)].state = StateEnum.blocked
 
     colormap = np.zeros((*m.shape, 3))
-    display_closure_step(m, 'test_show_other_full_2x2', show_links=True, show_real=True, show_entries_terminals=False, colormap=colormap, margin=None, roi_margin=0)
+    display_closure_step(m, title='test_show_other_full_2x2', show_links=True, show_real=True, colormap=colormap, margin=None, roi_margin=0)
     # display note: Title: 'initial state' - shows the four hand-placed squares before do_closure runs at all (position 0 = before any call_sequence step).
     find_alerts_set_links(m)
     find_secondary_links(m)
@@ -98,7 +98,7 @@ def test_show_other_full_2x2_generated():
         pass  # expected - see raised_message in the scorecard
     # ASSERT: do_closure raises InvalidTilingError
     colormap = np.zeros((*m.shape, 3))
-    display_closure_step(m, 'test_show_other_full_2x2', show_links=True, show_real=True, show_entries_terminals=False, colormap=colormap, margin=None, roi_margin=0)
+    display_closure_step(m, title='test_show_other_full_2x2', show_links=True, show_real=True, colormap=colormap, margin=None, roi_margin=0)
     # display note: Runs even though step 14 (check_tiling_invariant) raised - the test's try/except catches InvalidTilingError and displays the resulting (invalid) board, with the error folded into the title.
 # === END GENERATED TEST: test_show_other_full_2x2 ===
 
@@ -122,7 +122,7 @@ def test_margin_free_4x4realmap_generated():
     dissolve_blocked_paths(m, p)
     place_square_in_seat_closed(m)
     colormap = np.zeros((*m.shape, 3))
-    display_closure_step(m, 'test_margin_free_4x4realmap', show_links=True, show_real=True, show_entries_terminals=False, colormap=colormap, margin=RealSpaceMargin(width=2, crop=False), roi_margin=1)
+    display_closure_step(m, title='test_margin_free_4x4realmap', show_links=True, show_real=True, colormap=colormap, margin=RealSpaceMargin(width=2, crop=False), roi_margin=1)
     # display note: do_closure's own internal display (do_closure(..., show=True, margin=MARGIN, roi_margin=ROI_MARGIN)) for this final round - already appears as the step-7 'display_closure_step' entry in call_sequence; this item adds its flags.
     clear_all_but_state(m)
     find_alerts_set_links(m)
@@ -159,7 +159,7 @@ def test_get_and_set_blocked_links_marks_blocked_tmp_generated():
     # dissolve_blocked_paths sets no .blocked_tmp, strips no cell's path_id,
     # and retracts no .forces/.forced_by, unlike set_blocked_links.
     colormap = np.zeros((*m.shape, 3))
-    display_closure_step(m, 'test_get_and_set_blocked_links_marks_blocked_tmp', show_links=True, show_real=True, show_entries_terminals=False, colormap=colormap, margin=None, roi_margin=0)
+    display_closure_step(m, title='test_get_and_set_blocked_links_marks_blocked_tmp', show_links=True, show_real=True, colormap=colormap, margin=None, roi_margin=0)
     # display note: Falls between this scorecard's step 4 (dissolve_blocked_paths, recorded as set_blocked_links) and step 5 (place_square_in_seat_closed) - originally blocked_tmp cells shown in red, though dissolve_blocked_paths sets no such flag now. Title: 'get_blocked_links/set_blocked_links: blocked_tmp in red' (quoted as originally recorded). A further do_closure(show=True) call follows (after clear_all_but_state), with its own separate internal display - not represented in this scorecard's 5-step call_sequence.
     place_square_in_seat_closed(m)
     # ASSERT: new seats fill 4 of the 6 corroborating positions; (5,2) has no bordering new seat
@@ -192,7 +192,7 @@ def test_rectangle_generated():
     check_tiling_invariant(m)
     # ASSERT: check_tiling_invariant(m) does not raise
     colormap = np.zeros((*m.shape, 3))
-    display_closure_step(m, 'test_rectangle', show_links=True, show_real=False, show_entries_terminals=False, colormap=colormap, margin=None, roi_margin=0)
+    display_closure_step(m, title='test_rectangle', show_links=True, show_real=False, colormap=colormap, margin=None, roi_margin=0)
     # display note: Called after do_closure completes and after the test's own redundant check_tiling_invariant(m) re-check (not itself a call_sequence entry). Title: '4: check_tiling_invariant (invariant held - no state change)'.
 # === END GENERATED TEST: test_rectangle ===
 
@@ -228,7 +228,7 @@ def test_tree_fan_out_generated():
     # ASSERT: each of (2,2),(2,6),(6,2),(6,6) is alert_chosen with (4,4) in forced_by
     # ASSERT: get_blocked_links(m) == set()
     colormap = np.zeros((*m.shape, 3))
-    display_closure_step(m, 'test_tree_fan_out', show_links=True, show_real=True, show_entries_terminals=False, colormap=colormap, margin=None, roi_margin=0)
+    display_closure_step(m, title='test_tree_fan_out', show_links=True, show_real=True, colormap=colormap, margin=None, roi_margin=0)
     # display note: Called after the full call_sequence completes and after a redundant get_blocked_links(m) re-check (not itself a call_sequence entry). Title: 'tree (fan-out)'.
 # === END GENERATED TEST: test_tree_fan_out ===
 
@@ -262,10 +262,10 @@ def test_tree_fan_in_generated():
     # ASSERT: m[3,3].alert_chosen and not m[3,3].forces
     # ASSERT: {(2,1),(4,1),(4,3),(4,5)} <= m[3,3].forced_by
     colormap = np.zeros((*m.shape, 3))
-    display_closure_step(m, 'test_tree_fan_in', show_links=True, show_real=True, show_entries_terminals=False, colormap=colormap, margin=None, roi_margin=0)
+    display_closure_step(m, title='test_tree_fan_in', show_links=True, show_real=True, colormap=colormap, margin=None, roi_margin=0)
     # display note: Title: 'line into cycle' - the display tied to this scorecard's own recorded call_sequence (the first of the source test's three do_closure/display rounds).
     colormap = np.zeros((*m.shape, 3))
-    display_closure_step(m, 'test_tree_fan_in', show_links=True, show_real=True, show_entries_terminals=False, colormap=colormap, margin=None, roi_margin=0)
+    display_closure_step(m, title='test_tree_fan_in', show_links=True, show_real=True, colormap=colormap, margin=None, roi_margin=0)
     # display note: Title: 'fan-in forced via (6, 4)' - occurs after an additional place_squares(forced_closure(m, (6, 4))) call made directly by the test, outside do_closure and not represented in call_sequence. A third display ('fan-in forced via (2, 1)') exists in the source test but belongs to a second, independent do_closure call on a fresh copy of the same initial grid - out of scope for this scorecard's single call_sequence, so omitted here.
 # === END GENERATED TEST: test_tree_fan_in ===
 
@@ -300,10 +300,10 @@ def test_line_into_eye_generated():
     # ASSERT: m[1,4].forces == {(1,6)}; m[1,6].forces == {(1,8)}; (1,6) in m[1,8].forced_by
     # ASSERT: m[1,4].path_id == set() (single-target entry pruned by assign_paths)
     colormap = np.zeros((*m.shape, 3))
-    display_closure_step(m, 'test_line_into_eye', show_links=True, show_real=True, show_entries_terminals=False, colormap=colormap, margin=None, roi_margin=0)
+    display_closure_step(m, title='test_line_into_eye', show_links=True, show_real=True, colormap=colormap, margin=None, roi_margin=0)
     # display note: Title: 'line into cycle: before placing (1, 4)'.
     colormap = np.zeros((*m.shape, 3))
-    display_closure_step(m, 'test_line_into_eye', show_links=True, show_real=True, show_entries_terminals=False, colormap=colormap, margin=None, roi_margin=0)
+    display_closure_step(m, title='test_line_into_eye', show_links=True, show_real=True, colormap=colormap, margin=None, roi_margin=0)
     # display note: Title: 'line into cycle: after placing (1, 4)' - occurs after an additional place_squares(forced_closure(m, (1, 4))) call, outside do_closure and not represented in call_sequence.
 # === END GENERATED TEST: test_line_into_eye ===
 
@@ -335,10 +335,10 @@ def test_eye_outwards_generated():
     place_square_in_seat_closed(m)
     check_tiling_invariant(m)
     colormap = np.zeros((*m.shape, 3))
-    display_closure_step(m, 'test_eye_outwards', show_links=True, show_real=True, show_entries_terminals=False, colormap=colormap, margin=None, roi_margin=0)
+    display_closure_step(m, title='test_eye_outwards', show_links=True, show_real=True, colormap=colormap, margin=None, roi_margin=0)
     # display note: Title: 'cycle line outwards: before placing (1, 2)'.
     colormap = np.zeros((*m.shape, 3))
-    display_closure_step(m, 'test_eye_outwards', show_links=True, show_real=True, show_entries_terminals=False, colormap=colormap, margin=None, roi_margin=0)
+    display_closure_step(m, title='test_eye_outwards', show_links=True, show_real=True, colormap=colormap, margin=None, roi_margin=0)
     # display note: Title: 'cycle line outwards: after placing (1, 2)' - occurs after an additional place_squares(forced_closure(m, (1, 2))) call, outside do_closure and not represented in call_sequence.
 # === END GENERATED TEST: test_eye_outwards ===
 
@@ -362,7 +362,7 @@ def test_seat_from_two_alert_blocked_generated():
     dissolve_blocked_paths(m, p)
     place_square_in_seat_closed(m)
     colormap = np.zeros((*m.shape, 3))
-    display_closure_step(m, 'test_seat_from_two_alert_blocked', show_links=True, show_real=True, show_entries_terminals=False, colormap=colormap, margin=None, roi_margin=0)
+    display_closure_step(m, title='test_seat_from_two_alert_blocked', show_links=True, show_real=True, colormap=colormap, margin=None, roi_margin=0)
     # display note: This is do_closure's own internal display (do_closure(m, 'initial', show=True)) - it already appears as the step-7 'display_closure_step' entry in call_sequence; this item adds the flags that entry doesn't carry. A further place_and_chase(...) round follows, with its own separate do_closure(show=False) call plus an external display_closure_step call - not represented here.
     clear_all_but_state(m)
     find_alerts_set_links(m)
@@ -405,7 +405,7 @@ def test_frozen_area_generated():
     place_square_in_seat_closed(m)
     check_tiling_invariant(m)
     colormap = np.zeros((*m.shape, 3))
-    display_closure_step(m, 'test_frozen_area', show_links=True, show_real=True, show_entries_terminals=False, colormap=colormap, margin=None, roi_margin=0)
+    display_closure_step(m, title='test_frozen_area', show_links=True, show_real=True, colormap=colormap, margin=None, roi_margin=0)
     # display note: Called by place_and_chase directly, after its own internal do_closure(show=False) call (matching this scorecard's own do_closure_sequence(show=False)) - not via do_closure's own show=True branch.
 # === END GENERATED TEST: test_frozen_area ===
 
@@ -442,6 +442,6 @@ def test_margin_free_3x3realmap_generated():
         pass  # expected - see raised_message in the scorecard
     # ASSERT: do_closure raises InvalidTilingError on its first call
     colormap = np.zeros((*m.shape, 3))
-    display_closure_step(m, 'test_margin_free_3x3realmap', show_links=True, show_real=True, show_entries_terminals=False, colormap=colormap, margin=RealSpaceMargin(width=2, crop=False), roi_margin=1)
+    display_closure_step(m, title='test_margin_free_3x3realmap', show_links=True, show_real=True, colormap=colormap, margin=RealSpaceMargin(width=2, crop=False), roi_margin=1)
     # display note: Only reached because do_closure raised InvalidTilingError at step 14 - the test's except block displays the rejected board, using the module-level MARGIN=RealSpaceMargin(width=2) and ROI_MARGIN=1.
 # === END GENERATED TEST: test_margin_free_3x3realmap ===

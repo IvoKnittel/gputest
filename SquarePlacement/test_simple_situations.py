@@ -22,10 +22,10 @@ def test_rectangle():
     """
     m = build_map_of_squares(7, 7)
     place_blocked_squares(m, [(2, 3), (3, 3)])
-    do_closure(m,'')
+    do_closure(m)
     check_tiling_invariant(m)
     colormap = np.zeros((*m.shape, 3))
-    display_closure_step(m, '4: check_tiling_invariant  (invariant held - no state change)', show_links=True, colormap=colormap)
+    display_closure_step(m, title='4: check_tiling_invariant  (invariant held - no state change)', show_links=True, colormap=colormap)
 
 if __name__ == "__main__":
     test_rectangle()

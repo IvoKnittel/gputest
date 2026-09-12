@@ -5,13 +5,12 @@ import matplotlib.colors as mcolors
 from scipy.ndimage import label, center_of_mass
 from scipy.spatial.distance import pdist
 
-from closure import do_closure, place_squares
+from closure import do_closure, add_margin_ring
 from map_of_squares import InvalidTilingError, StateEnum
-from representation import (map_of_squares_from_array, display_closure_step,
-                             place_blocked_squares, build_map_of_squares)
+from representation import display_closure_step
+from test_utils import ROI_MARGIN, MARGIN
 from image_to_squares import (build_quality_map, image_squares_select_single, tile_counts_2d,
-                               insert_tile, sz_halftile, tile_upper_left_indices, best_allowed,
-                               core_range_for_tile, insert_best)
+                               insert_tile, sz_halftile)
 import numpy as np
 
 # Set env var DISPLAY_KERNEL_CALLS=1 to pop up the per-kernel-call plots; off by
@@ -55,7 +54,7 @@ def show_states(square_map, title):
     so this is the explicit "if display returns True, throw" checkpoint for
     every caller of show_states."""
     colormap = np.zeros((*square_map.shape, 3))
-    error = display_closure_step(square_map, title, show_real=True, colormap=colormap)
+    error = display_closure_step(square_map, title=title, show_real=True, colormap=colormap)
     if error:
         raise InvalidTilingError(f"{title}: real_space_map found a diagonal-chosen conflict")
 
@@ -87,7 +86,7 @@ def show_states_with_markers(square_map, title, marker_cells, marker_color='red'
     marker_cells, on top of the usual colorize_with_alerts panel."""
     colormap = np.zeros((*square_map.shape, 3))
     fig, ax = plt.subplots(figsize=(6, 6))
-    display_closure_step(square_map, title, show_links=True, show_real=False, ax=ax, colormap=colormap)
+    display_closure_step(square_map, title=title, show_links=True, show_real=False, ax=ax, colormap=colormap)
     for i, j in marker_cells:
         ax.plot(j, i, 'o', markersize=14, markerfacecolor='none',
                 markeredgecolor=marker_color, markeredgewidth=3, zorder=6)
@@ -114,18 +113,6 @@ def seeded_margin_map(sz):
     for corner in ((1, 1), (1, cols - 2), (rows - 2, 1), (rows - 2, cols - 2)):
         m[corner] = CHOSEN
     return m
-
-
-def add_blocked_margin(square_map):
-    """Set square_map's outer 1-cell ring to StateEnum.blocked, in place - fills
-    the existing array, doesn't resize it, same as seeded_margin_map above but for
-    a real map_of_squares (see representation.build_margin_free_map, which builds
-    this same margin fresh instead of adding it to an existing map)."""
-    rows, cols = square_map.shape
-    border = [(i, j) for i in range(rows) for j in range(cols)
-              if i in (0, rows - 1) or j in (0, cols - 1)]
-    place_blocked_squares(square_map, border)
-    return square_map
 
 
 def min_placement_distance(m, colorcode):
@@ -219,8 +206,8 @@ def test_supersuperlattice_random_order():
 def test_square_placement(quality_map_setup):
     binary_image, image_noisy_array, square_map = quality_map_setup
 
-    add_blocked_margin(square_map)
-    do_closure(square_map, "test_square_placement")
+    add_margin_ring(square_map)
+    do_closure(square_map, title="test_square_placement", margin=MARGIN, roi_margin=ROI_MARGIN)
 
     num_tiles_expand_noshift_shift = tile_counts_2d(square_map.shape)
     for colorcode in range(4):
@@ -250,7 +237,7 @@ def test_square_placement_random_order_supersuperlattice():
     1. Margin cells were previously found to stay free forever by accident: find_alerts
        only ever scans the interior (range(1, rows-1) / range(1, cols-1)), so the
        board's outermost ring never gets .alert_chosen and never enters a
-       forced_closure chain the way an interior cell can. add_blocked_margin below
+       forced_closure chain the way an interior cell can. add_margin_ring below
        turns that accident into an explicit, intentional border instead (matching
        representation.build_margin_free_map's convention) - real-space coverage still
        excludes it (is_realmap_cover_complete's own margin argument accounts for
@@ -265,8 +252,9 @@ def test_square_placement_random_order_supersuperlattice():
        kernel call pays for a full do_closure pass but usually only banks one square.
     """
     _, _, square_map = build_quality_map(seed=42)
-    add_blocked_margin(square_map)
-    do_closure(square_map, "test_square_placement_random_order_supersuperlattice")
+    add_margin_ring(square_map)
+    do_closure(square_map, title="test_square_placement_random_order_supersuperlattice",
+               margin=MARGIN, roi_margin=ROI_MARGIN)
 
     num_tiles_expand_noshift_shift = tile_counts_2d(square_map.shape)
     rng = np.random.default_rng(seed=0)
@@ -283,4 +271,4 @@ def test_square_placement_random_order_supersuperlattice():
                                 f"test_square_placement_random_order_supersuperlattice: "
                                 f"round={round_idx} colorcode={colorcode}")
                 square_map = image_squares_select_single(
-                    square_map, num_tiles_expand_noshift_shift, colorcode, super=True, display_every_step=True)
+                    square_map, num_tiles_expand_noshift_shift, colorcode, super=True, display_every_step=False)

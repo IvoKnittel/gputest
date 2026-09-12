@@ -11,19 +11,15 @@ from map_of_squares import StateEnum
 from representation import (build_map_of_squares,
                              map_of_squares_from_array,
                              display_closure_step)
-from closure import (find_alerts_set_links,
-                      find_secondary_links,
-                      assign_paths,
-                      get_blocked_links,
-                      do_closure,
-                      place_square)
+from closure import get_blocked_links, do_closure, place_square
 
-from test_utils import place_and_chase 
+from test_utils import place_and_chase, DoClosureAsserts, DoClosureAssertsSingle, DoClosureSteps
 
 
 def test_line():
-    """A simple chain, no branching - derived from a real grid via find_alerts_set_links,
-    unlike the rest of this file's hand-built shapes.
+    """A simple chain, no branching - derived from a real grid via do_closure's
+    own find_alerts_set_links/find_secondary_links stages, unlike the rest of
+    this file's hand-built shapes.
 
     The six placed squares' blocked diagonal neighbours pair into three mutual
     "2x2 minus one" quadrants, each alert_blocking the other: (8,2)/(7,3),
@@ -31,31 +27,59 @@ def test_line():
     link to (7,3), not a quadrant pairing.
 
     Unbranched, so get_blocked_links is empty.
+
+    Checked via do_closure's own asserts argument instead of hand-running the
+    pipeline stage by stage: check_chain hooks DoClosureSteps.find_secondary_
+    links (the chain/.alert_blocked bookkeeping is only fully formed once
+    both find_alerts_set_links and find_secondary_links have run, so it hangs
+    off the second of the two), and check_no_blocked_links hooks
+    DoClosureSteps.get_blocked_links. Both are only meaningful in do_closure's
+    first, displayed pass - the shape they check never survives round 2's
+    clear_all_but_state/re-derivation unchanged in a way that would need
+    checking twice - so both live in first_pass only, not second_pass.
+
+    
+    show_all=True, not plain show=True: nothing here ever changes .state (no
+    seat gets filled, get_blocked_links is empty), only bookkeeping
+    (.forces/.alert_chosen) - do_closure's own final summary display only
+    fires on a .state change (see its own docstring), so plain show=True
+    would silently show nothing at all. show_all=True instead forwards as
+    do_closure_intern's own show, whose "after assign_paths" display fires
+    whenever has_alert_bookkeeping(m) is true (regardless of .state) -
+    exactly this shape - which is what actually shows the alert_blocked=blue/
+    alert_chosen=yellow/both=green overlay this docstring's own title
+    describes (that display's own title is the fixed "after assign_paths",
+    not this call's title - the title above only labels do_closure's own,
+    here-unused, final summary).
     """
     m = build_map_of_squares(11, 10)
     positions = [(6, 1), (9, 4), (4, 3), (7, 6), (2, 5), (5, 8)]
     for pos in positions:
         place_square(m, pos)
 
-    find_alerts_set_links(m)
-    find_secondary_links(m)
-    alert_chosen_positions_asserted = [(9, 1), (7, 3), (5, 5), (3, 7)]
+    def check_chain(mm):
+        alert_chosen_positions_asserted = [(9, 1), (7, 3), (5, 5), (3, 7)]
 
-    chain = [alert_chosen_positions_asserted[0]]
-    while len(chain) < len(alert_chosen_positions_asserted):
-        chain.append(next(iter(m[chain[-1]].forces)))
-    assert chain == alert_chosen_positions_asserted
+        chain = [alert_chosen_positions_asserted[0]]
+        while len(chain) < len(alert_chosen_positions_asserted):
+            chain.append(next(iter(mm[chain[-1]].forces)))
+        assert chain == alert_chosen_positions_asserted
 
-    assert not m[9, 1].alert_blocked
-    for pos in alert_chosen_positions_asserted[1:]:
-        assert m[pos].alert_blocked
+        assert not mm[9, 1].alert_blocked
+        for pos in alert_chosen_positions_asserted[1:]:
+            assert mm[pos].alert_blocked
 
-    assign_paths(m)
-    assert get_blocked_links(m) == set()
+    def check_no_blocked_links(mm):
+        assert get_blocked_links(mm) == set()
 
-    colormap = np.zeros((*m.shape, 3))
-    display_closure_step(m, 'line (simple chain): alert_blocked=blue, alert_chosen=yellow, both=green',
-                          show_links=True, show_real=True, colormap=colormap)
+    first_pass = DoClosureAssertsSingle()
+    first_pass.asserts = [(DoClosureSteps.find_secondary_links, check_chain),
+                           (DoClosureSteps.get_blocked_links, check_no_blocked_links)]
+    asserts = DoClosureAsserts()
+    asserts.first_pass = first_pass
+
+    do_closure(m, title='line (simple chain): alert_blocked=blue, alert_chosen=yellow, both=green',
+               show_all=True, asserts=asserts)
 
 
 def test_tree_fan_out():
@@ -67,6 +91,16 @@ def test_tree_fan_out():
     a separate corner, so (4,4) links to all four despite never being
     alert_chosen itself (nothing forces it) - .forces and .alert_chosen are
     independent facts.
+
+    Checked via do_closure's own asserts argument: check_fan_out hooks
+    DoClosureSteps.find_alerts_set_links directly (this shape comes from
+    set_alert_chosen_set_links alone, no find_secondary_links relay
+    involved), check_no_blocked_links hooks DoClosureSteps.get_blocked_links
+    - both first_pass only, same reasoning as test_line. show_all=True for
+    the same reason as test_line too: nothing here changes .state (no seat
+    forms, get_blocked_links is empty), so plain show=True would display
+    nothing - show_all=True's "after assign_paths" display (gated on
+    has_alert_bookkeeping, true here) is what actually shows this shape.
     """
     grid = [[0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
             [0, 0, 0, 0, 1, 0, 0, 0, 0, 0],
@@ -80,17 +114,23 @@ def test_tree_fan_out():
             [0, 0, 0, 0, 0, 0, 0, 0, 0, 0]]
 
     m = map_of_squares_from_array(grid)
-    do_closure(m, "")
 
-    assert not m[4, 4].alert_chosen and m[4, 4].forced_by == set()
-    assert m[4, 4].forces == {(2, 2), (2, 6), (6, 2), (6, 6)}
-    for corner in [(2, 2), (2, 6), (6, 2), (6, 6)]:
-        assert m[corner].alert_chosen and (4, 4) in m[corner].forced_by
+    def check_fan_out(mm):
+        assert not mm[4, 4].alert_chosen and mm[4, 4].forced_by == set()
+        assert mm[4, 4].forces == {(2, 2), (2, 6), (6, 2), (6, 6)}
+        for corner in [(2, 2), (2, 6), (6, 2), (6, 6)]:
+            assert mm[corner].alert_chosen and (4, 4) in mm[corner].forced_by
 
-    assert get_blocked_links(m) == set()
+    def check_no_blocked_links(mm):
+        assert get_blocked_links(mm) == set()
 
-    colormap = np.zeros((*m.shape, 3))
-    display_closure_step(m, 'tree (fan-out)', show_links=True, show_real=True, colormap=colormap)
+    first_pass = DoClosureAssertsSingle()
+    first_pass.asserts = [(DoClosureSteps.find_alerts_set_links, check_fan_out),
+                           (DoClosureSteps.get_blocked_links, check_no_blocked_links)]
+    asserts = DoClosureAsserts()
+    asserts.first_pass = first_pass
+
+    do_closure(m, title='tree (fan-out)', show_all=True, asserts=asserts)
 
 def test_tree_fan_in():
     """Several items all point at one node in the same generation: (3, 3) is
@@ -114,26 +154,24 @@ def test_tree_fan_in():
             [0, 0, 0, 0, 0, 0, 0, 0, 0, 0]]
 
     m = map_of_squares_from_array(grid)
-    do_closure(m,'')
+    do_closure(m)
     colormap = np.zeros((*m.shape, 3))
-    display_closure_step(m, 'line into cycle', show_links=True, show_real=True, colormap=colormap)
+    display_closure_step(m, title='line into cycle', show_links=True, show_real=True, colormap=colormap)
 
     assert m[3, 3].alert_chosen and not m[3, 3].forces
     assert {(2, 1), (4, 1), (4, 3), (4, 5)} <= m[3, 3].forced_by
 
-    place_square(m, (6, 4))
-    do_closure(m, '', show=False)
+    do_closure(m, (6, 4), show=False)
     assert m[3, 3].state == StateEnum.chosen
     colormap = np.zeros((*m.shape, 3))
-    display_closure_step(m, 'fan-in forced via (6, 4)', show_links=True, show_real=True, colormap=colormap)
+    display_closure_step(m, title='fan-in forced via (6, 4)', show_links=True, show_real=True, colormap=colormap)
 
     m = map_of_squares_from_array(grid)
-    do_closure(m, '')
-    place_square(m, (2, 1))
-    do_closure(m, '', show=False)
+    do_closure(m)
+    do_closure(m, (2, 1), show=False)
     assert m[3, 3].state == StateEnum.chosen
     colormap = np.zeros((*m.shape, 3))
-    display_closure_step(m, 'fan-in forced via (2, 1)', show_links=True, show_real=True, colormap=colormap)
+    display_closure_step(m, title='fan-in forced via (2, 1)', show_links=True, show_real=True, colormap=colormap)
 
 def test_cycle_unidirectional_bidirectional():
     """ build a free cell with 4 direct blocked neighbors. """
@@ -166,7 +204,7 @@ def test_line_into_eye():
             [0, 0, 0, 0, 0, 0, 0, 0, 0, 0]]
 
     m = map_of_squares_from_array(grid)
-    do_closure(m, "")
+    do_closure(m)
 
     assert not m[1, 4].alert_chosen
     assert m[1, 6].alert_chosen
@@ -187,22 +225,16 @@ def test_line_into_eye():
     chosen_before = {(i, j) for i in range(rows) for j in range(cols)
                       if m[i, j].state == StateEnum.chosen}
     colormap = np.zeros((*m.shape, 3))
-    display_closure_step(m, 'line into cycle: before placing (1, 4)',
+    display_closure_step(m, title='line into cycle: before placing (1, 4)',
                           show_links=True, show_real=True, colormap=colormap)
 
-    place_square(m, (1, 4))
-    do_closure(m, '', show=False)
+    do_closure(m, (1, 4), 'line into cycle: after placing (1, 4)')
 
     chosen_after = {(i, j) for i in range(rows) for j in range(cols)
                      if m[i, j].state == StateEnum.chosen}
     # Placing (1, 4) forces both cycle cells chosen too, via the mutual pair
     # itself - (1, 6) and (1, 8) - and nothing beyond those three.
     assert chosen_after - chosen_before == {(1, 4), (1, 6), (1, 8)}
-
-    colormap = np.zeros((*m.shape, 3))
-    display_closure_step(m, 'line into cycle: after placing (1, 4)',
-                          show_links=True, show_real=True, colormap=colormap)
-
 
 def test_eye_outwards():
     
@@ -218,13 +250,9 @@ def test_eye_outwards():
             [0, 0, 0, 0, 0, 0, 0, 0, 0, 0]]
 
     m = map_of_squares_from_array(grid)
-    do_closure(m, "")
+    do_closure(m)
     colormap = np.zeros((*m.shape, 3))
-    display_closure_step(m, 'cycle line outwards: before placing (1, 2)',
+    display_closure_step(m, title='cycle line outwards: before placing (1, 2)',
                           show_links=True, show_real=True, colormap=colormap)
 
-    place_square(m, (1, 2))
-    do_closure(m, '', show=False)
-    colormap = np.zeros((*m.shape, 3))
-    display_closure_step(m, 'cycle line outwards: after placing (1, 2)',
-                          show_links=True, show_real=True, colormap=colormap)
+    do_closure(m, (1, 2), 'cycle line outwards: after placing (1, 2)')
