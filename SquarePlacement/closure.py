@@ -322,7 +322,7 @@ def place_square(map_of_squares, position):
     Takes a single position, not a list: placing more than one position at
     once - without a do_closure re-evaluation between them - is exactly the
     batching discipline that let two mutually-diagonal seats both get chosen
-    undetected (see place_square_in_seat's docstring and
+    undetected (see get_seat_positions's docstring and
     place_square_in_seat_closed's fix). A caller that needs several positions
     placed calls this once per position, with do_closure in between when the
     positions could be mutually obligating; a caller building an unrelated,
@@ -369,7 +369,7 @@ def add_margin_ring(map_of_squares):
     return map_of_squares
 
 
-def place_square_in_seat(map_of_squares):
+def get_seat_positions(map_of_squares):
     """
     Scan every 2x2 block of adjacent map_of_squares cells (same scan as
     check_tiling_invariant) for a seat - three corners blocked, one free (see
@@ -424,7 +424,7 @@ def place_square_in_seat(map_of_squares):
 
 def place_square_in_seat_closed(map_of_squares, asserts=None):
     """
-    Place every seat place_square_in_seat finds, to a fixed point - but one
+    Place every seat get_seat_positions finds, to a fixed point - but one
     seat at a time, running do_closure's own full re-evaluation after each
     single placement, instead of placing every seat found in one scan
     together the way this used to. Restores, specifically for seat-filling,
@@ -433,7 +433,7 @@ def place_square_in_seat_closed(map_of_squares, asserts=None):
     rest of this pipeline - seat-filling used to be the one place that
     violated it.
 
-    Inputs: none of its own - delegates entirely to place_square_in_seat and
+    Inputs: none of its own - delegates entirely to get_seat_positions and
     do_closure.
 
     Outputs: same net effect as before (every seat filled, looped to a fixed
@@ -441,7 +441,7 @@ def place_square_in_seat_closed(map_of_squares, asserts=None):
     completes another 2x2 block into a fresh seat, or open up new
     consequences of its own via do_closure's own pipeline); returns a bool.
     asserts - see find_alerts_set_links's own docstring for the contract.
-    Every position place_square_in_seat found this pass is re-checked for
+    Every position get_seat_positions found this pass is re-checked for
     StateEnum.free immediately before it's placed - an earlier position in
     the very same pass may already have resolved a later one (blocked it via
     diagonal side effect, or chosen it via do_closure's own cascading
@@ -454,7 +454,7 @@ def place_square_in_seat_closed(map_of_squares, asserts=None):
 
     -------------------------------------------------------------------------
 
-    This closes the mutually-diagonal-seats gap place_square_in_seat's own
+    This closes the mutually-diagonal-seats gap get_seat_positions's own
     docstring used to document as open: two seats found in the same scan
     can no longer both get chosen in one undetected batch, because they're
     no longer placed in a batch at all - the first one placed gets a full
@@ -478,7 +478,7 @@ def place_square_in_seat_closed(map_of_squares, asserts=None):
     would be.
     """
     changed = False
-    seats = place_square_in_seat(map_of_squares)
+    seats = get_seat_positions(map_of_squares)
     while seats:
         changed = True
         for pos in seats:
@@ -486,7 +486,7 @@ def place_square_in_seat_closed(map_of_squares, asserts=None):
                 continue
             place_square(map_of_squares, pos)
             do_closure_intern(map_of_squares, "", show_on_error=False)
-        seats = place_square_in_seat(map_of_squares)
+        seats = get_seat_positions(map_of_squares)
     if asserts is not None:
         _call_step_asserts(map_of_squares, asserts, 'place_square_in_seat_closed')
     return changed
@@ -975,7 +975,7 @@ def propagate_blocked_tmp_closed(m):
     """Run propagate_blocked_tmp to a fixed point: one D can only push the
     narrowing one hop back per pass at minimum, so keep looping until a full
     pass finds no further change - same shape as place_square_in_seat_closed
-    looping place_square_in_seat.
+    looping get_seat_positions.
 
     Returns True if at least one cell was newly blocked this way, False
     otherwise.
@@ -1039,7 +1039,7 @@ def do_closure_intern(m, title, show=False, margin=None, roi_margin=0, show_on_e
 
     -- Flagged for rewrite: cell-by-cell Python loops, not GPU-style tiles --
     Every stage this orchestrates (find_alerts_set_links, assign_paths,
-    get_blocked_links, dissolve_blocked_paths, place_square_in_seat,
+    get_blocked_links, dissolve_blocked_paths, get_seat_positions,
     check_tiling_invariant, clear_all_but_state) is its own independent `for i in
     range(rows): for j in range(cols):` scan over every cell in plain Python.
     image_to_squares.py's insert_tile/image_squares_select_single already
@@ -1164,6 +1164,13 @@ def do_closure_intern(m, title, show=False, margin=None, roi_margin=0, show_on_e
     clear_all_but_state(m)
     find_alerts_set_links(m, asserts=second_pass)
     find_secondary_links(m, asserts=second_pass)
+    colormap = np.zeros((*m.shape, 3))
+    error = display_closure_step(m, title="after find_secondary_links 2nd", show_links=True, show_real=True, colormap=colormap,
+                                 margin=margin, roi_margin=roi_margin)
+    if error:
+        raise InvalidTilingError(
+            f"{title}: real_space_map found a diagonal-chosen conflict - "
+            f"see the map_of_squares panel just shown for which cells")
     assign_paths(m, asserts=second_pass)
     dissolve_blocked_paths(m, get_blocked_links(m, asserts=second_pass), asserts=second_pass)
     place_square_in_seat_closed(m, asserts=second_pass)
@@ -1201,7 +1208,7 @@ def eval_map(m_before, m_after):
     though in practice those coincide here: nothing in this pipeline ever
     moves a cell away from StateEnum.chosen or StateEnum.blocked once it
     reaches one (see place_square/dissolve_blocked_paths/
-    place_square_in_seat), so the only real transition either list can ever
+    get_seat_positions), so the only real transition either list can ever
     report is free -> blocked or free -> chosen. Written as a plain
     inequality check anyway, rather than assuming that invariant holds.
 
@@ -1246,10 +1253,10 @@ def do_closure(m, pos=None, title="", show=True, margin=None, roi_margin=0, show
 
     pos: an optional (row, col) position to place (via place_square) before
     anything else this call does - the common "place one square, then let
-    do_closure chase whatever it obligates" pattern (see test_utils.
-    place_and_chase), folded into do_closure itself instead of a separate
-    place_square call before it. Called before m_before is captured (see
-    below), so the placement itself is never part of what eval_map reports
+    do_closure chase whatever it obligates" pattern, folded into do_closure
+    itself instead of a separate place_square call before it. Called before
+    m_before is captured (see below), so the placement itself is never part
+    of what eval_map reports
     changed - only genuine consequences of the closure pipeline are (a
     seat that gets filled, a path that gets blocked). The placement is
     still shown, though: both of this wrapper's own display_closure_step

@@ -2,7 +2,6 @@ import numpy as np
 
 from map_of_squares import StateEnum
 from representation import build_map_of_squares, map_of_squares_from_array, place_blocked_squares, display_closure_step
-from test_utils  import  place_and_chase
 from closure import do_closure
 
 def test_seat_from_two_alert_blocked():
@@ -24,7 +23,7 @@ def test_seat_from_two_alert_blocked():
     can now see this cell where it couldn't before: (7, 5) has a real
     .forced_by (hence a real path_id) the moment it's discovered, not only
     once place_square_in_seat_closed's raw scan happens to pick it up. See
-    place_square_in_seat's "Known gap" docstring (closure.py) for the general
+    get_seat_positions's "Known gap" docstring (closure.py) for the general
     shape of what's still unaddressed - two independently-forced seats that
     turn out to be diagonal neighbours of each other - which this fix
     narrows but does not claim to close in general.
@@ -46,7 +45,7 @@ def test_seat_from_two_alert_blocked():
     do_closure(m, title='initial', show=True)
     assert m[7,5].forced_by == {(5, 4)}
 
-    place_and_chase(m, (5, 4), "round 1: (5,4) placed")
+    do_closure(m, (5, 4), "round 1: (5,4) placed")
     assert m[7,5].state == StateEnum.chosen
 
 def test_frozen_area():
@@ -59,13 +58,14 @@ def test_frozen_area():
     stopping short and leaving it for place_square_in_seat_closed's raw scan
     to pick up once round 3's placement happens to complete its seat.
     """
+
     m = build_map_of_squares(11, 11)
     size = 11
     border = [(i, j) for i in range(size) for j in range(size)
               if i in (0, size - 1) or j in (0, size - 1)]
     place_blocked_squares(m, border)
-    place_and_chase(m, (4, 4), "round 1: (4,4) placed")
-    place_and_chase(m, (5, 4), "round 2: (5,4) placed")
+    do_closure(m, (4, 4), "round 1: (4,4) placed")
+    do_closure(m, (5, 4), "round 2: (5,4) placed", show_all=True)
     assert m[8,7].forced_by == {(6, 7), (6, 8)}
-    place_and_chase(m, (6, 7), "round 3: (6,7) placed")
+    do_closure(m, (6, 7), "round 3: (6,7) placed", show_all=True)
     assert m[8,7].state == StateEnum.chosen

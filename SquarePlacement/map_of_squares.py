@@ -21,7 +21,7 @@ class SquareItem:
     state:      current placement state (free / chosen / blocked).
     alert_chosen:  raised by a neighbouring tile's placement pass instead of writing
                    .state directly; resolved into real state via place_square +
-                   do_closure (see test_utils.place_and_chase).
+                   do_closure (see closure.do_closure's own `pos` argument).
     alert_blocked: same as alert_chosen, for the blocked outcome.
     forces:     every (row, col) index this item forces - i.e. what must also be
                 chosen if this item is chosen; empty means this item forces

@@ -13,7 +13,7 @@ from representation import (build_map_of_squares,
                              display_closure_step)
 from closure import get_blocked_links, do_closure, place_square
 
-from test_utils import place_and_chase, DoClosureAsserts, DoClosureAssertsSingle, DoClosureSteps
+from test_utils import DoClosureAsserts, DoClosureAssertsSingle, DoClosureSteps
 
 
 def test_line():
@@ -176,10 +176,10 @@ def test_tree_fan_in():
 def test_cycle_unidirectional_bidirectional():
     """ build a free cell with 4 direct blocked neighbors. """
     m = build_map_of_squares(12, 12)
-    place_and_chase(m, (2, 2), "round 1: (2,2) placed", True)
-    place_and_chase(m, (3, 5), "round 2: (3,5) placed", True)
-    place_and_chase(m, (5, 1), "round 3: (5,1) placed", True) 
-    place_and_chase(m, (6, 4), "round 4: (6,4) placed", True)   
+    do_closure(m, (2, 2), "round 1: (2,2) placed", True)
+    do_closure(m, (3, 5), "round 2: (3,5) placed", True)
+    do_closure(m, (5, 1), "round 3: (5,1) placed", True) 
+    do_closure(m, (6, 4), "round 4: (6,4) placed", True)   
 
 def test_line_into_eye():
     """(1, 4) is a pure diagonal linker into (1, 6) - like (4, 4) in
