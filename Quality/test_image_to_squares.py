@@ -99,7 +99,7 @@ def seeded_margin_map(sz):
     four interior corner cells pre-set to CHOSEN.
 
     The corners need no computation or do_closure to know: each one sits at a
-    map_of_squares "seat" (see closure.place_square_in_seat) purely from the
+    map_of_squares "seat" (see closure.get_seat_positions) purely from the
     margin - e.g. (1, 1)'s own 2x2 block is (0,0)/(0,1)/(1,0)/(1,1), and the first
     three are all margin (BLOCKED), leaving (1, 1) as the single free corner of an
     otherwise-blocked seat, which place_square_in_seat_closed would always fill.
@@ -245,7 +245,7 @@ def test_square_placement_random_order_supersuperlattice():
 
     2. Convergence is slow because each kernel call places one square at a time, not the
        group that must be placed together. insert_best's best_allowed pick is a fresh,
-       alert-bookkeeping-free cell (no .forces yet), so place_and_chase's forced_closure
+       alert-bookkeeping-free cell (no .forces yet), so do_closure's forced_closure
        call on it typically returns just {that one cell} - the rest of whatever patch it
        actually belongs to is only discovered later, one do_closure pass at a time, as
        find_alerts/assign_paths gradually builds up .forces elsewhere on the board. Every
