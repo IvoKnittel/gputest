@@ -10,6 +10,12 @@ from alert_graphs import (RING_OFFSETS,
                            set_alert_chosen_set_links)
 from representation import display_closure_step, margin_ring_positions
 
+# Sentinel state_value both find_secondary_links5x5's and
+# find_secondary_links's own local windows use for a position off the real
+# board - never equal to any real StateEnum.value (0, 1, 2), so a BR-009-style
+# equality check against StateEnum.free.value already excludes it for free.
+_OFFBOARD = -1
+
 
 def _call_step_asserts(m, asserts_single, step_name):
     """Shared implementation behind every pipeline function's own `asserts`
@@ -90,67 +96,56 @@ def find_alerts_set_links(map_of_squares, asserts=None):
     if asserts is not None:
         _call_step_asserts(map_of_squares, asserts, 'find_alerts_set_links')
 
-def find_secondary_links(map_of_squares, asserts=None):
-    """
-    A relay on top of find_alerts_set_links: for each alert_blocked item P,
-    simulate each candidate placement a (a free diagonal neighbour of P - the
-    thing that would actually cause P to become blocked) together with every
-    corner B that blocking P already promises (P's own alert_chosen corners,
-    from find_alerts_set_links), and look for seats that only exist once both
-    of those - a's own diagonal-blocking footprint and B's - are combined.
-    Link a directly to any such newly-created seat's corner.
 
-    Inputs: reads .alert_blocked map-wide; for each alert_blocked P, .state of
-    P's own ring (to recompute its corners) and of the diagonal neighbours of
-    every position in the simulated chosen set (a and its corners); .state of
-    every 2x2 block touching one of those.
+# find_secondary_links5x5's fixed local window - deliberately
+# radius 2 (5x5, sixteen blocks), the size find_secondary_links itself used
+# before test_closure_refactor.py's regression case proved radius 3 is
+# required for full correctness (see find_secondary_links's own docstring).
+# Kept at radius 2 here on purpose: this function is the known-incomplete,
+# cheaper-window comparison point, not a second correct implementation.
+_SECONDARY_WINDOW_RADIUS_5X5 = 2
+_SECONDARY_WINDOW_SIZE_5X5 = 2 * _SECONDARY_WINDOW_RADIUS_5X5 + 1
 
-    Outputs: writes .forces (on a), .forced_by and .alert_chosen (on each
-    newly-linked corner); returns None. asserts - see find_alerts_set_links's
-    own docstring for the contract.
+_SECONDARY_BLOCK_TOP_LEFTS_5X5 = [
+    (bi, bj)
+    for bi in range(_SECONDARY_WINDOW_SIZE_5X5 - 1)
+    for bj in range(_SECONDARY_WINDOW_SIZE_5X5 - 1)
+]
+_SECONDARY_BLOCK_ROWS_5X5 = np.array([[bi, bi, bi + 1, bi + 1] for bi, _ in _SECONDARY_BLOCK_TOP_LEFTS_5X5])
+_SECONDARY_BLOCK_COLS_5X5 = np.array([[bj, bj + 1, bj, bj + 1] for _, bj in _SECONDARY_BLOCK_TOP_LEFTS_5X5])
 
-    Scope: local - a fixed, bounded-radius simulation per (P, a) pair (P's
-    ring, a's diagonal footprint, each corner's diagonal footprint, and the
-    2x2 blocks touching any of that) - no traversal, no whole-board
-    aggregate.
 
-    -------------------------------------------------------------------------
+def find_secondary_links5x5(map_of_squares, asserts=None):
+    """Same vectorized, array-windowed approach as find_secondary_links (see
+    its own docstring for the full rationale: X0/XC instead of a dict, all
+    fixed blocks checked via one count_nonzero per window instead of a
+    targeted scan) - but deliberately kept at the smaller, radius-2 (5x5,
+    sixteen-block) window find_secondary_links itself used before its own
+    regression case (test_closure_refactor.py) proved that too small.
 
-    For an alert_blocked P, iter_alert_thirds(P's ring) gives B - the same
-    corners find_alerts_set_links already found and linked from *every* free
-    diagonal neighbour of P (it doesn't know which neighbour will actually
-    trigger P's block, so it links them all). This function instead asks, one
-    candidate a at a time: given that a specifically is what gets chosen -
-    which blocks P, forcing every member of B to be chosen too, which in turn
-    blocks *their* diagonal neighbours - does that combined, real chain of
-    consequences complete a seat that isn't already one on the real board?
-    If so, a is the one and only cause of it, so a (not B, not P) is what
-    gets linked to the new corner.
+    This is no longer a second correct implementation to check the real one
+    against - it's the cheaper, known-incomplete comparison point: a block
+    touching a radius-2 override position can itself extend to radius 3 (a
+    block's top-left can be pos-1), so any secondary link whose completing
+    corner only shows up at that outer ring is silently missed here, the
+    same way find_secondary_links's own first draft missed
+    test_closure_refactor.test_window_radius_must_be_3_not_2's (6, 4) ->
+    (4, 3) edge. Never produces a *wrong* edge, only possibly an incomplete
+    set - see test_closure_refactor.py's own coverage of exactly this
+    subset relationship.
 
-    The simulation never needs an explicit local grid copy: only two kinds of
-    cell ever change from the real board - the chosen set (a plus B) and
-    whichever of their diagonal neighbours are currently free (blocked as a
-    side effect) - so a small position->state override dict, consulted in
-    place of the real .state, is enough. Only the 2x2 blocks touching an
-    overridden position can possibly change seat status, so only those are
-    rechecked; a block already a real seat before the override is skipped -
-    that one belongs to place_square_in_seat_closed's direct scan already,
-    not to this function.
-
-    A found corner is skipped, not linked, if it's already .forced_by some
-    member of B: find_alerts_set_links already links every member of B
-    directly from a (a is one of P's free diagonal neighbours, and B is
-    exactly what P's own alert_blocked/alert_chosen pass linked every such
-    neighbour to), so a can already reach that corner in two hops via
-    whichever b forces it - linking a to it directly would be a redundant
-    edge, true but adding no reachability the .forces chain didn't already
-    have, and it only clutters the display. This one-hop-from-B check isn't a
-    complete reachability test (a corner could be several hops past some b
-    with nothing directly linking them), but it's cheap and catches the
-    common case without turning this function's otherwise fixed-radius
-    simulation into a graph walk.
+    Inputs/Outputs/Scope: identical to find_secondary_links's own docstring,
+    modulo the smaller window.
     """
     rows, cols = map_of_squares.shape
+    R = _SECONDARY_WINDOW_RADIUS_5X5
+
+    def state_value(pos):
+        r, c = pos
+        if 0 <= r < rows and 0 <= c < cols:
+            return map_of_squares[r, c].state.value
+        return _OFFBOARD
+
     for i in range(1, rows - 1):
         for j in range(1, cols - 1):
             p_item = map_of_squares[i, j]
@@ -163,6 +158,25 @@ def find_secondary_links(map_of_squares, asserts=None):
             if not b_positions:  # BR-004
                 continue
 
+            # X0: fixed 5x5 window of REAL state around P, read once per P -
+            # see find_secondary_links's own docstring for why this replaces
+            # a per-candidate overrides dict.
+            X0 = np.array(
+                [[state_value((i + dr, j + dc)) for dc in range(-R, R + 1)] for dr in range(-R, R + 1)],
+                dtype=np.int8,
+            )
+
+            def to_local(pos):
+                return pos[0] - i + R, pos[1] - j + R
+
+            # All sixteen blocks' real corners, read once per P.
+            real_corners_all = X0[_SECONDARY_BLOCK_ROWS_5X5, _SECONDARY_BLOCK_COLS_5X5]  # shape (16, 4)
+            real_is_seat = (
+                np.count_nonzero(real_corners_all == StateEnum.blocked.value, axis=1) == 3
+            ) & (
+                np.count_nonzero(real_corners_all == StateEnum.free.value, axis=1) == 1
+            )  # BR-011, vectorized over every block at once
+
             for di, dj in DIAGONAL_OFFSETS:
                 a_pos = (i + di, j + dj)
                 if not (0 <= a_pos[0] < rows and 0 <= a_pos[1] < cols):  # BR-005
@@ -171,46 +185,246 @@ def find_secondary_links(map_of_squares, asserts=None):
                 if a_item.state != StateEnum.free:  # BR-006
                     continue
 
+                # XC: the working copy - mutated for this candidate only,
+                # then discarded (next candidate copies fresh from X0).
+                XC = X0.copy()
+
                 chosen_hyp = {a_pos} | b_positions
-                overrides = {pos: StateEnum.chosen for pos in chosen_hyp}
+                chosen_local = {to_local(pos) for pos in chosen_hyp}
+                for lr, lc in chosen_local:
+                    XC[lr, lc] = StateEnum.chosen.value
+
                 for ci, cj in chosen_hyp:
                     for bdi, bdj in DIAGONAL_OFFSETS:
-                        n_pos = (ci + bdi, cj + bdj)
-                        if not (0 <= n_pos[0] < rows and 0 <= n_pos[1] < cols):  # BR-007
+                        nlr, nlc = to_local((ci + bdi, cj + bdj))
+                        if (nlr, nlc) in chosen_local:  # BR-008
                             continue
-                        if n_pos in overrides:  # BR-008
+                        if X0[nlr, nlc] == StateEnum.free.value:  # BR-009 (folds BR-007 in, same as find_secondary_links)
+                            XC[nlr, nlc] = StateEnum.blocked.value
+
+                # BR-010, reframed: one vectorized read of all sixteen fixed
+                # blocks' hypothetical corners, not a scan of just the ones
+                # an override touched - see find_secondary_links's own
+                # docstring. Unlike that function's own thirty-six blocks,
+                # this window is exactly the size that misses a block whose
+                # own corners land at radius 3 - see this function's own
+                # docstring.
+                hyp_corners_all = XC[_SECONDARY_BLOCK_ROWS_5X5, _SECONDARY_BLOCK_COLS_5X5]  # shape (16, 4)
+                hyp_is_seat = (
+                    np.count_nonzero(hyp_corners_all == StateEnum.blocked.value, axis=1) == 3
+                ) & (
+                    np.count_nonzero(hyp_corners_all == StateEnum.free.value, axis=1) == 1
+                )  # BR-012, vectorized
+                newly_created = hyp_is_seat & ~real_is_seat  # BR-011 + BR-012 combined
+
+                for block_idx in np.flatnonzero(newly_created):
+                    lr, lc = _SECONDARY_BLOCK_TOP_LEFTS_5X5[block_idx]
+                    local_corners = [(lr, lc), (lr, lc + 1), (lr + 1, lc), (lr + 1, lc + 1)]
+                    free_corner = next(pos for pos in local_corners
+                                        if XC[pos] == StateEnum.free.value)
+                    corner_pos = (free_corner[0] - R + i, free_corner[1] - R + j)
+                    corner_item = map_of_squares[corner_pos]
+                    if corner_item.forced_by & b_positions:  # BR-013
+                        continue  # already reachable from a via some b in B
+                    a_item.forces.add(corner_pos)
+                    corner_item.forced_by.add(a_pos)
+                    corner_item.alert_chosen = True
+    if asserts is not None:
+        _call_step_asserts(map_of_squares, asserts, 'find_secondary_links')
+
+
+# find_secondary_links's fixed local window: every position its
+# per-candidate simulation can ever read or write is within this radius of
+# P. P's own ring (a candidates and B members alike) is radius 1; their own
+# diagonal-blocking footprint (the overrides) reaches one hop further, radius
+# 2; and a block *touching* a radius-2 override position can extend one cell
+# past it again (a block's top-left can be pos-1), radius 3 - see the
+# function's own docstring for the full argument and why that still beats a
+# dict.
+_SECONDARY_WINDOW_RADIUS = 3
+_SECONDARY_WINDOW_SIZE = 2 * _SECONDARY_WINDOW_RADIUS + 1
+
+# Every 2x2 block's top-left corner inside the window, in (row, col) index
+# pairs into a (_SECONDARY_WINDOW_SIZE, _SECONDARY_WINDOW_SIZE) array -
+# computed once at import time, identical for every P, so the per-candidate
+# hot loop below never rebuilds it: it just fancy-indexes X0/XC with these
+# two arrays to pull all thirty-six blocks' four corners out in one
+# vectorized read. Corner order within a block matches find_secondary_links's own
+# [(bi,bj), (bi,bj+1), (bi+1,bj), (bi+1,bj+1)].
+_SECONDARY_BLOCK_TOP_LEFTS = [
+    (bi, bj)
+    for bi in range(_SECONDARY_WINDOW_SIZE - 1)
+    for bj in range(_SECONDARY_WINDOW_SIZE - 1)
+]
+_SECONDARY_BLOCK_ROWS = np.array([[bi, bi, bi + 1, bi + 1] for bi, _ in _SECONDARY_BLOCK_TOP_LEFTS])
+_SECONDARY_BLOCK_COLS = np.array([[bj, bj + 1, bj, bj + 1] for _, bj in _SECONDARY_BLOCK_TOP_LEFTS])
+
+
+def find_secondary_links(map_of_squares, asserts=None):
+    """Same P/a selection and BR-003..BR-013 contract as find_secondary_links5x5
+    (same three fields written, same mechanism) - restructured around a
+    fixed-size local array instead of a per-candidate dict, as a CPU-side
+    stand-in for what a CUDA kernel over this stage would actually want to
+    touch. This still runs as ordinary NumPy/Python, one P at a time -
+    nothing here is on a GPU - it only changes the *shape* of the working
+    data to one a GPU port could take as-is.
+
+    This is the sole correct implementation in the codebase - find_secondary_
+    links5x5 shares its mechanism but deliberately keeps the smaller,
+    radius-2 window this function itself used before its own first draft's
+    regression case (below) proved that too small; it is not, and is not
+    meant to be, algorithmically identical to this one. Inputs/Outputs/Scope
+    otherwise match find_secondary_links5x5's own docstring. test_closure_
+    refactor.py verifies, board-wide, that find_secondary_links5x5's own
+    .forces edges are always a *subset* of this function's - never a false
+    positive, only possibly incomplete.
+
+    -------------------------------------------------------------------------
+
+    Why the dict has to go: overrides there is keyed by arbitrary (row, col)
+    tuples, a different number of them for every (P, a) pair - no fixed
+    shape, no uniform memory layout, nothing SIMD lanes can stride over in
+    lockstep. X0 replaces it: a fixed 7x7 window of *real* .state, read once
+    per P (not once per candidate), each cell holding a small int - the
+    StateEnum's own .value, or _OFFBOARD (-1) past the real board's edge. The
+    radius is 3, not the radius-2 reach of the overrides themselves: a
+    radius-2 override position is still only *examined* by a block whose own
+    top-left can sit one cell further out (BR-010's `for bi in (pi-1, pi)`),
+    so the checked blocks' own corners can land at radius 3 even though
+    nothing is ever overridden there - a real, if now-fixed, off-by-one in
+    this function's own first draft (see test_closure_refactor.py's
+    regression case, found via exactly this gap). XC is a working copy of
+    X0, mutated in place for one candidate a's own hypothetical
+    chosen/blocked cells, read to judge every block in the window, then
+    thrown away and re-copied from X0 for the next candidate - "read X0
+    once, copy to XC, mutate XC, use it, copy X0 back over XC, next a" is
+    exactly the read/scratch/discard cycle a GPU kernel would run once per
+    thread block, one block per P.
+
+    BR-007's original bounds check has no separate counterpart here: every
+    diagonal neighbour this function ever overrides is provably inside the
+    7x7 window (radius 2 for the override itself, one inside the radius-3
+    window it's built at), so the local index is always in range - what used
+    to be an off-*board* position (negative row/col, or past rows/cols) now
+    just reads back _OFFBOARD from X0, which is never equal to
+    StateEnum.free.value, so BR-009's own equality check already excludes it
+    for free.
+
+    BR-010 is reframed rather than ported: instead of computing which of the
+    window's 2x2 blocks an override actually touched (data-dependent - a
+    different set, a different iteration count, for every candidate), all
+    thirty-six fixed blocks inside the 7x7 window are checked every time.
+    That is strictly more raw comparisons than the original's targeted scan,
+    but a fixed iteration count with no data-dependent branching is the
+    shape a SIMD lane wants - trading a little redundant work for zero
+    divergence is the same trade the rest of this docstring is making
+    throughout.
+
+    What is deliberately left untouched: b_positions is still read directly
+    off real SquareItem objects (same iter_alert_thirds call as find_alerts_
+    set_links and find_secondary_links5x5 both already make), and
+    the eventual .forces/.forced_by/.alert_chosen write still lands on real
+    SquareItem objects too. Those aren't board-state arrays - they're graph
+    bookkeeping with unbounded fan-out per cell (see map_of_squares.py's own
+    field docs) - restructuring that is a different problem than the one
+    this function's own window solves.
+    """
+    rows, cols = map_of_squares.shape
+    R = _SECONDARY_WINDOW_RADIUS
+
+    def state_value(pos):
+        r, c = pos
+        if 0 <= r < rows and 0 <= c < cols:
+            return map_of_squares[r, c].state.value
+        return _OFFBOARD
+
+    for i in range(1, rows - 1):
+        for j in range(1, cols - 1):
+            p_item = map_of_squares[i, j]
+            if not p_item.alert_blocked:  # BR-003
+                continue
+
+            ring = [map_of_squares[i + di, j + dj] for di, dj in RING_OFFSETS]
+            b_positions = {(i + RING_OFFSETS[idx][0], j + RING_OFFSETS[idx][1])
+                           for idx in iter_alert_thirds(ring)}
+            if not b_positions:  # BR-004
+                continue
+
+            # X0: fixed 7x7 window of REAL state around P, read once per P -
+            # not once per candidate a, unlike the per-a overrides dict it
+            # replaces. Building it is inherently one Python-level read per
+            # cell (map_of_squares holds SquareItem objects, not raw state
+            # values) - the array payoff below is in reusing this same X0
+            # across every candidate, and in checking all thirty-six blocks
+            # against it as one vectorized op instead of one at a time.
+            # int8 is plenty: the only values ever stored are _OFFBOARD (-1)
+            # and the three StateEnum.value's (0, 1, 2).
+            X0 = np.array(
+                [[state_value((i + dr, j + dc)) for dc in range(-R, R + 1)] for dr in range(-R, R + 1)],
+                dtype=np.int8,
+            )
+
+            def to_local(pos):
+                return pos[0] - i + R, pos[1] - j + R
+
+            # All thirty-six blocks' real corners, read once per P via a
+            # single fancy-indexed array op rather than one Python list per block.
+            real_corners_all = X0[_SECONDARY_BLOCK_ROWS, _SECONDARY_BLOCK_COLS]  # shape (36, 4)
+            real_is_seat = (
+                np.count_nonzero(real_corners_all == StateEnum.blocked.value, axis=1) == 3
+            ) & (
+                np.count_nonzero(real_corners_all == StateEnum.free.value, axis=1) == 1
+            )  # BR-011, vectorized over every block at once
+
+            for di, dj in DIAGONAL_OFFSETS:
+                a_pos = (i + di, j + dj)
+                if not (0 <= a_pos[0] < rows and 0 <= a_pos[1] < cols):  # BR-005
+                    continue
+                a_item = map_of_squares[a_pos]
+                if a_item.state != StateEnum.free:  # BR-006
+                    continue
+
+                # XC: the working copy - mutated for this candidate only,
+                # then discarded (next candidate copies fresh from X0).
+                XC = X0.copy()
+
+                chosen_hyp = {a_pos} | b_positions
+                chosen_local = {to_local(pos) for pos in chosen_hyp}
+                for lr, lc in chosen_local:
+                    XC[lr, lc] = StateEnum.chosen.value
+
+                for ci, cj in chosen_hyp:
+                    for bdi, bdj in DIAGONAL_OFFSETS:
+                        nlr, nlc = to_local((ci + bdi, cj + bdj))
+                        if (nlr, nlc) in chosen_local:  # BR-008
                             continue
-                        if map_of_squares[n_pos].state == StateEnum.free:  # BR-009
-                            overrides[n_pos] = StateEnum.blocked
+                        if X0[nlr, nlc] == StateEnum.free.value:  # BR-009 (folds BR-007 in - see docstring)
+                            XC[nlr, nlc] = StateEnum.blocked.value
 
-                def eff_state(pos):
-                    return overrides.get(pos, map_of_squares[pos].state)
+                # BR-010, reframed: one vectorized read of all thirty-six
+                # fixed blocks' hypothetical corners, not a scan of just the
+                # ones an override touched - see docstring.
+                hyp_corners_all = XC[_SECONDARY_BLOCK_ROWS, _SECONDARY_BLOCK_COLS]  # shape (36, 4)
+                hyp_is_seat = (
+                    np.count_nonzero(hyp_corners_all == StateEnum.blocked.value, axis=1) == 3
+                ) & (
+                    np.count_nonzero(hyp_corners_all == StateEnum.free.value, axis=1) == 1
+                )  # BR-012, vectorized
+                newly_created = hyp_is_seat & ~real_is_seat  # BR-011 + BR-012 combined
 
-                checked_blocks = set()
-                for pi, pj in overrides:
-                    for bi in (pi - 1, pi):
-                        for bj in (pj - 1, pj):
-                            if 0 <= bi < rows - 1 and 0 <= bj < cols - 1:  # BR-010
-                                checked_blocks.add((bi, bj))
 
-                for bi, bj in checked_blocks:
-                    corners = [(bi, bj), (bi, bj + 1), (bi + 1, bj), (bi + 1, bj + 1)]
-
-                    real_states = [map_of_squares[c].state for c in corners]
-                    if (real_states.count(StateEnum.blocked) == 3
-                            and real_states.count(StateEnum.free) == 1):  # BR-011
-                        continue  # already a real seat - not newly created
-
-                    hyp_states = [eff_state(c) for c in corners]
-                    if (hyp_states.count(StateEnum.blocked) == 3
-                            and hyp_states.count(StateEnum.free) == 1):  # BR-012
-                        corner_pos = corners[hyp_states.index(StateEnum.free)]
-                        corner_item = map_of_squares[corner_pos]
-                        if corner_item.forced_by & b_positions:  # BR-013
-                            continue  # already reachable from a via some b in B
-                        a_item.forces.add(corner_pos)
-                        corner_item.forced_by.add(a_pos)
-                        corner_item.alert_chosen = True
+                for block_idx in np.flatnonzero(newly_created):
+                    lr, lc = _SECONDARY_BLOCK_TOP_LEFTS[block_idx]
+                    local_corners = [(lr, lc), (lr, lc + 1), (lr + 1, lc), (lr + 1, lc + 1)]
+                    free_corner = next(pos for pos in local_corners
+                                        if XC[pos] == StateEnum.free.value)
+                    corner_pos = (free_corner[0] - R + i, free_corner[1] - R + j)
+                    corner_item = map_of_squares[corner_pos]
+                    if corner_item.forced_by & b_positions:  # BR-013
+                        continue  # already reachable from a via some b in B
+                    a_item.forces.add(corner_pos)
+                    corner_item.forced_by.add(a_pos)
+                    corner_item.alert_chosen = True
     if asserts is not None:
         _call_step_asserts(map_of_squares, asserts, 'find_secondary_links')
 

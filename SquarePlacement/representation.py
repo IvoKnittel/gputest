@@ -547,15 +547,19 @@ def display_closure_step(m, pos=None, title="", show_links=False, show_real=Fals
     this check entirely and displays normally, exactly as before this
     parameter pair existed.
 
-    pos: an optional (row, col) position, framed in red on the
-    map_of_squares panel, on top of everything else (including a yellow
-    newly_blocked/newly_chosen frame on the same cell, if any - red draws
-    last). do_closure passes its own `pos` argument here (see its own
-    docstring): the cell it placed before running the closure pipeline -
-    distinct from newly_blocked/newly_chosen's yellow frames, which mark
-    consequences the pipeline itself produced, not the placement that
-    triggered them. None (the default) draws nothing. Skipped (cropped out,
-    like every other overlay) for a position inside the roi_margin ring.
+    pos: an optional (row, col) position - or a list of them - framed in red
+    on the map_of_squares panel, on top of everything else (including a
+    yellow newly_blocked/newly_chosen frame on the same cell, if any - red
+    draws last). do_closure passes its own single-position `pos` argument
+    here (see its own docstring): the cell it placed before running the
+    closure pipeline - distinct from newly_blocked/newly_chosen's yellow
+    frames, which mark consequences the pipeline itself produced, not the
+    placement that triggered them. A list frames every position in it the
+    same way - e.g. every cell that was already chosen before some other
+    stage ran, when there's more than one and none of them is "the" single
+    placement a do_closure call made. None (the default) draws nothing.
+    Skipped (cropped out, like every other overlay) for a position inside
+    the roi_margin ring.
 
     title_color: forwarded as-is to ax.set_title's own color argument -
     None (the default) leaves the title in matplotlib's normal colour.
@@ -651,10 +655,10 @@ def display_closure_step(m, pos=None, title="", show_links=False, show_real=Fals
                                 edgecolor='yellow', facecolor='none', zorder=6))
 
     if pos is not None:
-        i, j = pos
-        if w <= i < rows - w and w <= j < cols - w:
-            ax.add_patch(Rectangle((j - w - 0.5, i - w - 0.5), 1, 1, linewidth=2,
-                                    edgecolor='red', facecolor='none', zorder=7))
+        for i, j in (pos if isinstance(pos, list) else [pos]):
+            if w <= i < rows - w and w <= j < cols - w:
+                ax.add_patch(Rectangle((j - w - 0.5, i - w - 0.5), 1, 1, linewidth=2,
+                                        edgecolor='red', facecolor='none', zorder=7))
 
     if show_real:
         real_display, error = real_space_map(m)

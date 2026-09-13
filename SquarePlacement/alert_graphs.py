@@ -10,7 +10,6 @@ RING_OFFSETS = [(-1, -1), (-1, 0), (-1, 1), (0, 1), (1, 1), (1, 0), (1, -1), (0,
 # triples.
 QUADRANT_TRIPLES = [(7, 0, 1), (1, 2, 3), (3, 4, 5), (5, 6, 7)]
 
-
 def iter_alert_thirds(ring):
     """Yield the ring index of the free corner completing each real seat around the
     centre - team term for what this module's own identifiers (alert_blocked,
