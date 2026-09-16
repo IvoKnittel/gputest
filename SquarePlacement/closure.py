@@ -43,6 +43,63 @@ def _call_step_asserts(m, asserts_single, step_name):
             return
 
 
+def display(m, display_single, step_name, on_error=False):
+    """Shared implementation behind do_closure_intern's own `display`
+    parameter - the display-mechanism equivalent of _call_step_asserts.
+    Looks up step_name (a DoClosureSteps member name, or None for
+    do_closure_intern's own fixed end-of-pass calls) among display_single's
+    own .items (a test_utils.DoClosureDisplaySingle), and for every item
+    whose .step matches step_name AND whose .on_error flag matches this
+    call's own on_error argument, calls display_closure_step(m, **item.kwargs)
+    (a fresh colormap=np.zeros((*m.shape, 3)) is added to kwargs here unless
+    the item's own kwargs already supplies one). Returns True if any of those
+    calls' own return value was truthy (display_closure_step's diagonal-
+    conflict signal - see its own docstring), False otherwise (including when
+    display_single is None, or nothing matched).
+
+    on_error distinguishes do_closure_intern's two calling modes: on_error=
+    False (the normal, live pass - do_closure_intern's own default,
+    error_replay=False) shows only items with on_error=False, skipping every
+    on_error=True item ("show only on error" - see do_closure's own
+    docstring for the replay that actually shows them). on_error=True (used
+    only by that replay, error_replay=True) inverts it: shows only
+    on_error=True items, skipping the rest - so nothing is ever shown twice
+    between the live pass and the replay.
+
+    test_utils.DoClosureSteps is imported here, locally, for the same reason
+    _call_step_asserts imports it locally - see that function's own
+    docstring.
+
+    Named exactly `display`, same as the `display` parameter do_closure_intern
+    and do_closure each take - deliberate, matching how `asserts`'s own
+    per-pass handling already works, though it does mean neither of those two
+    functions can call this one by its bare name once their own `display`
+    parameter has shadowed it; see the module-level `_display_step` alias
+    just below, kept for exactly that purpose.
+    """
+    from test_utils import DoClosureSteps
+    if display_single is None:
+        return False
+    step = DoClosureSteps[step_name] if step_name is not None else None
+    found_error = False
+    for item in display_single.items:
+        if item.step != step or item.on_error != on_error:
+            continue
+        kwargs = dict(item.kwargs)
+        kwargs.setdefault('colormap', np.zeros((*m.shape, 3)))
+        if display_closure_step(m, **kwargs):
+            found_error = True
+    return found_error
+
+
+# Alias used by do_closure_intern/do_closure to call display() above despite
+# each of them also having its own parameter named `display` (which, once
+# bound, shadows the module-level function of the same name for the rest of
+# that function body - ordinary Python scoping, not a bug) - see display()'s
+# own docstring for why the shared helper keeps that name anyway.
+_display_step = display
+
+
 def find_alerts_set_links(map_of_squares, asserts=None):
     """
     A seat (team term - see docs/rose_cascades_and_holes/README.md - for what this
@@ -699,7 +756,7 @@ def place_square_in_seat_closed(map_of_squares, asserts=None):
             if map_of_squares[pos].state != StateEnum.free:  # BR-037
                 continue
             place_square(map_of_squares, pos)
-            do_closure_intern(map_of_squares, "", show_on_error=False)
+            do_closure_intern(map_of_squares, "")
         seats = get_seat_positions(map_of_squares)
     if asserts is not None:
         _call_step_asserts(map_of_squares, asserts, 'place_square_in_seat_closed')
@@ -1227,7 +1284,7 @@ def has_alert_bookkeeping(m):
     return False
 
 
-def do_closure_intern(m, title, show=False, margin=None, roi_margin=0, show_on_error=True, asserts=None):
+def do_closure_intern(m, title, display=None, error_replay=False, asserts=None):
     """
     Run one full round of the closure pipeline, twice (see below for why
     twice), in place: find_alerts_set_links, assign_paths, get_blocked_links/
@@ -1236,8 +1293,8 @@ def do_closure_intern(m, title, show=False, margin=None, roi_margin=0, show_on_e
     Named do_closure_intern, not do_closure: do_closure itself is now a thin
     wrapper around this function (see its own docstring) that adds one more
     summary display, highlighting whatever changed this call, on top of
-    (or instead of) this function's own show=True per-step displays - most
-    callers should call do_closure, not this one, directly.
+    (or instead of) this function's own per-step displays - most callers
+    should call do_closure, not this one, directly.
 
     Inputs: none of its own - delegates entirely to the stages it calls, in
     sequence.
@@ -1265,25 +1322,16 @@ def do_closure_intern(m, title, show=False, margin=None, roi_margin=0, show_on_e
     get_blocked_links' snapshot-then-apply discipline) survive being
     re-expressed over tiles instead of individual cells first.
 
-    margin (a representation.RealSpaceMargin, or None) and roi_margin are
-    forwarded as-is to display_closure_step's own margin/roi_margin arguments
-    when show=True - see their docstrings; ignored when show=False.
-
-    show=True's up-to-three displays (after the first pass, before the
-    bookkeeping reset - see below) each also raise InvalidTilingError if
-    they find two chosen squares that are diagonal neighbours -
-    display_closure_step's show_real=True panel reports that via its own
-    return value (real_space_map does not raise it directly, see its
-    docstring), and this is the one place that turns it back into a raise,
-    matching check_tiling_invariant's already-loud handling of the other
-    kind of invalid board (a fully-blocked 2x2). show=False skips every one
-    of these checks entirely, the same way it skips the displays themselves -
-    a diagonal-chosen conflict can still be present on a show=False run,
-    just undetected by do_closure itself either way.
-
-    Each of the three displays is conditional on show=True *and* its own
-    preceding step having actually found or changed something - not shown
-    unconditionally just because show=True:
+    display (a test_utils.DoClosureDisplay, or None): .first_pass is
+    forwarded as every per-stage display() call's own display_single in the
+    first, displayed round below; .second_pass likewise for the second,
+    silent round - mirroring exactly how `asserts` splits into .first_pass/
+    .second_pass just below. Each of the module-level display() calls this
+    function makes (see that function's own docstring) is still gated by the
+    same condition as before this mechanism existed - that gating is
+    pipeline business logic (did this stage actually find or change
+    something), not something generic to any registered display item, so
+    this function still computes and checks it itself:
     - after assign_paths: only if has_alert_bookkeeping(m) - find_alerts_
       set_links/find_secondary_links/assign_paths never touch .state, so
       "did the map change" doesn't apply to them; this is the equivalent
@@ -1293,7 +1341,26 @@ def do_closure_intern(m, title, show=False, margin=None, roi_margin=0, show_on_e
     - after place_square_in_seat_closed: only if it returned True (it placed
       at least one seat this round).
     A round that finds nothing new at some stage skips that stage's own
-    display rather than showing an unchanged board.
+    display() call entirely, rather than calling it to show an unchanged
+    board. Each of those three display() calls also raises InvalidTilingError
+    if it finds two chosen squares that are diagonal neighbours -
+    display_closure_step's show_real=True panel reports that via its own
+    return value (real_space_map does not raise it directly, see its
+    docstring), and display() propagates it back up (see its own docstring),
+    and this is the one place that turns it back into a raise, matching
+    check_tiling_invariant's already-loud handling of the other kind of
+    invalid board (a fully-blocked 2x2). A caller that registers nothing for
+    a given stage skips this check for that stage entirely, the same way it
+    skips the display itself - a diagonal-chosen conflict can still be
+    present on a run with nothing registered, just undetected by do_closure
+    itself either way.
+
+    The one call in the second, silent round that precedes find_secondary_
+    links' own gated checks - "after find_secondary_links 2nd" - is NOT
+    gated on any stage's own return value, same as before this mechanism
+    existed: it always calls display() (though display() itself still shows
+    nothing unless a caller actually registered an item for that step) -
+    preserved as a pre-existing quirk, not newly introduced here.
 
     place_square_in_seat_closed follows dissolve_blocked_paths because a cell
     get_blocked_links flags is a genuine, permanent impossibility (see
@@ -1326,13 +1393,25 @@ def do_closure_intern(m, title, show=False, margin=None, roi_margin=0, show_on_e
 
     This final check_tiling_invariant sits after the second, silent pass, so
     without its own safety net a failure here would raise with no display
-    ever having shown the board that triggered it - the case show_on_error
-    (default True) exists for: if the invariant check raises, and
-    show_on_error is True, display the board (independent of `show`) before
-    re-raising the same exception. show_on_error=False skips that display
-    and just re-raises, for callers (like do_closure's own except block, or
-    place_square_in_seat_closed's per-seat re-evaluation calls) that already
-    handle showing the failure themselves.
+    ever having shown the board that triggered it - the case display()'s own
+    on_error item (registered under step=None, on_error=True, on whichever of
+    display's two DoClosureDisplaySingle owns it - see default_display's own
+    docstring for where it's registered) exists for. That item is looked up
+    with on_error=error_replay, same as every other display() call this
+    function makes: on a normal, live call (error_replay=False, this
+    function's own default) it never matches (it's registered on_error=True),
+    so nothing shows and the exception just propagates - the live pass never
+    displays anything on its own failure. error_replay=True inverts every
+    display() call this function makes (see display()'s own docstring): all
+    of the normal, on_error=False items become unreachable, and only this one
+    on_error=True item can ever match - do_closure uses this by re-running
+    this function on a deepcopy of the same starting map, in error-replay
+    mode, once its own real run has already raised (see do_closure's own
+    docstring) - since the pipeline is a deterministic function of cell
+    state, that replay reproduces the same intermediate states and the same
+    eventual failure, so this on_error=True item ends up showing the exact
+    board that triggered it, without the live run ever having had to display
+    anything on its own critical path.
 
     asserts (a test_utils.DoClosureAsserts, or None): .first_pass is
     forwarded as every pipeline function's own `asserts` in the first,
@@ -1343,45 +1422,39 @@ def do_closure_intern(m, title, show=False, margin=None, roi_margin=0, show_on_e
     """
     first_pass = asserts.first_pass if asserts is not None else None
     second_pass = asserts.second_pass if asserts is not None else None
+    first_pass_display = display.first_pass if display is not None else None
+    second_pass_display = display.second_pass if display is not None else None
 
     find_alerts_set_links(m, asserts=first_pass)
     find_secondary_links(m, asserts=first_pass)
     assign_paths(m, asserts=first_pass)
-    if show and has_alert_bookkeeping(m):
-        colormap = np.zeros((*m.shape, 3))
-        error = display_closure_step(m, title="after assign_paths", show_links=True, show_real=True, colormap=colormap,
-                                    margin=margin, roi_margin=roi_margin)
-        if error:
+    if has_alert_bookkeeping(m):
+        if _display_step(m, first_pass_display, 'assign_paths', on_error=error_replay):
             raise InvalidTilingError(
                     f"{title}: real_space_map found a diagonal-chosen conflict - "
                     f"see the map_of_squares panel just shown for which cells")
 
     blocked_something = dissolve_blocked_paths(m, get_blocked_links(m, asserts=first_pass), asserts=first_pass)
-    if show and blocked_something:
-        colormap = np.zeros((*m.shape, 3))
-        error = display_closure_step(m, title="after dissolve_blocked_paths", show_links=True, show_real=True, colormap=colormap,
-                                        margin=margin, roi_margin=roi_margin)
-        if error:
+    if blocked_something:
+        if _display_step(m, first_pass_display, 'dissolve_blocked_paths', on_error=error_replay):
             raise InvalidTilingError(
                 f"{title}: real_space_map found a diagonal-chosen conflict - "
                 f"see the map_of_squares panel just shown for which cells")
 
     placed_something = place_square_in_seat_closed(m, asserts=first_pass)
-    if show and placed_something:
-        colormap = np.zeros((*m.shape, 3))
-        error = display_closure_step(m, title="after place_square_in_seat_closed", show_links=True, show_real=True, colormap=colormap,
-                                      margin=margin, roi_margin=roi_margin)
-        if error:
+    if placed_something:
+        if _display_step(m, first_pass_display, 'place_square_in_seat_closed', on_error=error_replay):
             raise InvalidTilingError(
                 f"{title}: real_space_map found a diagonal-chosen conflict - "
                 f"see the map_of_squares panel just shown for which cells")
     clear_all_but_state(m)
     find_alerts_set_links(m, asserts=second_pass)
     find_secondary_links(m, asserts=second_pass)
-    colormap = np.zeros((*m.shape, 3))
-    error = display_closure_step(m, title="after find_secondary_links 2nd", show_links=True, show_real=True, colormap=colormap,
-                                 margin=margin, roi_margin=roi_margin)
-    if error:
+    # Preserved quirk (not newly introduced here - see this function's own
+    # docstring): unlike the three display() calls above, this one is never
+    # gated on any stage's own return value - always called, though it still
+    # shows nothing unless a caller registered a find_secondary_links item.
+    if _display_step(m, second_pass_display, 'find_secondary_links', on_error=error_replay):
         raise InvalidTilingError(
             f"{title}: real_space_map found a diagonal-chosen conflict - "
             f"see the map_of_squares panel just shown for which cells")
@@ -1391,11 +1464,13 @@ def do_closure_intern(m, title, show=False, margin=None, roi_margin=0, show_on_e
     try:
         check_tiling_invariant(m)
     except InvalidTilingError:
-        if show_on_error:
-            colormap = np.zeros((*m.shape, 3))
-            display_closure_step(m, title=f"ERROR: {title}: check_tiling_invariant failed", show_links=True,
-                                  show_real=True, colormap=colormap, margin=margin, roi_margin=roi_margin,
-                                  title_color='red')
+        # Owned by second_pass_display, not first_pass_display: this always
+        # runs after the second, silent pass has fully completed, and
+        # do_closure_intern has no dedicated "very end" slot of its own to
+        # register it under instead - see this function's own docstring for
+        # why on_error=error_replay (not a hardcoded True) is still correct
+        # here despite this item itself always being registered on_error=True.
+        _display_step(m, second_pass_display, None, on_error=error_replay)
         raise
 
 
@@ -1456,8 +1531,7 @@ def eval_map(m_before, m_after):
     return newly_blocked, newly_chosen
 
 
-def do_closure(m, pos=None, title="", show=True, margin=None, roi_margin=0, show_all=False, show_on_error=True,
-                asserts=None):
+def do_closure(m, pos=None, title="", display=None, show_on_error=True, asserts=None):
     """Wrapper around do_closure_intern - what every caller should use
     instead of calling that one directly. Runs the real closure pipeline on
     m in place exactly as before (do_closure_intern is unchanged, just
@@ -1480,43 +1554,56 @@ def do_closure(m, pos=None, title="", show=True, margin=None, roi_margin=0, show
     placement that triggered it. None (the default) places nothing, exactly
     as before this parameter existed.
 
-    show_all: forwarded as do_closure_intern's own `show` - unchanged
-    behaviour, its existing per-stage displays (after assign_paths/
-    dissolve_blocked_paths/place_square_in_seat_closed, each already
-    conditional on that stage having found or changed something - see
-    do_closure_intern's own docstring). Independent of, and unrelated to,
-    this wrapper's own `show` below - the two can be combined freely (e.g.
-    show_all=True to watch every stage plus show=True for the final
-    highlighted summary), or either used alone.
+    display (a test_utils.DoClosureDisplay, or None): .first_pass/
+    .second_pass are forwarded as-is to do_closure_intern's own `display`
+    argument - see that function's own docstring for what it does with them.
+    .top_level is this wrapper's own slot, read directly here (do_closure_
+    intern never touches it) - see DoClosureDisplay's own docstring for why
+    it exists as a third field alongside first_pass/second_pass rather than
+    a separate parameter of its own. Each .top_level item's kwargs are
+    static (built ahead of time, e.g. by test_utils.default_display), but
+    pos/newly_blocked/newly_chosen are only known here, at call time - so
+    rather than forcing this through the module-level display()'s own
+    generic step-matching (built for do_closure_intern's fixed, statically-
+    kwargs'd per-stage calls), this wrapper matches .top_level's items itself
+    (by step=None and by on_error) and merges pos/newly_blocked/newly_chosen
+    (and, absent an explicit title in the item's own kwargs, title or
+    f"ERROR: {title}") into each match's kwargs right before calling
+    display_closure_step - see _show_top_level below.
 
-    show: this wrapper's own flag, controlling only its own summary display -
-    not forwarded anywhere. A copy of m is taken before do_closure_intern
-    runs (copy.deepcopy - a real, independent snapshot, not a view), and
-    eval_map compares it against m after do_closure_intern finishes (or
-    raises - see below) to get the newly_blocked/newly_chosen lists.
-    display_closure_step then gets both lists as its own newly_blocked/
-    newly_chosen arguments: if show=True but eval_map found nothing changed
-    at all (both lists empty), display_closure_step's own contract for that
-    case is to display nothing, not an empty round for nothing - see its own
-    docstring. show=False skips computing or showing any of this, exactly as
-    if this wrapper's own logic wasn't there at all.
+    A copy of m is taken before do_closure_intern runs (copy.deepcopy - a
+    real, independent snapshot, not a view), and eval_map compares it
+    against m after do_closure_intern finishes (or raises - see below) to
+    get the newly_blocked/newly_chosen lists. display_closure_step then gets
+    both lists as its own newly_blocked/newly_chosen arguments: if
+    display.top_level carries an on_error=False item but eval_map found
+    nothing changed at all (both lists empty), display_closure_step's own
+    contract for that case is to display nothing, not an empty round for
+    nothing - see its own docstring. No on_error=False item registered
+    (e.g. test_utils.default_display(show=False, ...)) skips computing or
+    showing any of this, exactly as if this wrapper's own summary-display
+    logic wasn't there at all.
 
-    If do_closure_intern raises InvalidTilingError, this wrapper still shows
-    its own summary display first (if show_on_error=True, the default) -
-    whatever changed before the failure is exactly the interesting part of
-    the board to be looking at - then re-raises the same exception
-    unchanged, so a caller of do_closure still sees the same failure
-    do_closure_intern itself would have raised. That on-error display is
-    gated by show_on_error rather than show, so a caller with show=False can
-    still see the failing board, and a caller (like test_margins.py) that
-    already handles the expected-to-raise case itself can pass
-    show_on_error=False to suppress it and avoid a duplicate display.
-    show_on_error is also forwarded to do_closure_intern's own call, as its
-    safety net around check_tiling_invariant (see that function's
-    docstring). Either on-error display's title is title (do_closure's own)
-    or do_closure_intern's own title, prefixed with "ERROR: " and coloured
-    red (display_closure_step's title_color), so an error panel is visibly
-    distinct from a normal one even sitting among several plot windows.
+    If do_closure_intern raises InvalidTilingError: if show_on_error is True
+    (the default), do_closure_intern is re-run once more, on a deepcopy of
+    m_before (a throwaway copy - discarded once this replay returns or
+    raises, never touching the real m or m_before), in error-replay mode
+    (error_replay=True - see do_closure_intern's own docstring for what that
+    flips) with this same display object - since the pipeline is a
+    deterministic function of cell state, this reproduces the same
+    intermediate states and the same eventual failure, this time actually
+    surfacing whatever on_error=True items either pass's DoClosureDisplaySingle
+    carries (typically just check_tiling_invariant's own failure panel - see
+    default_display). This wrapper's own on-error summary display then runs
+    (_show_top_level(on_error=True)) - using eval_map(m_before, m) against
+    the real (failed) m, not the throwaway replay copy - before re-raising
+    the original exception unchanged, so a caller of do_closure still sees
+    the same failure do_closure_intern itself would have raised. show_on_error
+    is the master on/off switch for this entire replay - independent of
+    what's registered on either DoClosureDisplaySingle's own on_error=True
+    items, show_on_error=False skips the replay outright, for callers (like
+    test_margins.py) that already handle the expected-to-raise case
+    themselves and would otherwise get a duplicate display.
 
     asserts (a test_utils.DoClosureAsserts, or None) is forwarded as-is to
     do_closure_intern's own `asserts` argument - see its own docstring for
@@ -1525,22 +1612,88 @@ def do_closure(m, pos=None, title="", show=True, margin=None, roi_margin=0, show
     if pos is not None:
         place_square(m, pos)
     m_before = copy.deepcopy(m)
+    top_level_display = display.top_level if display is not None else None
+
+    def _show_top_level(on_error):
+        if top_level_display is None:
+            return
+        newly_blocked, newly_chosen = eval_map(m_before, m)
+        for item in top_level_display.items:
+            if item.step is not None or item.on_error != on_error:
+                continue
+            kwargs = dict(item.kwargs)
+            kwargs.setdefault('pos', pos)
+            kwargs['newly_blocked'] = newly_blocked
+            kwargs['newly_chosen'] = newly_chosen
+            kwargs.setdefault('colormap', np.zeros((*m.shape, 3)))
+            kwargs.setdefault('title', f"ERROR: {title}" if on_error else title)
+            if on_error:
+                kwargs.setdefault('title_color', 'red')
+            display_closure_step(m, **kwargs)
+
     try:
-        do_closure_intern(m, title, show=show_all, margin=margin, roi_margin=roi_margin,
-                           show_on_error=show_on_error, asserts=asserts)
+        do_closure_intern(m, title, display=display, asserts=asserts)
     except InvalidTilingError:
         if show_on_error:
-            newly_blocked, newly_chosen = eval_map(m_before, m)
-            colormap = np.zeros((*m.shape, 3))
-            display_closure_step(m, pos=pos, title=f"ERROR: {title}", show_links=True, show_real=True,
-                                  colormap=colormap, margin=margin, roi_margin=roi_margin,
-                                  newly_blocked=newly_blocked, newly_chosen=newly_chosen,
-                                  title_color='red')
+            replay = copy.deepcopy(m_before)
+            try:
+                do_closure_intern(replay, title, display=display, error_replay=True, asserts=asserts)
+            except InvalidTilingError:
+                pass  # expected - the replay exists only to surface on_error=True displays, see above
+            _show_top_level(on_error=True)
         raise
 
-    if show:
+    _show_top_level(on_error=False)
+
+
+def do_closure_old(m, pos=None, title="", display=None, show_on_error=True, asserts=None):
+    """Frozen copy of do_closure, taken verbatim right before the closure
+    pipeline's planned major refactor (see that refactor's own notes/commits
+    for the motivating problems - among them: alerts/links only capture
+    pairwise forcing, not seat-level ternary forcing like test_sudden_
+    appearance.test_frozen_area's (6,7)->(8,5) link; the growing find_
+    secondary_links/get_ternary_links progression; path-following being
+    inherently sequential, not parallel-friendly; and wanting to know which
+    cells can be chosen simultaneously for future parallel placement).
+
+    Kept as a reference/rollback baseline - not called anywhere else in this
+    codebase. Do not update this copy when do_closure itself changes; it
+    exists specifically to keep showing pre-refactor behaviour. See
+    do_closure's own docstring for what every parameter/the logic below
+    means - unchanged here.
+    """
+    if pos is not None:
+        place_square(m, pos)
+    m_before = copy.deepcopy(m)
+    top_level_display = display.top_level if display is not None else None
+
+    def _show_top_level(on_error):
+        if top_level_display is None:
+            return
         newly_blocked, newly_chosen = eval_map(m_before, m)
-        colormap = np.zeros((*m.shape, 3))
-        display_closure_step(m, pos=pos, title=title, show_links=True, show_real=True, colormap=colormap,
-                              margin=margin, roi_margin=roi_margin,
-                              newly_blocked=newly_blocked, newly_chosen=newly_chosen)
+        for item in top_level_display.items:
+            if item.step is not None or item.on_error != on_error:
+                continue
+            kwargs = dict(item.kwargs)
+            kwargs.setdefault('pos', pos)
+            kwargs['newly_blocked'] = newly_blocked
+            kwargs['newly_chosen'] = newly_chosen
+            kwargs.setdefault('colormap', np.zeros((*m.shape, 3)))
+            kwargs.setdefault('title', f"ERROR: {title}" if on_error else title)
+            if on_error:
+                kwargs.setdefault('title_color', 'red')
+            display_closure_step(m, **kwargs)
+
+    try:
+        do_closure_intern(m, title, display=display, asserts=asserts)
+    except InvalidTilingError:
+        if show_on_error:
+            replay = copy.deepcopy(m_before)
+            try:
+                do_closure_intern(replay, title, display=display, error_replay=True, asserts=asserts)
+            except InvalidTilingError:
+                pass  # expected - the replay exists only to surface on_error=True displays, see above
+            _show_top_level(on_error=True)
+        raise
+
+    _show_top_level(on_error=False)

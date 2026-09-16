@@ -5,6 +5,7 @@ import numpy as np
 from map_of_squares import InvalidTilingError, StateEnum
 from representation import build_map_of_squares, display_closure_step, place_blocked_squares, real_space_map
 from closure import do_closure, place_square, get_seat_positions, place_square_in_seat_closed, clear_all_but_state
+from test_utils import default_display
 
 def test_pinwheel():
     """Try to build the pinwheel with a single central element. Four chosen squares, arranged in a 90-degree-rotated
@@ -13,12 +14,12 @@ def test_pinwheel():
 
     m = build_map_of_squares(9, 9)
 
-    do_closure(m, (3, 3), "round 1: (3,3) placed")
-    do_closure(m, (4, 5), "round 2: (4,5) placed")
-    do_closure(m, (6, 4), "round 3: (6,4) placed")
+    do_closure(m, (3, 3), "round 1: (3,3) placed", display=default_display())
+    do_closure(m, (4, 5), "round 2: (4,5) placed", display=default_display())
+    do_closure(m, (6, 4), "round 3: (6,4) placed", display=default_display())
 
     try:
-        do_closure(m, (5, 2), "round 4: (5,2) placed anyway")
+        do_closure(m, (5, 2), "round 4: (5,2) placed anyway", display=default_display())
         raised = False
     except InvalidTilingError as e:
         raised = True
@@ -42,7 +43,7 @@ def test_show_other_full_2x2():
     colormap = np.zeros((*m.shape, 3))
     display_closure_step(m, title='initial state', show_links=True, show_real=True, colormap=colormap)
     try:
-        do_closure(m)
+        do_closure(m, display=default_display())
         title = 'next state'
     except InvalidTilingError as e:
         title = f'next state (rejected - {e})'
@@ -65,7 +66,7 @@ def test_corner_and_interior_dominoes():
     colormap = np.zeros((*m.shape, 3))
     display_closure_step(m, title='initial state', show_links=True, show_real=True, colormap=colormap)
     try:
-        do_closure(m)
+        do_closure(m, display=default_display())
         title = 'next state'
     except InvalidTilingError as e:
         title = f'next state (rejected - {e})'
@@ -75,37 +76,37 @@ def test_corner_and_interior_dominoes():
 
 def test_try_3x3_hole1():
     m = build_map_of_squares(12, 12)
-    do_closure(m, (5, 2), "round 1: (5,2) placed", False)
-    do_closure(m, (6, 2), "round 2: (6,2) placed", False)
-    do_closure(m, (5, 8), "round 3: (5,8) placed", False) 
-    do_closure(m, (6, 8), "round 4: (6,8) placed")   
+    do_closure(m, (5, 2), "round 1: (5,2) placed", display=default_display(show=False))
+    do_closure(m, (6, 2), "round 2: (6,2) placed", display=default_display(show=False))
+    do_closure(m, (5, 8), "round 3: (5,8) placed", display=default_display(show=False))
+    do_closure(m, (6, 8), "round 4: (6,8) placed", display=default_display())
 
-    do_closure(m, (3, 4), "round 5: (3,4) placed") 
-    do_closure(m, (3, 5), "round 6: (3,5) placed")      
+    do_closure(m, (3, 4), "round 5: (3,4) placed", display=default_display())
+    do_closure(m, (3, 5), "round 6: (3,5) placed", display=default_display())
 
 def test_try_3x3_hole2():
     m = build_map_of_squares(12, 12)
-    do_closure(m, (5, 2), "round 1: (5,2) placed", False)
-    do_closure(m, (6, 2), "round 2: (6,2) placed", False)
-    do_closure(m, (5, 8), "round 3: (5,8) placed", False) 
-    do_closure(m, (6, 8), "round 4: (6,8) placed")   
+    do_closure(m, (5, 2), "round 1: (5,2) placed", display=default_display(show=False))
+    do_closure(m, (6, 2), "round 2: (6,2) placed", display=default_display(show=False))
+    do_closure(m, (5, 8), "round 3: (5,8) placed", display=default_display(show=False))
+    do_closure(m, (6, 8), "round 4: (6,8) placed", display=default_display())
 
-    do_closure(m, (8, 6), "round 5: (8,6) placed") 
-    do_closure(m, (2, 4), "round 6: (2,4) placed") 
-    do_closure(m, (8, 5), "round 7: (8,5) placed") 
+    do_closure(m, (8, 6), "round 5: (8,6) placed", display=default_display())
+    do_closure(m, (2, 4), "round 6: (2,4) placed", display=default_display())
+    do_closure(m, (8, 5), "round 7: (8,5) placed", display=default_display())
 
 
 def test_try_3x3_hole3():
     m = build_map_of_squares(12, 12)
-    do_closure(m, (3, 5), "round 1: (3,5) placed", False)
-    do_closure(m, (6, 2), "round 2: (6,2) placed", False)
-    do_closure(m, (5, 8), "round 3: (5,8) placed", False)
-    do_closure(m, (9, 5), "round 4: (9,5) placed", False)
+    do_closure(m, (3, 5), "round 1: (3,5) placed", display=default_display(show=False))
+    do_closure(m, (6, 2), "round 2: (6,2) placed", display=default_display(show=False))
+    do_closure(m, (5, 8), "round 3: (5,8) placed", display=default_display(show=False))
+    do_closure(m, (9, 5), "round 4: (9,5) placed", display=default_display(show=False))
 
-    do_closure(m, (5, 2), "round 5: (5,2) placed", False)
-    do_closure(m, (3, 6), "round 6: (3,6) placed", False)
-    do_closure(m, (9, 4), "round 7: (9,4) placed")
-    do_closure(m, (6, 8), "round 8: (6,8) placed")
+    do_closure(m, (5, 2), "round 5: (5,2) placed", display=default_display(show=False))
+    do_closure(m, (3, 6), "round 6: (3,6) placed", display=default_display(show=False))
+    do_closure(m, (9, 4), "round 7: (9,4) placed", display=default_display())
+    do_closure(m, (6, 8), "round 8: (6,8) placed", display=default_display())
 
     #do_closure(m, (8, 7), "round 9: (8,7) placed")
-    do_closure(m, (7, 5), "round 9: (7,5) placed")
+    do_closure(m, (7, 5), "round 9: (7,5) placed", display=default_display())

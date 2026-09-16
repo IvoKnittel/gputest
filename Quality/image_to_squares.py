@@ -3,6 +3,7 @@ from item import Item
 from map_of_squares import SquareItem, StateEnum
 from quality_test_utils import image_generator
 from closure import do_closure
+from test_utils import default_display
 
 # Axis name constants: v = vertical (row), h = horizontal (column).
 v = 0
@@ -127,13 +128,14 @@ def insert_best(square_storage_location_map, upper_left_idx, show=False, display
     """Place the single highest-quality free SquareItem in the tile's 3x3 core at
     upper_left_idx, then run the closure it triggers.
 
-    do_closure is called with best_idx as its own `pos` (places it before
-    anything else runs), show forwarded as its own final highlighted-summary
-    display flag, and show_all=display_every_step - forwarded as
-    do_closure_intern's own show, so display_every_step=True shows every
-    intermediate step of do_closure's own pipeline too (after round 1's own
-    discoveries, before the round-2 bookkeeping reset - see do_closure's own
-    docstring), not just the final settled board. For watching exactly where
+    do_closure is called with best_idx as its own `pos` and display=
+    test_utils.default_display(show=show, show_all=display_every_step) -
+    show reproduces do_closure's own final highlighted-summary display, and
+    show_all=display_every_step reproduces do_closure_intern's own per-stage
+    displays, so display_every_step=True shows every intermediate step of
+    do_closure's own pipeline too (after round 1's own discoveries, before
+    the round-2 bookkeeping reset - see do_closure's own docstring), not
+    just the final settled board. For watching exactly where
     a diagonal-chosen conflict or a fully-blocked 2x2 actually forms - see
     get_seat_positions's "Known gap" docstring in closure.py and
     test_square_placement_random_order_supersuperlattice, which is the
@@ -148,7 +150,8 @@ def insert_best(square_storage_location_map, upper_left_idx, show=False, display
     found, best_idx = best_allowed(square_storage_location_map, core_range_for_tile(upper_left_idx))
     if found:
         title = f"select_single_{best_idx}"
-        do_closure(square_storage_location_map, best_idx, title, show=show, show_all=display_every_step)
+        do_closure(square_storage_location_map, best_idx, title,
+                   display=default_display(show=show, show_all=display_every_step))
     return found
 
 def tile_upper_left_indices(num_tiles_expand_noshift_shift, colorcode, super=False):

@@ -13,6 +13,7 @@ import numpy as np
 from representation import build_map_of_squares, place_blocked_squares, display_closure_step
 from closure import (do_closure,
                       check_tiling_invariant)
+from test_utils import default_display
 
 
 def test_rectangle():
@@ -22,7 +23,7 @@ def test_rectangle():
     """
     m = build_map_of_squares(7, 7)
     place_blocked_squares(m, [(2, 3), (3, 3)])
-    do_closure(m)
+    do_closure(m, display=default_display())
     check_tiling_invariant(m)
     colormap = np.zeros((*m.shape, 3))
     display_closure_step(m, title='4: check_tiling_invariant  (invariant held - no state change)', show_links=True, colormap=colormap)

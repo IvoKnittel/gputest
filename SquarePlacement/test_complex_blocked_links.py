@@ -3,7 +3,8 @@ import numpy as np
 from map_of_squares import StateEnum
 from representation import build_margin_free_map, margin_ring_positions, display_closure_step
 from closure import place_square, do_closure
-from test_utils import ROI_MARGIN, MARGIN, DoClosureAsserts, DoClosureAssertsSingle, DoClosureSteps
+from test_utils import ROI_MARGIN, MARGIN, DoClosureAsserts, DoClosureAssertsSingle, DoClosureSteps, default_display
+
 
 def test_two_forced_cells_block_each_other():
     """A 10x10 free core wrapped in build_margin_free_map's own two-ring
@@ -23,7 +24,7 @@ def test_two_forced_cells_block_each_other():
     check_redo to compare against), and check_redo hooks the same step in
     second_pass (do_closure_intern's own silent redo round - "only display
     if it actually changed anything" is check_redo's own job, not something
-    do_closure's own show flag needs to special-case). check_tiling_invariant
+    the display mechanism itself needs to special-case). check_tiling_invariant
     isn't called by hand anywhere below - do_closure_intern already calls it
     once, unconditionally, after both passes (see its own docstring).
 
@@ -84,7 +85,7 @@ def test_two_forced_cells_block_each_other():
     asserts.first_pass = first_pass
     asserts.second_pass = second_pass
 
-    do_closure(m, show=False, margin=MARGIN, roi_margin=ROI_MARGIN, asserts=asserts)
+    do_closure(m, display=default_display(show=False, margin=MARGIN, roi_margin=ROI_MARGIN), asserts=asserts)
 
 def test_get_and_set_blocked_links_marks_blocked_tmp():
     """Same shape as test_two_forced_cells_block_each_other, but stopping
@@ -135,7 +136,8 @@ def test_get_and_set_blocked_links_marks_blocked_tmp():
     second, silent pass is exactly the "clear every round's worth of stale
     bookkeeping and run the real pipeline again from scratch" step this used
     to run by hand afterward - no separate call needed for it. do_closure's
-    own show=True supplies the final settled-board display.
+    own display=default_display(show=True, ...) supplies the final
+    settled-board display.
     """
     m = build_margin_free_map(10)
     for pos in [(5, 8), (6, 8), (9, 4), (9, 5)]:
@@ -158,5 +160,5 @@ def test_get_and_set_blocked_links_marks_blocked_tmp():
     asserts = DoClosureAsserts()
     asserts.first_pass = first_pass
 
-    do_closure(m, title='after blocking self-contradicting cells and filling seats', show=True,
-               margin=MARGIN, roi_margin=ROI_MARGIN, asserts=asserts)
+    do_closure(m, title='after blocking self-contradicting cells and filling seats',
+               display=default_display(show=True, margin=MARGIN, roi_margin=ROI_MARGIN), asserts=asserts)

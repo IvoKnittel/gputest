@@ -29,7 +29,7 @@ from map_of_squares import StateEnum, InvalidTilingError
 from representation import (build_margin_free_map,
                              display_closure_step, is_realmap_cover_complete)
 from closure import do_closure
-from test_utils import ROI_MARGIN, MARGIN
+from test_utils import ROI_MARGIN, MARGIN, default_display
 
 MAX_RANDOM_PLACEMENTS = 8
 
@@ -52,7 +52,8 @@ def test_margin_free_3x3realmap():
     n=2
     m = build_margin_free_map(n)
     try:
-        do_closure(m, title=f'margin {n}x{n}: initial closure', margin=MARGIN, roi_margin=ROI_MARGIN,
+        do_closure(m, title=f'margin {n}x{n}: initial closure',
+                   display=default_display(margin=MARGIN, roi_margin=ROI_MARGIN),
                    show_on_error=False)
         raised = False
     except InvalidTilingError as e:
@@ -70,13 +71,14 @@ def test_margin_free_4x4realmap():
     m = build_margin_free_map(n)
     success=False
 
-    do_closure(m, show=True, margin=MARGIN, roi_margin=ROI_MARGIN,
+    do_closure(m, display=default_display(show=True, margin=MARGIN, roi_margin=ROI_MARGIN),
                show_on_error=False)
     for k in range(MAX_RANDOM_PLACEMENTS):
         found, pos = place_random_free_cell(m)
         if found:
-            do_closure(m, pos, f'margin {n}x{n}: random placement {k + 1}', show=True,
-                   margin=MARGIN, roi_margin=ROI_MARGIN, show_on_error=False)
+            do_closure(m, pos, f'margin {n}x{n}: random placement {k + 1}',
+                   display=default_display(show=True, margin=MARGIN, roi_margin=ROI_MARGIN),
+                   show_on_error=False)
         else:
             break
         if is_realmap_cover_complete(m, margin=2):
@@ -90,12 +92,13 @@ def test_margin_free_5x5realmap():
     n=4
     m = build_margin_free_map(n)
     try:
-        do_closure(m, title=f'margin {n}x{n}: initial closure', margin=MARGIN, roi_margin=ROI_MARGIN,
+        do_closure(m, title=f'margin {n}x{n}: initial closure',
+                   display=default_display(margin=MARGIN, roi_margin=ROI_MARGIN),
                    show_on_error=False)
         raised = False
     except InvalidTilingError as e:
         raised = True
-        colormap = np.zeros((*m.shape, 3))            
+        colormap = np.zeros((*m.shape, 3))
         title = f'margin {n}x{n}: {e}'
         display_closure_step(m, title=f"ERROR: {title}",
                               show_links=True, show_real=True, colormap=colormap,
@@ -106,13 +109,15 @@ def test_margin_free_6x6realmap():
     n=5
     m = build_margin_free_map(n)
     success=False
-    do_closure(m, title=f'margin {n}x{n}: initial closure', margin=MARGIN, roi_margin=ROI_MARGIN,
+    do_closure(m, title=f'margin {n}x{n}: initial closure',
+               display=default_display(margin=MARGIN, roi_margin=ROI_MARGIN),
                show_on_error=False)
     for k in range(MAX_RANDOM_PLACEMENTS):
         found, pos = place_random_free_cell(m)
         if found:
-            do_closure(m, pos, f'margin {n}x{n}: random placement {k + 1}', show=True,
-                   margin=MARGIN, roi_margin=ROI_MARGIN, show_on_error=False)
+            do_closure(m, pos, f'margin {n}x{n}: random placement {k + 1}',
+                   display=default_display(show=True, margin=MARGIN, roi_margin=ROI_MARGIN),
+                   show_on_error=False)
         else:
             break
         if is_realmap_cover_complete(m, margin=2):

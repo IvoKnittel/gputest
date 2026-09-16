@@ -8,7 +8,7 @@ from scipy.spatial.distance import pdist
 from closure import do_closure, add_margin_ring
 from map_of_squares import InvalidTilingError, StateEnum
 from representation import display_closure_step
-from test_utils import ROI_MARGIN, MARGIN
+from test_utils import ROI_MARGIN, MARGIN, default_display
 from image_to_squares import (build_quality_map, image_squares_select_single, tile_counts_2d,
                                insert_tile, sz_halftile)
 import numpy as np
@@ -207,7 +207,8 @@ def test_square_placement(quality_map_setup):
     binary_image, image_noisy_array, square_map = quality_map_setup
 
     add_margin_ring(square_map)
-    do_closure(square_map, title="test_square_placement", margin=MARGIN, roi_margin=ROI_MARGIN)
+    do_closure(square_map, title="test_square_placement",
+               display=default_display(margin=MARGIN, roi_margin=ROI_MARGIN))
 
     num_tiles_expand_noshift_shift = tile_counts_2d(square_map.shape)
     for colorcode in range(4):
@@ -254,7 +255,7 @@ def test_square_placement_random_order_supersuperlattice():
     _, _, square_map = build_quality_map(seed=42)
     add_margin_ring(square_map)
     do_closure(square_map, title="test_square_placement_random_order_supersuperlattice",
-               margin=MARGIN, roi_margin=ROI_MARGIN)
+               display=default_display(margin=MARGIN, roi_margin=ROI_MARGIN))
 
     num_tiles_expand_noshift_shift = tile_counts_2d(square_map.shape)
     rng = np.random.default_rng(seed=0)

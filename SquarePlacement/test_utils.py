@@ -49,6 +49,122 @@ class DoClosureAsserts:
         self.first_pass = None
         self.second_pass = None
 
+
+class DoClosureDisplayItem:
+    """One registered display_closure_step call. step: a DoClosureSteps
+    member naming which pipeline stage this fires after, or None for
+    do_closure_intern's own fixed end-of-pass call ("after find_secondary_links
+    2nd" today - the one call in do_closure_intern that isn't gated on any
+    stage's own return value) or for one of the two "very end" panels
+    (check_tiling_invariant's own failure panel, or do_closure's own summary/
+    on-error panel - see DoClosureDisplay.top_level). kwargs: dict forwarded
+    to display_closure_step as its own keyword arguments (m and colormap are
+    supplied by the caller of closure.display()/do_closure, not here -
+    colormap is always a fresh np.zeros((*m.shape, 3)) per call, matching
+    every existing call site). on_error: bool, default False - see
+    closure.display()'s own docstring for what this flag does.
+    """
+    def __init__(self, step, kwargs, on_error=False):
+        self.step = step
+        self.kwargs = kwargs
+        self.on_error = on_error
+
+
+class DoClosureDisplaySingle:
+    """One do_closure_intern pass's worth of display hooks - .items is a list
+    of DoClosureDisplayItem, built up by the caller the same way
+    DoClosureAssertsSingle.asserts is. closure.display() matches items by
+    their .step (and by whether their .on_error matches the call's own
+    on_error argument).
+    """
+    def __init__(self):
+        self.items = []
+
+
+class DoClosureDisplay:
+    """Display hooks for do_closure_intern's own two passes - .first_pass /
+    .second_pass, each None or a DoClosureDisplaySingle, matching
+    DoClosureAsserts's own shape exactly; forwarded to do_closure_intern's
+    own `display` argument the same way DoClosureAsserts is.
+
+    .top_level is the one addition beyond that mirror: do_closure's own
+    summary display (on success) and its own on-error summary panel both
+    fire *after* do_closure_intern has already returned or raised - outside
+    either of do_closure_intern's own two passes, using data (pos,
+    newly_blocked, newly_chosen) only do_closure itself has. do_closure_intern
+    never reads this field; do_closure reads it directly (see do_closure's
+    own docstring for how). Kept on this same object anyway, rather than a
+    separate parameter, so a caller only ever has to build and pass one
+    display object per do_closure call - see default_display, which builds
+    all three fields at once.
+    """
+    def __init__(self):
+        self.first_pass = None
+        self.second_pass = None
+        self.top_level = None
+
+
+def default_display(show=True, show_all=False, margin=None, roi_margin=0, title=""):
+    """Builds a DoClosureDisplay reproducing exactly what do_closure/
+    do_closure_intern used to show for a given (show, show_all, margin,
+    roi_margin) combination, pre-display-mechanism - the drop-in replacement
+    for a do_closure call site that used to just pass those flags directly.
+
+    show_all reproduces do_closure_intern's old `show`-gated per-stage
+    panels (after assign_paths/dissolve_blocked_paths/
+    place_square_in_seat_closed - each still independently gated by its own
+    stage's own return value, computed by do_closure_intern itself, not by
+    anything registered here). The "after find_secondary_links 2nd" panel is
+    registered unconditionally, regardless of show_all - preserving a
+    pre-existing quirk of the original code (see do_closure_intern's own
+    docstring): that one call never was gated on `show` to begin with.
+
+    show reproduces do_closure's own old `show`-gated final summary panel
+    (do_closure.top_level, on_error=False).
+
+    Both the check_tiling_invariant failure panel (do_closure_intern's
+    second_pass, on_error=True) and do_closure's own on-error summary panel
+    (top_level, on_error=True) are registered regardless of show/show_all -
+    matching show_on_error's own old default of True, independent of show;
+    do_closure's own show_on_error argument remains the master switch for
+    whether the replay that actually surfaces either of them ever runs.
+
+    title, if given, should match the title passed to the same do_closure
+    call - baked into the check_tiling_invariant failure panel's own title
+    (the one display() call whose kwargs can't be patched up with a
+    just-caught exception's title at call time, unlike do_closure's own
+    top_level items - see do_closure's own handling of those).
+    """
+    display_obj = DoClosureDisplay()
+    first_pass = DoClosureDisplaySingle()
+    second_pass = DoClosureDisplaySingle()
+    top_level = DoClosureDisplaySingle()
+
+    common = {'show_links': True, 'show_real': True, 'margin': margin, 'roi_margin': roi_margin}
+
+    if show_all:
+        first_pass.items.append(DoClosureDisplayItem(
+            DoClosureSteps.assign_paths, {**common, 'title': 'after assign_paths'}))
+        first_pass.items.append(DoClosureDisplayItem(
+            DoClosureSteps.dissolve_blocked_paths, {**common, 'title': 'after dissolve_blocked_paths'}))
+        first_pass.items.append(DoClosureDisplayItem(
+            DoClosureSteps.place_square_in_seat_closed, {**common, 'title': 'after place_square_in_seat_closed'}))
+
+    second_pass.items.append(DoClosureDisplayItem(
+        DoClosureSteps.find_secondary_links, {**common, 'title': 'after find_secondary_links 2nd'}))
+    second_pass.items.append(DoClosureDisplayItem(
+        None, {**common, 'title': f"ERROR: {title}: check_tiling_invariant failed", 'title_color': 'red'},
+        on_error=True))
+
+    if show:
+        top_level.items.append(DoClosureDisplayItem(None, dict(common)))
+    top_level.items.append(DoClosureDisplayItem(None, {**common, 'title_color': 'red'}, on_error=True))
+
+    display_obj.first_pass = first_pass
+    display_obj.second_pass = second_pass
+    display_obj.top_level = top_level
+    return display_obj
+
 # Display settings for any board built (build_margin_free_map) or seeded
 # (closure.add_margin_ring) with that same two-ring margin convention - an
 # outermost chosen ring plus the blocked ring just inside it (see either

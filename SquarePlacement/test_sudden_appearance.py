@@ -3,6 +3,7 @@ import numpy as np
 from map_of_squares import StateEnum
 from representation import build_map_of_squares, map_of_squares_from_array, place_blocked_squares, display_closure_step
 from closure import do_closure
+from test_utils import default_display
 
 def test_seat_from_two_alert_blocked():
     """(7, 5) used to end up StateEnum.chosen with an empty .forced_by
@@ -42,10 +43,10 @@ def test_seat_from_two_alert_blocked():
             [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]]
 
     m = map_of_squares_from_array(grid)
-    do_closure(m, title='initial', show=True)
+    do_closure(m, title='initial', display=default_display(show=True))
     assert m[7,5].forced_by == {(5, 4)}
 
-    do_closure(m, (5, 4), "round 1: (5,4) placed")
+    do_closure(m, (5, 4), "round 1: (5,4) placed", display=default_display())
     assert m[7,5].state == StateEnum.chosen
 
 def test_frozen_area():
@@ -64,8 +65,8 @@ def test_frozen_area():
     border = [(i, j) for i in range(size) for j in range(size)
               if i in (0, size - 1) or j in (0, size - 1)]
     place_blocked_squares(m, border)
-    do_closure(m, (4, 4), "round 1: (4,4) placed")
-    do_closure(m, (5, 4), "round 2: (5,4) placed", show_all=True)
+    do_closure(m, (4, 4), "round 1: (4,4) placed", display=default_display())
+    do_closure(m, (5, 4), "round 2: (5,4) placed", display=default_display(show_all=True))
     assert m[8,7].forced_by == {(6, 7), (6, 8)}
-    do_closure(m, (6, 7), "round 3: (6,7) placed", show_all=True)
+    do_closure(m, (6, 7), "round 3: (6,7) placed", display=default_display(show_all=True))
     assert m[8,7].state == StateEnum.chosen
