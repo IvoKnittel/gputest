@@ -1,69 +1,68 @@
 """Hierarchical union-find over patch ids, for the fixed-superlattice closure
 refactor (see do_closure_old's own docstring for the problems motivating it).
 
-A patch id is a cell's own (row, col) index in the base lattice - "patch id =
-the unique id of one of their cells", per the design this implements. An
-alias (id_a, id_b) records that two ids name the same patch, without
-committing to which one is canonical - picking one canonical id per patch
-("giving patches their proper name") is a later, downward pass over this
-same hierarchy; this module only builds the hierarchy's upward, aliasing
-half.
+A patch id is a cell's own (row, col) index in the base lattice. An alias
+(id_a, id_b) records that two ids name the same patch; a conflict (id_a, id_b)
+records that two patches are mutually exclusive. Both are stored low-id-first
+so (a, b) and (b, a) are one entry in a set.
 
-A core covers a fixed rectangular realm of the base lattice - one core at
-level 0, a 3x3 block of level-0 cores at level 1 ("core2"), and so on.
-CoreItem itself carries no notion of its own realm or level - that context
-is only ever meaningful relative to whichever level you're looking at it
-from, so in_realm/build_parent_core take it as an explicit argument instead,
-the same rectangular ((row_start, row_end), (col_start, col_end)) shape
-image_to_squares.core_range_for_tile already uses.
+A CoreItem is one node of the pyramid: a 3x3 array of elements - base-level
+squares for the lowest level, CoreItems above that - plus a margin of read-only
+references around them, and the rectangular realm
+((row_start, row_end), (col_start, col_end)) of base-lattice ids it owns.
+
+Information flows both ways:
+- up: .aliases and .conflicts, the pairs this core could not yet resolve
+  inside its own realm (update_aliases / update_conflicts).
+- down: .aliases_down and .blocked, filled by the descending pass (not built
+  yet). .blocked is the set of path ids of this core that may not be placed in
+  the current kernel call because they conflict with a path of another core
+  placed simultaneously; it is recomputed per colorcode.
 """
 
 
 class CoreItem:
-    """One core's own unresolved patch-id aliases. .aliases is a set of
-    (id, id) tuples - each pair stored low-id-first (sorted) so that (a, b)
-    and (b, a) are always recognised as the same alias when merged into a
-    set, rather than kept as two distinct entries.
+    """elements: 3x3 object array (base-level squares or CoreItems, never
+    mixed). margin: the read-only items around them. realm: the rectangle of
+    base-lattice ids this core owns.
     """
-    def __init__(self, aliases=None):
+    def __init__(self, elements, margin, realm):
+        self.elements = elements
+        self.margin = margin
+        self.realm = realm
         self.aliases = set()
-        if aliases is not None:
-            for id_a, id_b in aliases:
-                self.aliases.add(tuple(sorted((id_a, id_b))))
+        self.conflicts = set()
+        self.aliases_down = set()
+        self.blocked = set()
+
+    def update_aliases(self):
+        """Recompute .aliases from the elements: every element's aliases,
+        minus the pairs whose two ids both lie inside this core's realm."""
+        self.aliases = self._carry_up('aliases')
+
+    def update_conflicts(self):
+        """Recompute .conflicts from the elements, same rule as
+        update_aliases."""
+        self.conflicts = self._carry_up('conflicts')
+
+    def _carry_up(self, field):
+        merged = set()
+        for element in self.elements.flat:
+            if isinstance(element, CoreItem):
+                merged |= getattr(element, field)
+            else:
+                raise NotImplementedError(
+                    f"update_{field} for base-level elements ({type(element).__name__}) "
+                    f"is not defined yet")
+        return {pair for pair in merged
+                if not (in_realm(pair[0], self.realm) and in_realm(pair[1], self.realm))}
 
 
 def in_realm(id_, realm):
     """True if id_ (a (row, col) base-lattice index) falls inside realm -
     ((row_start, row_end), (col_start, col_end)), both ends exclusive on
-    their own row_end/col_end, matching core_range_for_tile's convention.
+    row_end/col_end, matching image_to_squares.core_range_for_tile.
     """
     (row_start, row_end), (col_start, col_end) = realm
     row, col = id_
     return row_start <= row < row_end and col_start <= col < col_end
-
-
-def build_parent_core(children, realm):
-    """Build the CoreItem one level up from `children` (an iterable of the
-    child-level CoreItems the new, bigger core covers - e.g. the 3x3 block
-    of level-0 cores under one level-1 "core2"), given the new core's own
-    realm.
-
-    Merges every child's .aliases into one set, then keeps only the pairs
-    still foreign to this bigger realm: an alias (id_a, id_b) is dropped -
-    both ends now provably belong to one core this level already owns
-    outright, so there's nothing left for any higher level to resolve -
-    only when BOTH ids fall inside realm. Otherwise (at least one id still
-    reaches beyond even this bigger realm) it's carried up unresolved, in
-    the new core's own .aliases, for the next level up to try again. Realm
-    boundaries only ever grow level over level, so an alias still foreign
-    here stays a candidate to resolve later - never silently dropped.
-    """
-    merged = set()
-    for child in children:
-        merged.update(child.aliases)
-    parent = CoreItem()
-    for id_a, id_b in merged:
-        if in_realm(id_a, realm) and in_realm(id_b, realm):
-            continue
-        parent.aliases.add((id_a, id_b))
-    return parent
