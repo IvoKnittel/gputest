@@ -30,7 +30,7 @@ def test_line_generated():
         m[tuple(pos)].state = StateEnum.blocked
 
     find_alerts_set_links(m)
-    # ASSERT: m[9,1].forces == {(7,3)} (chain start, not itself alert_blocked)
+    # ASSERT: m[9,1].forces1 == {(7,3)} (chain start, not itself alert_blocked)
     # ASSERT: m[7,3], m[5,5], m[3,7] are each .alert_blocked
     find_secondary_links(m)
     assign_paths(m)
@@ -157,7 +157,7 @@ def test_get_and_set_blocked_links_marks_blocked_tmp_generated():
     # no longer calls (dissolve_blocked_paths replaced it) - the six cells
     # {(2,2),(2,9),(5,2),(5,4),(7,6),(9,9)} still end up .state==blocked, but
     # dissolve_blocked_paths sets no .blocked_tmp, strips no cell's path_id,
-    # and retracts no .forces/.forced_by, unlike set_blocked_links.
+    # and retracts no .forces1/.forced_by1, unlike set_blocked_links.
     colormap = np.zeros((*m.shape, 3))
     display_closure_step(m, title='test_get_and_set_blocked_links_marks_blocked_tmp', show_links=True, show_real=True, colormap=colormap, margin=None, roi_margin=0)
     # display note: Falls between this scorecard's step 4 (dissolve_blocked_paths, recorded as set_blocked_links) and step 5 (place_square_in_seat_closed) - originally blocked_tmp cells shown in red, though dissolve_blocked_paths sets no such flag now. Title: 'get_blocked_links/set_blocked_links: blocked_tmp in red' (quoted as originally recorded). A further do_closure(show=True) call follows (after clear_all_but_state), with its own separate internal display - not represented in this scorecard's 5-step call_sequence.
@@ -201,7 +201,7 @@ def test_rectangle_generated():
 def test_tree_fan_out_generated():
     """Reconstructed from closure_test_scorecards.json (test_id='test_tree_fan_out').
 
-    Four squares each alert-block one diagonal neighbour of the shared centre (4,4) via a separate corner, so (4,4) ends up forcing all four despite never being alert_chosen itself - .forces and .alert_chosen are independent facts.
+    Four squares each alert-block one diagonal neighbour of the shared centre (4,4) via a separate corner, so (4,4) ends up forcing all four despite never being alert_chosen itself - .forces1 and .alert_chosen are independent facts.
     """
     m = build_map_of_squares(10, 10)
     for pos in [[1, 4], [4, 1], [4, 7], [7, 4]]:
@@ -223,9 +223,9 @@ def test_tree_fan_out_generated():
     dissolve_blocked_paths(m, p)
     place_square_in_seat_closed(m)
     check_tiling_invariant(m)
-    # ASSERT: not m[4,4].alert_chosen and m[4,4].forced_by == set()
-    # ASSERT: m[4,4].forces == {(2,2),(2,6),(6,2),(6,6)}
-    # ASSERT: each of (2,2),(2,6),(6,2),(6,6) is alert_chosen with (4,4) in forced_by
+    # ASSERT: not m[4,4].alert_chosen and m[4,4].forced_by1 == set()
+    # ASSERT: m[4,4].forces1 == {(2,2),(2,6),(6,2),(6,6)}
+    # ASSERT: each of (2,2),(2,6),(6,2),(6,6) is alert_chosen with (4,4) in forced_by1
     # ASSERT: get_blocked_links(m) == set()
     colormap = np.zeros((*m.shape, 3))
     display_closure_step(m, title='test_tree_fan_out', show_links=True, show_real=True, colormap=colormap, margin=None, roi_margin=0)
@@ -237,7 +237,7 @@ def test_tree_fan_out_generated():
 def test_tree_fan_in_generated():
     """Reconstructed from closure_test_scorecards.json (test_id='test_tree_fan_in').
 
-    (3,3) is forced_by four separate items at once - (2,1),(4,1),(4,3),(4,5) - none needing any of the others. Either of two different later placements (6,4) or (2,1)) reaches it via forced_closure, confirming it's a real fan-in, not just one link in a chain.
+    (3,3) is forced_by1 four separate items at once - (2,1),(4,1),(4,3),(4,5) - none needing any of the others. Either of two different later placements (6,4) or (2,1)) reaches it via forced_closure, confirming it's a real fan-in, not just one link in a chain.
     """
     m = build_map_of_squares(10, 10)
     for pos in [[1, 3], [1, 4], [5, 7], [6, 7], [7, 7], [8, 7]]:
@@ -259,8 +259,8 @@ def test_tree_fan_in_generated():
     dissolve_blocked_paths(m, p)
     place_square_in_seat_closed(m)
     check_tiling_invariant(m)
-    # ASSERT: m[3,3].alert_chosen and not m[3,3].forces
-    # ASSERT: {(2,1),(4,1),(4,3),(4,5)} <= m[3,3].forced_by
+    # ASSERT: m[3,3].alert_chosen and not m[3,3].forces1
+    # ASSERT: {(2,1),(4,1),(4,3),(4,5)} <= m[3,3].forced_by1
     colormap = np.zeros((*m.shape, 3))
     display_closure_step(m, title='test_tree_fan_in', show_links=True, show_real=True, colormap=colormap, margin=None, roi_margin=0)
     # display note: Title: 'line into cycle' - the display tied to this scorecard's own recorded call_sequence (the first of the source test's three do_closure/display rounds).
@@ -274,7 +274,7 @@ def test_tree_fan_in_generated():
 def test_line_into_eye_generated():
     """Reconstructed from closure_test_scorecards.json (test_id='test_line_into_eye').
 
-    (1,4) is a pure diagonal linker into (1,6): it has real .forces without being alert_chosen itself. (1,6) and (1,8) are a genuine mutual pair - each is alert_chosen and forces the other - a real bidirectional link. Placing (1,4) afterwards (outside do_closure, via forced_closure+place_squares) drags both bidirectionally-linked cells chosen too.
+    (1,4) is a pure diagonal linker into (1,6): it has real .forces1 without being alert_chosen itself. (1,6) and (1,8) are a genuine mutual pair - each is alert_chosen and forces the other - a real bidirectional link. Placing (1,4) afterwards (outside do_closure, via forced_closure+place_squares) drags both bidirectionally-linked cells chosen too.
     """
     m = build_map_of_squares(10, 10)
     for pos in [[0, 6], [3, 7]]:
@@ -297,7 +297,7 @@ def test_line_into_eye_generated():
     place_square_in_seat_closed(m)
     check_tiling_invariant(m)
     # ASSERT: not m[1,4].alert_chosen; m[1,6].alert_chosen; m[1,8].alert_chosen
-    # ASSERT: m[1,4].forces == {(1,6)}; m[1,6].forces == {(1,8)}; (1,6) in m[1,8].forced_by
+    # ASSERT: m[1,4].forces1 == {(1,6)}; m[1,6].forces1 == {(1,8)}; (1,6) in m[1,8].forced_by1
     # ASSERT: m[1,4].path_id == set() (single-target entry pruned by assign_paths)
     colormap = np.zeros((*m.shape, 3))
     display_closure_step(m, title='test_line_into_eye', show_links=True, show_real=True, colormap=colormap, margin=None, roi_margin=0)
@@ -347,7 +347,7 @@ def test_eye_outwards_generated():
 def test_seat_from_two_alert_blocked_generated():
     """Reconstructed from closure_test_scorecards.json (test_id='test_seat_from_two_alert_blocked').
 
-    Regression case for find_secondary_links. Without it, (7,5) used to end up chosen with an empty .forced_by - discovered only by place_square_in_seat_closed's raw state scan, invisible to the alert/path bookkeeping. find_secondary_links simulates (5,4) and (7,3) both chosen together (combining candidate a=(5,4) with P=(6,3)'s promised corner B=(7,3)) and finds this jointly completes a fresh seat at (7,5) - so (5,4) gets linked to it directly, and forced_closure(m,(5,4)) now reaches (7,5) too.
+    Regression case for find_secondary_links. Without it, (7,5) used to end up chosen with an empty .forced_by1 - discovered only by place_square_in_seat_closed's raw state scan, invisible to the alert/path bookkeeping. find_secondary_links simulates (5,4) and (7,3) both chosen together (combining candidate a=(5,4) with P=(6,3)'s promised corner B=(7,3)) and finds this jointly completes a fresh seat at (7,5) - so (5,4) gets linked to it directly, and forced_closure(m,(5,4)) now reaches (7,5) too.
     """
     m = build_map_of_squares(12, 12)
     for pos in [[5, 1], [8, 3]]:
@@ -372,7 +372,7 @@ def test_seat_from_two_alert_blocked_generated():
     dissolve_blocked_paths(m, p)
     place_square_in_seat_closed(m)
     check_tiling_invariant(m)
-    # ASSERT: m[7,5].forced_by == {(5,4)}
+    # ASSERT: m[7,5].forced_by1 == {(5,4)}
     # ASSERT: forced_closure(m, (5,4)) == {(5,4),(7,3),(7,5)}
 # === END GENERATED TEST: test_seat_from_two_alert_blocked ===
 
@@ -389,7 +389,7 @@ def test_frozen_area_generated():
     for pos in [[0, 0], [0, 1], [0, 2], [0, 3], [0, 4], [0, 5], [0, 6], [0, 7], [0, 8], [0, 9], [0, 10], [1, 0], [1, 10], [2, 0], [2, 2], [2, 8], [2, 10], [3, 0], [3, 3], [3, 5], [3, 10], [4, 0], [4, 3], [4, 5], [4, 10], [5, 0], [5, 3], [5, 5], [5, 10], [6, 0], [6, 3], [6, 5], [6, 10], [7, 0], [7, 10], [8, 0], [8, 2], [8, 8], [8, 10], [9, 0], [9, 10], [10, 0], [10, 1], [10, 2], [10, 3], [10, 4], [10, 5], [10, 6], [10, 7], [10, 8], [10, 9], [10, 10]]:
         m[tuple(pos)].state = StateEnum.blocked
 
-    # ASSERT: m[8,7].forced_by == {(6,7),(6,8)} (evaluated before this call sequence, on the round-2 board)
+    # ASSERT: m[8,7].forced_by1 == {(6,7),(6,8)} (evaluated before this call sequence, on the round-2 board)
     find_alerts_set_links(m)
     find_secondary_links(m)
     assign_paths(m)

@@ -10,14 +10,14 @@ from closure import (find_alerts_set_links, find_secondary_links, find_secondary
 
 
 def _forces_edges(m):
-    """Every (source, target) pair m's own .forces sets encode, flattened
+    """Every (source, target) pair m's own .forces1 sets encode, flattened
     into one set - the natural unit for a subset comparison between two
     find_secondary_links implementations that are no longer expected to
     agree exactly (see find_secondary_links5x5's own docstring).
     """
     rows, cols = m.shape
     return {(pos, target) for i in range(rows) for j in range(cols)
-            for pos in [(i, j)] for target in m[pos].forces}
+            for pos in [(i, j)] for target in m[pos].forces1}
 
 
 def test_window_radius_must_be_3_not_2():
@@ -52,12 +52,12 @@ def test_window_radius_must_be_3_not_2():
     find_alerts_set_links(m_fixed)
     assert m_fixed[7, 3].alert_blocked
     find_secondary_links(m_fixed)
-    assert m_fixed[6, 4].forces == {(6, 3), (4, 3)}
+    assert m_fixed[6, 4].forces1 == {(6, 3), (4, 3)}
 
     m_5x5 = build_minimal_board()
     find_alerts_set_links(m_5x5)
     find_secondary_links5x5(m_5x5)
-    assert m_5x5[6, 4].forces == {(6, 3)}, \
+    assert m_5x5[6, 4].forces1 == {(6, 3)}, \
         "find_secondary_links5x5 was expected to miss (4, 3) - it didn't, so this repro no longer isolates the gap"
 
     # No cell starts out chosen in this minimal fixture (only the three real
@@ -108,9 +108,9 @@ def test_5x5_is_a_strict_subset_on_seat_from_two_alert_blocked():
     find_alerts_set_links(m_5x5)
     find_secondary_links5x5(m_5x5)
 
-    assert m_correct[6, 4].forces == {(6, 3), (4, 3)}
-    assert m_correct[7, 5].forced_by == {(5, 4)}
-    assert m_correct[7, 1].forced_by == {(5, 2), (5, 0), (7, 0)}
+    assert m_correct[6, 4].forces1 == {(6, 3), (4, 3)}
+    assert m_correct[7, 5].forced_by1 == {(5, 4)}
+    assert m_correct[7, 1].forced_by1 == {(5, 2), (5, 0), (7, 0)}
 
     correct_edges = _forces_edges(m_correct)
     edges_5x5 = _forces_edges(m_5x5)

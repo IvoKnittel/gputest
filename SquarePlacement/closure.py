@@ -112,7 +112,7 @@ def find_alerts_set_links(map_of_squares, asserts=None):
     ring.
 
     Outputs: writes .alert_blocked (on the free cell itself) and
-    .alert_chosen/.forces/.forced_by (on ring neighbours); returns None.
+    .alert_chosen/.forces1/.forced_by1 (on ring neighbours); returns None.
     asserts (a test_utils.DoClosureAssertsSingle, or None) is looked up via
     _call_step_asserts once this function's own work is done, under this
     function's own DoClosureSteps entry - see _call_step_asserts' and
@@ -138,7 +138,7 @@ def find_alerts_set_links(map_of_squares, asserts=None):
     When that happens: set_alert_blocked raises .alert_blocked on the item under
     consideration, and set_alert_chosen_set_links raises .alert_chosen on the free
     completing corner, recording the pairing by adding the alert_chosen item's
-    index to the alert_blocked item's .forces.
+    index to the alert_blocked item's .forces1.
     """
     rows, cols = map_of_squares.shape
     for i in range(1, rows - 1):
@@ -281,10 +281,10 @@ def find_secondary_links5x5(map_of_squares, asserts=None):
                                         if XC[pos] == StateEnum.free.value)
                     corner_pos = (free_corner[0] - R + i, free_corner[1] - R + j)
                     corner_item = map_of_squares[corner_pos]
-                    if corner_item.forced_by & b_positions:  # BR-013
+                    if corner_item.forced_by1 & b_positions:  # BR-013
                         continue  # already reachable from a via some b in B
-                    a_item.forces.add(corner_pos)
-                    corner_item.forced_by.add(a_pos)
+                    a_item.forces1.add(corner_pos)
+                    corner_item.forced_by1.add(a_pos)
                     corner_item.alert_chosen = True
     if asserts is not None:
         _call_step_asserts(map_of_squares, asserts, 'find_secondary_links')
@@ -333,7 +333,7 @@ def find_secondary_links(map_of_squares, asserts=None):
     meant to be, algorithmically identical to this one. Inputs/Outputs/Scope
     otherwise match find_secondary_links5x5's own docstring. test_closure_
     refactor.py verifies, board-wide, that find_secondary_links5x5's own
-    .forces edges are always a *subset* of this function's - never a false
+    .forces1 edges are always a *subset* of this function's - never a false
     positive, only possibly incomplete.
 
     -------------------------------------------------------------------------
@@ -380,7 +380,7 @@ def find_secondary_links(map_of_squares, asserts=None):
     What is deliberately left untouched: b_positions is still read directly
     off real SquareItem objects (same iter_alert_thirds call as find_alerts_
     set_links and find_secondary_links5x5 both already make), and
-    the eventual .forces/.forced_by/.alert_chosen write still lands on real
+    the eventual .forces1/.forced_by1/.alert_chosen write still lands on real
     SquareItem objects too. Those aren't board-state arrays - they're graph
     bookkeeping with unbounded fan-out per cell (see map_of_squares.py's own
     field docs) - restructuring that is a different problem than the one
@@ -477,10 +477,10 @@ def find_secondary_links(map_of_squares, asserts=None):
                                         if XC[pos] == StateEnum.free.value)
                     corner_pos = (free_corner[0] - R + i, free_corner[1] - R + j)
                     corner_item = map_of_squares[corner_pos]
-                    if corner_item.forced_by & b_positions:  # BR-013
+                    if corner_item.forced_by1 & b_positions:  # BR-013
                         continue  # already reachable from a via some b in B
-                    a_item.forces.add(corner_pos)
-                    corner_item.forced_by.add(a_pos)
+                    a_item.forces1.add(corner_pos)
+                    corner_item.forced_by1.add(a_pos)
                     corner_item.alert_chosen = True
     if asserts is not None:
         _call_step_asserts(map_of_squares, asserts, 'find_secondary_links')
@@ -488,7 +488,7 @@ def find_secondary_links(map_of_squares, asserts=None):
 
 def clear_all_but_state(map_of_squares):
     """
-    Clear every cell's .alert_blocked, .alert_chosen, .forces, .forced_by,
+    Clear every cell's .alert_blocked, .alert_chosen, .forces1, .forced_by1,
     and .path_id back to their defaults (False, False, set(), set(), set()),
     map-wide, unconditionally - .state is the only field that starts a round
     and survives it; everything else is derived fresh from .state each
@@ -499,7 +499,7 @@ def clear_all_but_state(map_of_squares):
     Inputs: none - every field is cleared to a fixed default, regardless of
     .state or anything else already on the cell.
 
-    Outputs: writes .alert_blocked, .alert_chosen, .forces, .forced_by, and
+    Outputs: writes .alert_blocked, .alert_chosen, .forces1, .forced_by1, and
     .path_id on every cell, unconditionally; returns None.
 
     Scope: local - a pure per-cell reset, no cross-cell read at all.
@@ -508,13 +508,13 @@ def clear_all_but_state(map_of_squares):
 
     find_alerts_set_links only ever adds: it skips any cell whose .state
     isn't StateEnum.free, so once a cell is placed (e.g. as part of a
-    do_closure chase), whatever .alert_chosen/.alert_blocked/.forces/
-    .forced_by it was carrying from an earlier round is never cleared - it just
+    do_closure chase), whatever .alert_chosen/.alert_blocked/.forces1/
+    .forced_by1 it was carrying from an earlier round is never cleared - it just
     sits there, stale. That's silently wrong for display: colorize_with_alerts
     overlays alert_chosen/alert_blocked colour on top of the plain state colour,
     so a cell that is now genuinely chosen but still carries a stale
     alert_chosen=True renders as "promised, still free" (yellow) instead of
-    actually placed (cyan) - and a stale .forces/.forced_by entry pointing at or
+    actually placed (cyan) - and a stale .forces1/.forced_by1 entry pointing at or
     from a no-longer-free cell is a dangling reference into a role that cell no
     longer plays. Needed whenever a round places more than one square at once
     (e.g. across a multi-round do_closure chase): the incremental single-step
@@ -530,15 +530,15 @@ def clear_all_but_state(map_of_squares):
             item = map_of_squares[i, j]
             item.alert_blocked = False
             item.alert_chosen = False
-            item.forces = set()
-            item.forced_by = set()
+            item.forces1 = set()
+            item.forced_by1 = set()
             item.path_id = set()
 
 
 def check_tiling_invariant(map_of_squares):
     """
     A 2x2 block of blocked items must never happen - the
-    alert_blocked/alert_chosen/forces bookkeeping find_alerts_set_links and
+    alert_blocked/alert_chosen/forces1 bookkeeping find_alerts_set_links and
     assign_paths build exists specifically to prevent it.
 
     Inputs: reads .state of every 2x2 block of adjacent cells.
@@ -765,30 +765,30 @@ def place_square_in_seat_closed(map_of_squares, asserts=None):
 
 def propagate_path_id_from_entries(map_of_squares):
     """
-    Union every self-seeded item's path_id forward, via .forces, into
+    Union every self-seeded item's path_id forward, via .forces1, into
     everything it reaches.
 
-    Inputs: reads .path_id and .forces of every cell, then walks the whole
-    .forces graph reachable from any self-seeded cell.
+    Inputs: reads .path_id and .forces1 of every cell, then walks the whole
+    .forces1 graph reachable from any self-seeded cell.
 
     Outputs: writes .path_id (unions) onto every cell reached by that walk;
     returns None.
 
-    Scope: global - an explicit BFS across .forces, unbounded in reach.
+    Scope: global - an explicit BFS across .forces1, unbounded in reach.
 
     -------------------------------------------------------------------------
 
-    "Self-seeded" isn't a graph-structural property (not "no .forced_by") -
+    "Self-seeded" isn't a graph-structural property (not "no .forced_by1") -
     it's whichever item assign_paths directly gave its own id to:
     unique_id((i, j), (rows, cols)) in item.path_id. An item that only ever received
     a foreign id through this same forward walk doesn't pass that test, so it
     never gets walked from itself - each id only needs to move forward once
     from wherever it originated.
 
-    No .alert_chosen check anywhere in this function: once .forces/.forced_by
+    No .alert_chosen check anywhere in this function: once .forces1/.forced_by1
     exist, this works purely off them and off path_id membership - a
     non-alert_chosen pure diagonal linker that assign_paths happened to
-    self-seed (because it has more than one .forces target of its own)
+    self-seed (because it has more than one .forces1 target of its own)
     propagates its id exactly the same way an alert_chosen item would.
     """
     rows, cols = map_of_squares.shape
@@ -802,7 +802,7 @@ def propagate_path_id_from_entries(map_of_squares):
                 continue
 
             entry=item
-            to_visit = list(entry.forces)
+            to_visit = list(entry.forces1)
             visited = set()
             while to_visit:
                 pos = to_visit.pop()
@@ -811,7 +811,7 @@ def propagate_path_id_from_entries(map_of_squares):
                 visited.add(pos)
                 item = map_of_squares[pos]
                 item.path_id = item.path_id | entry.path_id
-                to_visit.extend(item.forces)
+                to_visit.extend(item.forces1)
 
 def unique_id(pos, size):
     """
@@ -846,10 +846,10 @@ def assign_paths(map_of_squares, asserts=None):
     """
     Seed every entry, and every blocking-pair site, with its own path_id,
     then call propagate_path_id_from_entries to spread each seed forward
-    along .forces.
+    along .forces1.
 
-    Inputs: reads .forces, .forced_by of every cell, plus .state and
-    .forced_by of each cell's diagonal neighbours (for the self-blocking-pair
+    Inputs: reads .forces1, .forced_by1 of every cell, plus .state and
+    .forced_by1 of each cell's diagonal neighbours (for the self-blocking-pair
     seed).
 
     Outputs: writes .path_id (seeds), then calls
@@ -863,13 +863,13 @@ def assign_paths(map_of_squares, asserts=None):
 
     -------------------------------------------------------------------------
 
-    An entry is any item with .forces but no .forced_by - no .alert_chosen
+    An entry is any item with .forces1 but no .forced_by1 - no .alert_chosen
     check: a pure diagonal linker qualifies exactly like an alert_chosen item
-    does, since once .forces/.forced_by exist neither this function nor
+    does, since once .forces1/.forced_by1 exist neither this function nor
     propagate_path_id_from_entries cares how they got there.
 
-    An entry with more than one .forces target seeds itself, as expected. An
-    entry with exactly one .forces target B is pruned instead: B gets seeded
+    An entry with more than one .forces1 target seeds itself, as expected. An
+    entry with exactly one .forces1 target B is pruned instead: B gets seeded
     with B's own id, not the entry's. Reasoning: "if the entry is chosen, B
     is chosen" is the entry's only possible consequence, so the entry's own
     identity adds no information about which cells have to be chosen
@@ -878,33 +878,33 @@ def assign_paths(map_of_squares, asserts=None):
     ends up self-seeded once instead of the group accumulating several
     different ids that all meant the same thing.
 
-    Separately, any item with a .forced_by (something already obligates it)
+    Separately, any item with a .forced_by1 (something already obligates it)
     that also has a free diagonal neighbour which is itself independently
-    forced (has its own .forced_by) - a genuine diagonal-blocking pair - gets
+    forced (has its own .forced_by1) - a genuine diagonal-blocking pair - gets
     seeded with its own id too (added, not assigned, in case it already
     picked up an id from elsewhere in this same pass): a seed exactly like an
-    entry's, just keyed off .forced_by instead of "nothing forces it", so it
+    entry's, just keyed off .forced_by1 instead of "nothing forces it", so it
     belongs here alongside the rest of the seeding.
     """
     rows, cols = map_of_squares.shape
     for i in range(rows):
         for j in range(cols):
             item = map_of_squares[i, j]
-            if item.forces and not item.forced_by:  # BR-022
-                if len(item.forces) == 1:  # BR-023
-                    target_pos = next(iter(item.forces))
+            if item.forces1 and not item.forced_by1:  # BR-022
+                if len(item.forces1) == 1:  # BR-023
+                    target_pos = next(iter(item.forces1))
                     target = map_of_squares[target_pos[0], target_pos[1]]
                     target.path_id.add(unique_id(target_pos, (rows, cols)))
                 else:  # BR-024
                     item.path_id = {unique_id((i,j), (rows, cols))}
 
-            if item.forced_by:  # BR-025
+            if item.forced_by1:  # BR-025
                 for di, dj in DIAGONAL_OFFSETS:
                     ni, nj = i + di, j + dj
                     if not (0 <= ni < rows and 0 <= nj < cols):  # BR-026
                         continue
                     neighbour = map_of_squares[ni, nj]
-                    if neighbour.state == StateEnum.free and neighbour.forced_by:  # BR-027
+                    if neighbour.state == StateEnum.free and neighbour.forced_by1:  # BR-027
                         item.path_id.add(unique_id((i, j), (rows, cols)))
                         break
 
@@ -984,7 +984,7 @@ def get_blocked_links(m, asserts=None):
     (`unique_id((i, j), ...) in p`) just to find which cells those ids
     actually belong to. That round trip through unique_id/a global set
     works, but it's not in place: propagating
-    the contradiction directly along each cell's own .forces/.forced_by links
+    the contradiction directly along each cell's own .forces1/.forced_by1 links
     (the same links assign_paths/propagate_path_id_from_entries already walk)
     instead of round-tripping through a global id set would let get_blocked_links
     mark the origin cells itself, with no second grid-wide scan needed. Not
@@ -1021,10 +1021,10 @@ def get_blocked_links(m, asserts=None):
 def dissolve_blocked_paths(m, p, asserts=None):
     """Block the one cell per id in p - the cell whose own position hashes to
     that id via unique_id - and do nothing else. No eager .path_id stripping
-    across the rest of the board, no .forces/.forced_by retraction.
+    across the rest of the board, no .forces1/.forced_by1 retraction.
 
     Motivation: that cell was, in the case that actually matters (seeded via
-    assign_paths' "genuine diagonal-blocking pair" rule - .forced_by nonempty
+    assign_paths' "genuine diagonal-blocking pair" rule - .forced_by1 nonempty
     and a diagonal neighbour that's independently forced too), itself
     alert_chosen - the free corner of some other centre's near-seat. Blocking
     it is then exactly the same move that centre's own alert_blocked flag was
@@ -1033,7 +1033,7 @@ def dissolve_blocked_paths(m, p, asserts=None):
     one - turns it into a real seat on the spot, for do_closure's very next
     step (place_square_in_seat_closed) to find and fill, no different in
     kind from any other seat that step handles. Whatever this leaves
-    dangling (this cell's own now-meaningless .forces/.forced_by, every
+    dangling (this cell's own now-meaningless .forces1/.forced_by1, every
     other cell's now-stale copy of one of these ids in its own .path_id) is
     picked up for free by do_closure's own second round: clear_all_but_state
     wipes all of it, and the fresh find_alerts_set_links/assign_paths pass
@@ -1042,9 +1042,9 @@ def dissolve_blocked_paths(m, p, asserts=None):
     entirely, the same way any other already-blocked cell does.
 
     Caveat this function doesn't resolve on its own: a cell seeded via
-    assign_paths' OTHER rule (a plain multi-target "entry" - .forces
-    nonempty, .forced_by EMPTY by definition) is not alert_chosen (alert_chosen
-    is only ever set alongside a .forced_by entry) - the "this must create a
+    assign_paths' OTHER rule (a plain multi-target "entry" - .forces1
+    nonempty, .forced_by1 EMPTY by definition) is not alert_chosen (alert_chosen
+    is only ever set alongside a .forced_by1 entry) - the "this must create a
     seat" argument above doesn't apply to it. Concretely: (5, 2) in
     test_get_and_set_blocked_links_marks_blocked_tmp is documented, in that
     test's own docstring, as exactly this - no new seat borders it. Confirmed
@@ -1125,9 +1125,9 @@ def seed_blocked_paths(m):
 def apply_blocked_paths(m):
     """Pass 1: for every cell B seed_blocked_paths flagged (nonempty
     .blocked_paths), prune those ids out of B's own path_id, push them
-    forward onto whatever B.forces (B's own consequences also inherit the
+    forward onto whatever B.forces1 (B's own consequences also inherit the
     taint), and push the blocking itself one hop backward onto whatever
-    B.forced_by (the cells that would have to be chosen to force B into
+    B.forced_by1 (the cells that would have to be chosen to force B into
     contradiction - those are the ones that are actually now impossible to
     choose). Run once - not itself looped; propagate_blocked_tmp_closed is
     what carries the backward blocking further than this one hop.
@@ -1135,20 +1135,20 @@ def apply_blocked_paths(m):
     Snapshot-then-apply: which cells qualify as B, and B's own blocked_paths/
     path_id values used in every step below, are all taken from the state at
     the start of this call - so one B's own effect on another cell's
-    blocked_paths (the .forces branch) can never make that cell newly qualify
-    as its own B within this same pass, and B's forced_by cells always see
+    blocked_paths (the .forces1 branch) can never make that cell newly qualify
+    as its own B within this same pass, and B's forced_by1 cells always see
     the same, single, consistent version of B's post-prune path_id (not a
     version some other B already mutated further this pass).
 
-    Inputs: reads every cell's .blocked_paths, .path_id, .forces, .forced_by
+    Inputs: reads every cell's .blocked_paths, .path_id, .forces1, .forced_by1
     as they stood before this call.
 
     Outputs: for every B with nonempty .blocked_paths (as of entry):
     - B.path_id loses every id in B.blocked_paths;
-    - every A in B.forces gains B's blocked_paths into its own (union);
-    - every C in B.forced_by is set .state = StateEnum.blocked and
+    - every A in B.forces1 gains B's blocked_paths into its own (union);
+    - every C in B.forced_by1 is set .state = StateEnum.blocked and
       .is_blocked_tmp = True (nothing is cleared - dissolve_blocked_paths
-      leaves .forces/.forced_by alone too, for the same reason; here the
+      leaves .forces1/.forced_by1 alone too, for the same reason; here the
       graph stays intact for propagate_blocked_tmp_closed to walk further,
       and for callers/tests to still inspect);
     - every such C also has its .path_id narrowed to its intersection with
@@ -1157,10 +1157,10 @@ def apply_blocked_paths(m):
       with the very cell whose contradiction is what blocked it).
     Returns None.
 
-    Scope: local-ish - each B's own effect reaches only its fixed .forces/
-    .forced_by neighbours (one hop each), not a board-wide walk; the
+    Scope: local-ish - each B's own effect reaches only its fixed .forces1/
+    .forced_by1 neighbours (one hop each), not a board-wide walk; the
     snapshot discipline above is what keeps that bounded reach well-defined
-    even though several B's can share a forces/forced_by neighbour.
+    even though several B's can share a forces1/forced_by1 neighbour.
     """
     rows, cols = m.shape
     seeded = []
@@ -1174,11 +1174,11 @@ def apply_blocked_paths(m):
         B.path_id -= blocked_paths
         pruned_path_id = path_id_before - blocked_paths
 
-        for a_pos in B.forces:
+        for a_pos in B.forces1:
             A = m[a_pos]
             A.blocked_paths |= blocked_paths
 
-        for c_pos in B.forced_by:
+        for c_pos in B.forced_by1:
             C = m[c_pos]
             C.state = StateEnum.blocked
             C.is_blocked_tmp = True
@@ -1187,7 +1187,7 @@ def apply_blocked_paths(m):
 
 def propagate_blocked_tmp(m):
     """Pass 2, single hop: for every cell D already flagged .is_blocked_tmp
-    with a still-nonempty .path_id, narrow every E in D.forced_by's own
+    with a still-nonempty .path_id, narrow every E in D.forced_by1's own
     path_id down to its intersection with D's path_id; an E whose path_id
     actually shrinks that way *and still has something left in it* is, by
     the same reasoning apply_blocked_paths applies to its own C cells,
@@ -1197,10 +1197,10 @@ def propagate_blocked_tmp(m):
 
     Both guards exist to stop a real, observed runaway cascade: without
     them, the first D whose path_id narrows all the way to empty would wipe
-    every E in its .forced_by to empty too (intersecting against an empty
+    every E in its .forced_by1 to empty too (intersecting against an empty
     set is always empty), flag every one of them blocked regardless of
     whether they ever shared anything real with D, and those newly-empty E's
-    would then do the same to *their* own forced_by in the next pass -
+    would then do the same to *their* own forced_by1 in the next pass -
     cascading through the whole reachable graph rather than stopping at
     genuine contradictions (confirmed on the get_and_set_blocked_links_marks_
     blocked_tmp board: 48 cells wrongly blocked instead of the correct 6). An
@@ -1210,7 +1210,7 @@ def propagate_blocked_tmp(m):
     narrowed and flagged - narrowing to nothing is not itself evidence E was
     part of D's contradiction, only that this hop found no overlap.
 
-    Inputs: reads every cell's .is_blocked_tmp, .path_id, .forced_by.
+    Inputs: reads every cell's .is_blocked_tmp, .path_id, .forced_by1.
 
     Outputs: for every E reached this way whose .path_id changes to a
     nonempty result: .path_id is narrowed in place, .state =
@@ -1218,7 +1218,7 @@ def propagate_blocked_tmp(m):
     apply_blocked_paths - see its own docstring).
     Returns True if at least one cell changed this way, False otherwise.
 
-    Scope: local per hop - each D only ever reaches its own .forced_by
+    Scope: local per hop - each D only ever reaches its own .forced_by1
     neighbours - but a D newly flagged earlier in this same scan is visible
     to a later iteration of this same pass (row-major order), so one call can
     already carry a chain more than one hop; propagate_blocked_tmp_closed's
@@ -1231,7 +1231,7 @@ def propagate_blocked_tmp(m):
             D = m[i, j]
             if not D.is_blocked_tmp or not D.path_id:
                 continue
-            for e_pos in D.forced_by:
+            for e_pos in D.forced_by1:
                 E = m[e_pos]
                 narrowed = E.path_id & D.path_id
                 if narrowed != E.path_id and narrowed:
@@ -1259,7 +1259,7 @@ def propagate_blocked_tmp_closed(m):
 
 def has_alert_bookkeeping(m):
     """True if any cell carries .alert_blocked, .alert_chosen, or a nonempty
-    .forces - i.e. find_alerts_set_links/find_secondary_links/assign_paths
+    .forces1 - i.e. find_alerts_set_links/find_secondary_links/assign_paths
     actually found or established something this pass, as opposed to a
     board with nothing free left to flag. Used by do_closure to decide
     whether its own post-assign_paths display is worth showing: those three
@@ -1267,7 +1267,7 @@ def has_alert_bookkeeping(m):
     them the way it does to dissolve_blocked_paths/place_square_in_seat_closed
     - this is the equivalent question for bookkeeping-only steps.
 
-    Inputs: reads .alert_blocked, .alert_chosen, .forces of every cell.
+    Inputs: reads .alert_blocked, .alert_chosen, .forces1 of every cell.
 
     Outputs: returns a bool; writes nothing.
 
@@ -1279,7 +1279,7 @@ def has_alert_bookkeeping(m):
     for i in range(rows):
         for j in range(cols):
             item = m[i, j]
-            if item.alert_blocked or item.alert_chosen or item.forces:
+            if item.alert_blocked or item.alert_chosen or item.forces1:
                 return True
     return False
 
@@ -1318,7 +1318,7 @@ def do_closure_intern(m, title, display=None, error_replay=False, asserts=None):
     tile/core, each a batched, vectorizable operation rather than a
     scalar-per-cell Python loop. Not done yet: noted here as a target, not
     attempted - a real rewrite has to work out how each stage's cross-cell
-    dependencies (e.g. assign_paths' forward walk along .forces,
+    dependencies (e.g. assign_paths' forward walk along .forces1,
     get_blocked_links' snapshot-then-apply discipline) survive being
     re-expressed over tiles instead of individual cells first.
 

@@ -1,5 +1,5 @@
 {
-  "schema_note": "One table (\"tests\"), keyed by test_id, with every per-test fact nested inside its own entry - no join needed to read one test whole. To flatten into separate SQL tables later: tests (drop call_sequence/asserts/tags/displays/initial_chosen_cells/initial_blocked_cells, add test_id as a column), call_sequence (test_id, step, function_name, map_changed, raised), asserts (test_id, assert_id, assertion, evaluated_at_step, note), tags (test_id, tag), displays (test_id, display_id, position, flags.*, note) - each is already exactly that shape, just nested. initial_chosen_cells/initial_blocked_cells are [row, col] pairs; a cell absent from both is free. call_sequence.step is 1-based and numbers the exact function-call order do_closure (or the hand-orchestrated equivalent named in that test's free_text) executed - see free_text for which; call_sequence.raised is true on the one step (if any) whose call raised InvalidTilingError, which is still recorded (the exception is raised, not swallowed - see tests.raised_message). \"bidirectional link\" (tag has-bidirectional-link/no-bidirectional-link) is this team's term for what the codebase itself sometimes calls an \"eye\": two cells that directly force each other (A in B.forces and B in A.forces). displays is every representation.display_closure_step call belonging to this test's own recorded call_sequence (both do_closure's own internal call, when show=True, and any call the test makes directly around it) - \"position\" is the call_sequence step number after which the display occurs (0 = before any step ran); \"flags\" are the arguments that actually vary display to display (show_links, show_real, show_entries_terminals, margin - null or {width, crop} - and roi_margin), omitting the always-present ax/colormap/title plumbing. A display already occupying its own call_sequence entry (function_name \"display_closure_step\", when do_closure ran with show=True) still gets a displays entry at the same position, since call_sequence itself does not carry these flags - the two are complementary, not duplicates. Displays belonging to a different do_closure call than the one this scorecard's call_sequence recorded (an earlier or later round in the same source test, or a run on a separate copy of the map) are out of scope and omitted, with a note on the nearest in-scope display item explaining what was left out.",
+  "schema_note": "One table (\"tests\"), keyed by test_id, with every per-test fact nested inside its own entry - no join needed to read one test whole. To flatten into separate SQL tables later: tests (drop call_sequence/asserts/tags/displays/initial_chosen_cells/initial_blocked_cells, add test_id as a column), call_sequence (test_id, step, function_name, map_changed, raised), asserts (test_id, assert_id, assertion, evaluated_at_step, note), tags (test_id, tag), displays (test_id, display_id, position, flags.*, note) - each is already exactly that shape, just nested. initial_chosen_cells/initial_blocked_cells are [row, col] pairs; a cell absent from both is free. call_sequence.step is 1-based and numbers the exact function-call order do_closure (or the hand-orchestrated equivalent named in that test's free_text) executed - see free_text for which; call_sequence.raised is true on the one step (if any) whose call raised InvalidTilingError, which is still recorded (the exception is raised, not swallowed - see tests.raised_message). \"bidirectional link\" (tag has-bidirectional-link/no-bidirectional-link) is this team's term for what the codebase itself sometimes calls an \"eye\": two cells that directly force each other (A in B.forces1 and B in A.forces1). displays is every representation.display_closure_step call belonging to this test's own recorded call_sequence (both do_closure's own internal call, when show=True, and any call the test makes directly around it) - \"position\" is the call_sequence step number after which the display occurs (0 = before any step ran); \"flags\" are the arguments that actually vary display to display (show_links, show_real, show_entries_terminals, margin - null or {width, crop} - and roi_margin), omitting the always-present ax/colormap/title plumbing. A display already occupying its own call_sequence entry (function_name \"display_closure_step\", when do_closure ran with show=True) still gets a displays entry at the same position, since call_sequence itself does not carry these flags - the two are complementary, not duplicates. Displays belonging to a different do_closure call than the one this scorecard's call_sequence recorded (an earlier or later round in the same source test, or a run on a separate copy of the map) are out of scope and omitted, with a note on the nearest in-scope display item explaining what was left out.",
   "tests": {
     "test_rectangle": {
       "source_file": "test_simple_situations.py",
@@ -339,7 +339,7 @@
       "asserts": [
         {
           "assert_id": 1,
-          "assertion": "m[9,1].forces == {(7,3)} (chain start, not itself alert_blocked)",
+          "assertion": "m[9,1].forces1 == {(7,3)} (chain start, not itself alert_blocked)",
           "evaluated_at_step": 1,
           "note": null
         },
@@ -458,7 +458,7 @@
           5
         ]
       ],
-      "free_text": "Four squares each alert-block one diagonal neighbour of the shared centre (4,4) via a separate corner, so (4,4) ends up forcing all four despite never being alert_chosen itself - .forces and .alert_chosen are independent facts.",
+      "free_text": "Four squares each alert-block one diagonal neighbour of the shared centre (4,4) via a separate corner, so (4,4) ends up forcing all four despite never being alert_chosen itself - .forces1 and .alert_chosen are independent facts.",
       "raises_error": false,
       "raised_message": null,
       "tags": [
@@ -554,19 +554,19 @@
       "asserts": [
         {
           "assert_id": 1,
-          "assertion": "not m[4,4].alert_chosen and m[4,4].forced_by == set()",
+          "assertion": "not m[4,4].alert_chosen and m[4,4].forced_by1 == set()",
           "evaluated_at_step": 14,
           "note": null
         },
         {
           "assert_id": 2,
-          "assertion": "m[4,4].forces == {(2,2),(2,6),(6,2),(6,6)}",
+          "assertion": "m[4,4].forces1 == {(2,2),(2,6),(6,2),(6,6)}",
           "evaluated_at_step": 14,
           "note": null
         },
         {
           "assert_id": 3,
-          "assertion": "each of (2,2),(2,6),(6,2),(6,6) is alert_chosen with (4,4) in forced_by",
+          "assertion": "each of (2,2),(2,6),(6,2),(6,6) is alert_chosen with (4,4) in forced_by1",
           "evaluated_at_step": 14,
           "note": null
         },
@@ -703,7 +703,7 @@
           8
         ]
       ],
-      "free_text": "(3,3) is forced_by four separate items at once - (2,1),(4,1),(4,3),(4,5) - none needing any of the others. Either of two different later placements (6,4) or (2,1)) reaches it via forced_closure, confirming it's a real fan-in, not just one link in a chain.",
+      "free_text": "(3,3) is forced_by1 four separate items at once - (2,1),(4,1),(4,3),(4,5) - none needing any of the others. Either of two different later placements (6,4) or (2,1)) reaches it via forced_closure, confirming it's a real fan-in, not just one link in a chain.",
       "raises_error": false,
       "raised_message": null,
       "tags": [
@@ -799,13 +799,13 @@
       "asserts": [
         {
           "assert_id": 1,
-          "assertion": "m[3,3].alert_chosen and not m[3,3].forces",
+          "assertion": "m[3,3].alert_chosen and not m[3,3].forces1",
           "evaluated_at_step": 14,
           "note": null
         },
         {
           "assert_id": 2,
-          "assertion": "{(2,1),(4,1),(4,3),(4,5)} <= m[3,3].forced_by",
+          "assertion": "{(2,1),(4,1),(4,3),(4,5)} <= m[3,3].forced_by1",
           "evaluated_at_step": 14,
           "note": null
         }
@@ -875,7 +875,7 @@
           8
         ]
       ],
-      "free_text": "(1,4) is a pure diagonal linker into (1,6): it has real .forces without being alert_chosen itself. (1,6) and (1,8) are a genuine mutual pair - each is alert_chosen and forces the other - a real bidirectional link. Placing (1,4) afterwards (outside do_closure, via forced_closure+place_squares) drags both bidirectionally-linked cells chosen too.",
+      "free_text": "(1,4) is a pure diagonal linker into (1,6): it has real .forces1 without being alert_chosen itself. (1,6) and (1,8) are a genuine mutual pair - each is alert_chosen and forces the other - a real bidirectional link. Placing (1,4) afterwards (outside do_closure, via forced_closure+place_squares) drags both bidirectionally-linked cells chosen too.",
       "raises_error": false,
       "raised_message": null,
       "tags": [
@@ -977,7 +977,7 @@
         },
         {
           "assert_id": 2,
-          "assertion": "m[1,4].forces == {(1,6)}; m[1,6].forces == {(1,8)}; (1,6) in m[1,8].forced_by",
+          "assertion": "m[1,4].forces1 == {(1,6)}; m[1,6].forces1 == {(1,8)}; (1,6) in m[1,8].forced_by1",
           "evaluated_at_step": 14,
           "note": null
         },
@@ -1524,13 +1524,13 @@
         },
         {
           "assert_id": 2,
-          "assertion": "blocked_tmp cells == {(2,2),(2,9),(5,2),(5,4),(7,6),(9,9)}, each .state==blocked, .forces==.forced_by==set()",
+          "assertion": "blocked_tmp cells == {(2,2),(2,9),(5,2),(5,4),(7,6),(9,9)}, each .state==blocked, .forces1==.forced_by1==set()",
           "evaluated_at_step": 4,
           "note": null
         },
         {
           "assert_id": 3,
-          "assertion": "no cell's path_id retains any id in p; no cell's forces/forced_by retains any blocked_tmp position",
+          "assertion": "no cell's path_id retains any id in p; no cell's forces1/forced_by1 retains any blocked_tmp position",
           "evaluated_at_step": 4,
           "note": null
         },
@@ -1603,7 +1603,7 @@
           4
         ]
       ],
-      "free_text": "Regression case for find_secondary_links. Without it, (7,5) used to end up chosen with an empty .forced_by - discovered only by place_square_in_seat_closed's raw state scan, invisible to the alert/path bookkeeping. find_secondary_links simulates (5,4) and (7,3) both chosen together (combining candidate a=(5,4) with P=(6,3)'s promised corner B=(7,3)) and finds this jointly completes a fresh seat at (7,5) - so (5,4) gets linked to it directly, and forced_closure(m,(5,4)) now reaches (7,5) too.",
+      "free_text": "Regression case for find_secondary_links. Without it, (7,5) used to end up chosen with an empty .forced_by1 - discovered only by place_square_in_seat_closed's raw state scan, invisible to the alert/path bookkeeping. find_secondary_links simulates (5,4) and (7,3) both chosen together (combining candidate a=(5,4) with P=(6,3)'s promised corner B=(7,3)) and finds this jointly completes a fresh seat at (7,5) - so (5,4) gets linked to it directly, and forced_closure(m,(5,4)) now reaches (7,5) too.",
       "raises_error": false,
       "raised_message": null,
       "tags": [
@@ -1705,7 +1705,7 @@
       "asserts": [
         {
           "assert_id": 1,
-          "assertion": "m[7,5].forced_by == {(5,4)}",
+          "assertion": "m[7,5].forced_by1 == {(5,4)}",
           "evaluated_at_step": 15,
           "note": null
         },
@@ -2067,7 +2067,7 @@
       "asserts": [
         {
           "assert_id": 1,
-          "assertion": "m[8,7].forced_by == {(6,7),(6,8)}",
+          "assertion": "m[8,7].forced_by1 == {(6,7),(6,8)}",
           "evaluated_at_step": 0,
           "note": "evaluated before this call sequence, on the round-2 board"
         },

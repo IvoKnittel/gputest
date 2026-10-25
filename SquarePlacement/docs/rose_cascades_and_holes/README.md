@@ -12,7 +12,7 @@ chosen/blocked map directly and run it through `find_alerts` / `link_patches` /
 
 Every image below is `map_of_squares`: white = free, cyan = chosen, grey = blocked,
 **blue = alert_blocked, yellow = alert_chosen, green = both at once**. Black arrows
-are `.forced_by` -> the item pointing at you is what forces you to eventually be
+are `.forced_by1` -> the item pointing at you is what forces you to eventually be
 chosen.
 
 **Seat** (new, team-wide as of today): a 2x2 block with 3 corners blocked and 1
@@ -78,7 +78,7 @@ terminal artificially, at exactly one point on the ring, chosen the same way no
 matter which cell happens to get processed first. After that cut, the ring is just
 an ordinary chain again, and gets the same centrality/path_id treatment everything
 else does (see the "p=21 c=..." labels - one shared patch, distance-from-terminal
-counted in .forces hops from the cut).
+counted in .forces1 hops from the cut).
 
 ## 4. What we're actually preventing
 
@@ -134,10 +134,10 @@ That's the real shape of what the seat mechanism needs in order to actually work
 not just *detecting* a seat and promising its occupant, but something that also
 *protects* that promise against every placement that comes after it. **Update,
 same night:** this motivated `closure.forced_closure` - after each manual
-placement, walk that item's own `.forces` chain (transitively) and place
+placement, walk that item's own `.forces1` chain (transitively) and place
 everything it reaches too, right then, instead of leaving it as a passive record.
 Re-running this exact scenario with `forced_closure` wired in: by the time `(5,6)`
-would be placed, it *already* carries `.forces == {(3,5), (5,5)}` from the
+would be placed, it *already* carries `.forces1 == {(3,5), (5,5)}` from the
 previous round's closure pass - chasing that chain places `(5,5)` (and `(3,5)`) as
 genuinely `chosen`, on the spot, before the danger ever completes. The would-be
 fourth placement, `(6,6)`, is then rejected outright by `place_squares`'s own
@@ -146,13 +146,13 @@ already a real chosen square. Recording and enforcing used to be two different
 things where only the first existed; now the second exists too, for this
 scenario. See `test_rose_wolfgang_hole_motivation.py` for the full run.
 
-![round 3: (5,6) placed, its forces chased, (5,5) chosen on the spot](7_round_3.png)
+![round 3: (5,6) placed, its forces1 chased, (5,5) chosen on the spot](7_round_3.png)
 ![round 4: (6,6) rejected outright - (5,5) is no longer just promised](7_round_4_rejected.png)
 
 Not a general guarantee, though, and the test's own docstring says so directly:
 which square gets placed in what order is still an external choice, made by
 whatever calls `place_squares` - a *different* order could still let some
-unrelated placement block a promise before that promise's own `.forces` chain
+unrelated placement block a promise before that promise's own `.forces1` chain
 ever gets a turn to fire. What's shown here is narrower but real: for this
 scenario, the step that was missing - actually acting on what closure already
 knew - would have caught the problem before it happened, not after. Whether that

@@ -1,4 +1,4 @@
-"""Tools for hand-building small map_of_squares scenarios and displaying their .forces
+"""Tools for hand-building small map_of_squares scenarios and displaying their .forces1
 structure directly, instead of only meeting chains/cycles/vertices incidentally
 inside a full placement run.
 
@@ -441,8 +441,8 @@ def display_closure_step(m, pos=None, title="", show_links=False, show_real=Fals
     visible on top of the plain free/chosen/blocked colours.
 
     show_links=True additionally draws a black arrow into every alert_chosen
-    item from each item in its .forced_by (see SquareItem.forced_by) -
-    drawn from that source, not read off the target's own .forces, so the arrow
+    item from each item in its .forced_by1 (see SquareItem.forced_by1) -
+    drawn from that source, not read off the target's own .forces1, so the arrow
     points the way the causal flow actually runs: source is what gets chosen
     (or blocked) first, and that is what forces this item, not the other way
     around. An item can have more than one, drawn
@@ -612,15 +612,15 @@ def display_closure_step(m, pos=None, title="", show_links=False, show_real=Fals
         for i in range(w, rows - w):
             for j in range(w, cols - w):
                 item = m[i, j]
-                if not (item.alert_chosen and item.forced_by):
+                if not (item.alert_chosen and item.forced_by1):
                     continue
-                for si, sj in item.forced_by:
+                for si, sj in item.forced_by1:
                     if (si, sj) == (i, j):
                         ax.plot(j - w, i - w, 'o', markersize=16, markerfacecolor='none',
                                 markeredgecolor='red', markeredgewidth=2, zorder=4)
                         continue
 
-                    mutual = (i, j) in m[si, sj].forced_by
+                    mutual = (i, j) in m[si, sj].forced_by1
                     if mutual:
                         pair = frozenset(((i, j), (si, sj)))
                         if pair in drawn_mutual_pairs:

@@ -6,8 +6,8 @@ from closure import do_closure
 from test_utils import default_display
 
 def test_seat_from_two_alert_blocked():
-    """(7, 5) used to end up StateEnum.chosen with an empty .forced_by
-    throughout - the .forces/.forced_by link analysis (find_alerts_set_links/
+    """(7, 5) used to end up StateEnum.chosen with an empty .forced_by1
+    throughout - the .forces1/.forced_by1 link analysis (find_alerts_set_links/
     assign_paths) never recorded it as forced by anything, before or after,
     and it was chosen purely by place_square_in_seat_closed's raw state scan
     once placing (5, 4) happened to complete that seat. Fixed by
@@ -22,7 +22,7 @@ def test_seat_from_two_alert_blocked():
     This also means get_blocked_links's contradiction detection (see
     test_complex_blocked_links.test_get_and_set_blocked_links_marks_blocked_tmp)
     can now see this cell where it couldn't before: (7, 5) has a real
-    .forced_by (hence a real path_id) the moment it's discovered, not only
+    .forced_by1 (hence a real path_id) the moment it's discovered, not only
     once place_square_in_seat_closed's raw scan happens to pick it up. See
     get_seat_positions's "Known gap" docstring (closure.py) for the general
     shape of what's still unaddressed - two independently-forced seats that
@@ -44,7 +44,7 @@ def test_seat_from_two_alert_blocked():
 
     m = map_of_squares_from_array(grid)
     do_closure(m, title='initial', display=default_display(show=True))
-    assert m[7,5].forced_by == {(5, 4)}
+    assert m[7,5].forced_by1 == {(5, 4)}
 
     do_closure(m, (5, 4), "round 1: (5,4) placed", display=default_display())
     assert m[7,5].state == StateEnum.chosen
@@ -52,7 +52,7 @@ def test_seat_from_two_alert_blocked():
 def test_frozen_area():
     """Same phenomenon as test_seat_from_two_alert_blocked above, from a third
     placement instead of a second - and fixed the same way. (8, 7) has
-    forces={(9, 5), (9, 7)} (something it would force onward) before round 3;
+    forces1={(9, 5), (9, 7)} (something it would force onward) before round 3;
     by the end of round 2, find_secondary_links has already linked both
     (6, 7) and (6, 8) - the two cells round 3 is about to place - to (8, 7)
     directly, so forced_closure(m, (6, 7)) now reaches (8, 7) too, instead of
@@ -67,6 +67,6 @@ def test_frozen_area():
     place_blocked_squares(m, border)
     do_closure(m, (4, 4), "round 1: (4,4) placed", display=default_display())
     do_closure(m, (5, 4), "round 2: (5,4) placed", display=default_display(show_all=True))
-    assert m[8,7].forced_by == {(6, 7), (6, 8)}
+    assert m[8,7].forced_by1 == {(6, 7), (6, 8)}
     do_closure(m, (6, 7), "round 3: (6,7) placed", display=default_display(show_all=True))
     assert m[8,7].state == StateEnum.chosen

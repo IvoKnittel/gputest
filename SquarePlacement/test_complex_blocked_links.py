@@ -9,7 +9,7 @@ from test_utils import ROI_MARGIN, MARGIN, DoClosureAsserts, DoClosureAssertsSin
 def test_two_forced_cells_block_each_other():
     """A 10x10 free core wrapped in build_margin_free_map's own two-ring
     margin (chosen outer ring, blocked ring just inside it - see its own
-    docstring), so the forces/path_id behaviour under test comes from the
+    docstring), so the forces1/path_id behaviour under test comes from the
     shape itself, not from free cells touching the array's own edge - the
     same reason test_margins.py wraps its own boards this way, shared here
     via build_margin_free_map instead of a hand-built border.
@@ -106,14 +106,14 @@ def test_get_and_set_blocked_links_marks_blocked_tmp():
     id's own origin cell (the one whose own unique_id it is) directly, and
     does nothing else:
     (3, 3), (3, 10), (6, 3), (6, 5), (8, 7), (10, 10) all end up
-    StateEnum.blocked, full stop - none of their own .forces/.forced_by is
-    cleared (e.g. (3, 3) still carries forces={(2, 3), (3, 2), (2, 5), (5, 2)}
+    StateEnum.blocked, full stop - none of their own .forces1/.forced_by1 is
+    cleared (e.g. (3, 3) still carries forces1={(2, 3), (3, 2), (2, 5), (5, 2)}
     afterward, now pointing nowhere meaningful), nothing retracts them from
-    any other cell's .forces/.forced_by either, and no cell's path_id
+    any other cell's .forces1/.forced_by1 either, and no cell's path_id
     anywhere on the board is stripped of these six ids (38 other cells still
     carry one, unchanged). All of that is left for do_closure's own second
     round to sort out instead: clear_all_but_state wipes every cell's
-    .forces/.forced_by/.path_id unconditionally, and the fresh
+    .forces1/.forced_by1/.path_id unconditionally, and the fresh
     find_alerts_set_links/assign_paths pass that follows re-derives
     everything from the current .state alone, in which these six cells - no
     longer free - simply drop out of consideration, the same way any other

@@ -61,7 +61,7 @@ def set_alert_chosen_set_links(i, j, ring):
 
     The link this creates is NOT between (i, j) and the corner. (i, j) itself is
     never going to be *chosen* in this scenario - it's the item at risk of being
-    *blocked*, and .forces means "if this gets chosen, these must too" everywhere
+    *blocked*, and .forces1 means "if this gets chosen, these must too" everywhere
     else it's read (forced_closure); "if this gets blocked"
     is a different event entirely, one (i, j) being chosen has nothing to do with.
     What actually forces a corner is whichever of (i, j)'s own diagonal neighbours,
@@ -98,8 +98,8 @@ def set_alert_chosen_set_links(i, j, ring):
                 continue
             ci, cj = RING_OFFSETS[c_idx]
             c_pos = (i + ci, j + cj)
-            diagonal_item.forces.add(c_pos)
-            ring[c_idx].forced_by.add(d_pos)
+            diagonal_item.forces1.add(c_pos)
+            ring[c_idx].forced_by1.add(d_pos)
 
 
 # The four diagonal neighbours - the ones a chosen item blocks (see closure.place_square)
