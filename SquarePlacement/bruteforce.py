@@ -286,6 +286,130 @@ def compute_conditions(m):
     return forced
 
 
+def unblock_path(m, id_):
+    """Permanently block a self-blocking cell and recompute the board from
+    the updated .state - the new architecture's own analog of the old
+    pipeline's dissolve_blocked_paths + do_closure_intern's second-pass
+    recompute (see squareplacement_superlattice_refactor memory note,
+    2026-10-29 entry, "Old pipeline's own self-blocking handling recalled").
+    Named "unblock_path" per Ivo's own instruction that day, even though
+    the direct action is blocking one cell - the NAME describes the
+    purpose it serves for every OTHER path that was needlessly constrained
+    by a candidate that could never actually have been chosen: once id_ is
+    confirmed permanently blocked, those other paths are freed/"unblocked"
+    from a conflict that was never real.
+
+    "Play it safe": rather than inventing any new, bespoke invalidation
+    logic for whatever else happened to depend on id_, this does the
+    minimum - set id_'s own .state, then call the SAME, already-trusted
+    compute_conditions (see its own docstring) the rest of this module
+    already relies on to propagate the consequence - "a condition is false,
+    and removed, if any of its elements is blocked" already does exactly
+    the "many paths converge into one cell, if that cell is self-blocking
+    this blocks all of them" job map-wide, in one pass, with no separate
+    per-path tracing needed - matching dissolve_blocked_paths's own
+    original motivation precisely, just via this architecture's own
+    machinery instead of .path_id/.forces1.
+
+    id_ is expected to already be a confirmed self-blocking candidate - see
+    cores.CoreItem.update_blocked's own docstring: id_'s own forcing chain
+    reaches a diagonal neighbour of itself, a genuine contradiction, so id_
+    could never validly have been chosen in the first place. This function
+    does not itself check that (callers are expected to have found id_ via
+    .blocked's own (id_, id_) self-blocking pairs); it only applies the
+    consequence.
+
+    Mutates id_'s own .state (free -> blocked) and, via compute_conditions,
+    every cell's own .forced_by/.forces map-wide - NOT any CoreItem's own
+    .forced_by/.placement_reach/.blocked, which are each their own,
+    separate, explicit recompute (update_forced_by/update_placement_reach/
+    update_blocked) a caller runs afterward over whichever tile(s) the
+    change actually reaches, same as after any other board mutation.
+    """
+    m[id_].state = StateEnum.blocked
+    compute_conditions(m)
+
+
+def collapse_synced_ids(m, id0, synced_ids):
+    """STUB (2026-10-31) - action intentionally left open, not yet
+    implemented. Covers points 1 and 2 of Ivo's own downstream planning
+    note (see squareplacement_superlattice_refactor memory note, same
+    date): id0's own forcing chain forces every id in synced_ids (id1,
+    id2, ... - discovered via CoreItem.update_blocked's own transitive
+    rule, 2026-10-29, which already finds the id0/id1/id2 triple this acts
+    on). Two cases share this one mechanism:
+
+    1. synced_ids also mutually exclude each other (the self-blocking case
+       update_blocked already detects): id0 itself can then never validly
+       be chosen - handled separately, by unblock_path (id0 is the id_ that
+       gets permanently blocked there, not any of synced_ids).
+    2. synced_ids do NOT mutually exclude: id0 being chosen forces every
+       one of them together, with no contradiction - id0 and every synced
+       id are now permanently linked, "choosing id1 without id2 has become
+       impossible" (Ivo's own words) regardless of which specific id among
+       them is actually placed.
+
+    Either way, every id in synced_ids is now fully interchangeable with
+    id0 as far as any OTHER condition/term on the board is concerned - its
+    own separate identity carries no more information than id0's already
+    does.
+
+    Intended eventual action (not yet implemented): replace every
+    occurrence of every id in synced_ids with id0 itself, wherever it
+    appears as a condition member in ANY SquareItem's own .forced_by/
+    .forces, map-wide - collapsing any n-ary term that named two or more of
+    these ids as separate members down to however many DISTINCT ids remain
+    once the substitution is applied (e.g. a triple naming {id1, id2, id3}
+    collapses to the pair {id0, id3} once id1 and id2 both become id0) -
+    "creating more links," Ivo's own words, since a smaller, more-reduced
+    term is a stronger, more immediately actionable fact than the original
+    triple ever was (same "n-aries just link paths together" mechanism
+    already confirmed 2026-10-23, now triggered by an explicit rewrite
+    instead of compute_conditions's own gradual one-member-at-a-time
+    shrinking). Callers would then be responsible for recomputing
+    CoreItem.forced_by/.blocked (and .placement_reach/.aliases_down as
+    relevant) on whichever tiles the change reaches - same discipline
+    unblock_path already established; this function would not do that
+    itself, same as unblock_path doesn't either.
+    """
+    raise NotImplementedError(
+        "collapse_synced_ids: action intentionally left open - see its own docstring")
+
+
+def create_virtual_sync_id(m, ids):
+    """STUB (2026-10-31) - action intentionally left open, not yet
+    implemented. Covers point 3 of Ivo's own downstream planning note (see
+    squareplacement_superlattice_refactor memory note, same date): ids
+    (idx, idy, ... - at least 2) belong to DIFFERENT placement tiles, each
+    independently choosable in the same round, with no forcing chain
+    linking them (unlike collapse_synced_ids's own case) - so they CAN be
+    chosen together, but don't have to be, and neither implies the other
+    the way a forced id does. This makes any n-ary term naming two or more
+    of them relevant/activatable once they are in fact chosen together, but
+    WITHOUT collapsing their own separate identities away (Ivo's own words:
+    "keeping id1 and id2") - unlike collapse_synced_ids, which does replace
+    them.
+
+    Intended eventual action (not yet implemented): for every non-trivial
+    subset of size >= 2 of the given ids (for 3 ids id1/id2/id3: the three
+    pairs (id1,id2)/(id2,id3)/(id1,id3), plus the full triple
+    (id1,id2,id3) - Ivo's own worked example), create a virtual id -
+    represented as the frozenset of its own constituent ids, e.g. a virtual
+    id literally named frozenset({id1, id2}) - standing in for "this
+    specific subset, all chosen together" as a single compound fact, usable
+    the same way any other id is used as a condition member, without
+    removing or replacing the original ids anywhere. Exactly which n-ary
+    terms should actually get rewritten to reference a virtual id instead
+    of their own original members, and how a virtual id's own eventual
+    "chosen" status gets determined from its own constituents (presumably:
+    chosen once every one of its constituents is independently chosen, via
+    their own separate placement tiles' own simultaneous choices), is not
+    yet designed.
+    """
+    raise NotImplementedError(
+        "create_virtual_sync_id: action intentionally left open - see its own docstring")
+
+
 def compute_eligibility(m, realm):
     """Set every cell's .placement_status relative to realm, in place, then replace
     every inside cell's own .forced_by with the fully flattened n-ary terms

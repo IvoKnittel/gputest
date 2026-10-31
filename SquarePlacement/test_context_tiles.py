@@ -10,9 +10,9 @@ import random
 
 import numpy as np
 
-from conditions import initial_map
+from conditions import initial_map, forced_by_on_realm
 from closure import place_square
-from bruteforce import compute_conditions, retag_forced_by, prune_same_core_candidates
+from bruteforce import compute_conditions, retag_forced_by, prune_same_core_candidates, unblock_path
 from cores import CoreItem
 from map_of_squares import StateEnum, PlacementStatus
 
@@ -766,11 +766,24 @@ def test_aliases_down_informs_a_genuinely_reached_sibling():
     don't produce cross-level-1 reach at all (consistent with reach staying
     mostly local throughout this whole session's findings). On an n=15
     board, level-2 centered so (1,1) (local index) contains a real
-    placement core, seed=9 produces 3 aliases_down entries, all informing
-    sibling (0,0) - cross-checked against the same independent brute-force
-    BFS as the test above, confirming every entry's id_out really is
-    reachable from its own origin, and that the origin really is a
-    candidate cell."""
+    placement core, seed=9 produces a real cross-sibling touch, reaching
+    into sibling (0,0).
+
+    Non-vacuousness is confirmed independently of CoreItem's own fields
+    (via the same brute-force BFS as the test above), not by reading
+    .aliases_down after the call - update_aliases_down now consumes and
+    clears every informed child's own .aliases_down as its own last step
+    (2026-10-25: "At the end, you should update the CoreItems .forced_by
+    and clear the .aliases_down list"), so .aliases_down is always empty
+    by the time this test can observe it, whether or not anything happened.
+    Checked instead: .aliases_down really is empty everywhere afterward
+    (the clearing itself), and any .forced_by entries .forced_by gained as
+    a side effect of consumption are genuinely correct (reachable from
+    their own origin per the independent brute-force graph) - in this
+    particular run the touched cell turns out to be a dead end (no further
+    local reach inside (0,0) once consumption looks for one), so .forced_by
+    staying unchanged is itself the correct, verified outcome here, not a
+    failure to detect."""
     n, M = 15, 3
     m, N = build_swept_map(n, M, seed=9)
     base_offset = (2, 2)
@@ -783,13 +796,35 @@ def test_aliases_down_informs_a_genuinely_reached_sibling():
     level2 = CoreItem(elements, margin=None, realm=((r0, r0 + 27), (c0, c0 + 27)))
     level2.update_forced_by()
     level2.update_placement_reach()
+
+    # confirm, independently of CoreItem's own aliases_down, that a real
+    # cross-sibling touch exists in this scenario before calling
+    # update_aliases_down (which will consume and clear it)
+    candidate_cells = [(i, j) for i in range(N) for j in range(N)
+                        if m[i, j].placement_status == PlacementStatus.candidate]
+    cross_sibling_touch_found = False
+    for cand in candidate_cells:
+        owner = next((t for t in level1.values() if t.realm[0][0] <= cand[0] < t.realm[0][1]
+                       and t.realm[1][0] <= cand[1] < t.realm[1][1]), None)
+        if owner is None:
+            continue
+        reachable = _reachable_via_single_links(m, N, [cand])
+        for other in level1.values():
+            if other is owner:
+                continue
+            if any(other.realm[0][0] <= c[0] < other.realm[0][1]
+                   and other.realm[1][0] <= c[1] < other.realm[1][1] for c in reachable):
+                cross_sibling_touch_found = True
+    assert cross_sibling_touch_found, "expected at least one real cross-sibling touch in this scenario"
+
+    before = {key: set(t.forced_by) for key, t in level1.items()}
     level2.update_aliases_down()
 
-    total = sum(len(t.aliases_down) for t in level1.values())
-    assert total > 0, "expected at least one sibling to actually be informed in this run"
+    for t in level1.values():
+        assert t.aliases_down == set()
 
-    for child in level1.values():
-        for origin, node in child.aliases_down:
+    for key, t in level1.items():
+        for origin, node in t.forced_by - before[key]:
             assert m[origin].placement_status == PlacementStatus.candidate
             assert node in _reachable_via_single_links(m, N, [origin])
 
@@ -802,30 +837,41 @@ def test_aliases_down_applies_the_same_way_one_level_up():
     small, deliberately-constructed (not swept-from-a-real-board) scenario
     so the test doesn't depend on a real sweep happening to produce reach
     that crosses a level-2 boundary: three synthetic side-by-side CoreItems
-    (elements=None - update_aliases_down only ever reads .placement_reach/
-    .forced_by and .realm, never .elements, for its own non-base branch)
-    with hand-set .placement_reach/.forced_by (the pair set on both,
-    respecting the real .placement_reach <= .forced_by invariant - edges
-    are sourced from .forced_by, origins from .placement_reach, see
-    update_aliases_down's own docstring), composed into one parent. Only
-    the sibling whose realm the pair's id_out actually falls into gets
-    informed."""
+    for a, b (elements=None - plain relay/origin facts, nothing further to
+    consume through) and a REAL one-child CoreItem for c, so consumption
+    (added 2026-10-25, same day - "update the CoreItems .forced_by and
+    clear the .aliases_down list") has real structure to extend through and
+    leaves an observable .forced_by trace - .aliases_down itself is always
+    cleared by the end regardless of which sibling was actually informed
+    (consumption's own last step), so it can no longer distinguish
+    "informed then cleared" from "never touched" on its own; .forced_by
+    growth is what proves specifically c, not a or b, was the one reached."""
     a = CoreItem(elements=None, margin=None, realm=((0, 9), (0, 9)))
     b = CoreItem(elements=None, margin=None, realm=((0, 9), (9, 18)))
-    c = CoreItem(elements=None, margin=None, realm=((0, 9), (18, 27)))
     a.placement_reach = set()
     a.forced_by = set()
     b.placement_reach = {((5, 10), (5, 20))}
     b.forced_by = {((5, 10), (5, 20))}
+
+    # c: a real one-child CoreItem whose own grandchild already knows
+    # (5,20) [the cell b's reach touches c at] forces (5,30), external to
+    # c's own realm (cols 18:27) - so consumption has something concrete to
+    # discover, landing genuinely outside c, not just outside gc.
+    gc = CoreItem(elements=None, margin=None, realm=((0, 9), (18, 27)))
+    gc.forced_by = {((5, 20), (5, 30))}
+    gc.placement_reach = set()
+    c = CoreItem(np.array([[gc]], dtype=object), margin=None, realm=((0, 9), (18, 27)))
     c.placement_reach = set()
     c.forced_by = set()
 
     parent = CoreItem(np.array([[a, b, c]], dtype=object), margin=None, realm=((0, 9), (0, 27)))
     parent.update_aliases_down()
 
-    assert a.aliases_down == set()
-    assert b.aliases_down == set()
-    assert c.aliases_down == {((5, 10), (5, 20))}
+    assert a.aliases_down == set() and a.forced_by == set()
+    assert b.aliases_down == set() and b.forced_by == {((5, 10), (5, 20))}
+    assert c.aliases_down == set()
+    assert c.forced_by == {((5, 10), (5, 30))}, \
+        "expected c's own consumption to relay b's origin through to (5,25)"
 
 
 def test_aliases_down_relays_through_a_siblings_own_forced_by():
@@ -845,32 +891,438 @@ def test_aliases_down_relays_through_a_siblings_own_forced_by():
     a different set), while keeping walk ORIGINS restricted to confirmed
     candidates (.placement_reach keys) only.
 
-    Built directly with synthetic CoreItems (elements=None) rather than a
-    real board, so the scenario exactly matches Ivo's own description
-    rather than depending on a real sweep happening to produce it."""
+    Built directly with synthetic CoreItems rather than a real board, so the
+    scenario exactly matches Ivo's own description rather than depending on
+    a real sweep happening to produce it. c10 (the final destination) is a
+    real one-child CoreItem, not elements=None, so update_aliases_down's
+    own consumption step (added 2026-10-25, same day - "update the
+    CoreItems .forced_by and clear the .aliases_down list") has real
+    structure to extend through and leaves an observable .forced_by trace -
+    .aliases_down alone can no longer prove the relay happened, since it is
+    always cleared by the end regardless."""
     other = CoreItem(elements=None, margin=None, realm=((0, 9), (9, 18)))
     c00 = CoreItem(elements=None, margin=None, realm=((0, 9), (0, 9)))
-    c10 = CoreItem(elements=None, margin=None, realm=((9, 18), (0, 9)))
     c11 = CoreItem(elements=None, margin=None, realm=((9, 18), (9, 18)))
 
     origin_a = (5, 15)       # foreign candidate, lives in 'other'
     b_in_00 = (5, 5)         # touched cell inside (0,0)'s own realm
     c_in_10 = (12, 5)        # external to (0,0), lands inside (1,0)
+    d_beyond_10 = (20, 2)    # external to (1,0) (realm rows 9:18) - (1,0)'s own further reach from c_in_10
 
     other.placement_reach = {(origin_a, b_in_00)}
     other.forced_by = {(origin_a, b_in_00)}
     c00.placement_reach = set()
     c00.forced_by = {(b_in_00, c_in_10)}
-    c10.placement_reach = set()
-    c10.forced_by = set()
     c11.placement_reach = set()
     c11.forced_by = set()
+
+    gc10 = CoreItem(elements=None, margin=None, realm=((9, 18), (0, 9)))
+    gc10.forced_by = {(c_in_10, d_beyond_10)}
+    gc10.placement_reach = set()
+    c10 = CoreItem(np.array([[gc10]], dtype=object), margin=None, realm=((9, 18), (0, 9)))
+    c10.placement_reach = set()
+    c10.forced_by = set()
 
     elements = np.array([[other, c00], [c10, c11]], dtype=object)
     parent = CoreItem(elements, margin=None, realm=((0, 18), (0, 18)))
     parent.update_aliases_down()
 
-    assert c00.aliases_down == {(origin_a, b_in_00)}
-    assert c10.aliases_down == {(origin_a, c_in_10)}, \
-        "expected origin_a's reach to relay through (0,0)'s own forced_by into (1,0)"
-    assert c11.aliases_down == set()
+    assert c00.aliases_down == set() and c00.forced_by == {(b_in_00, c_in_10)}
+    assert c10.aliases_down == set()
+    assert c10.forced_by == {(origin_a, d_beyond_10)}, \
+        "expected origin_a's reach to relay through (0,0)'s forced_by into (1,0), " \
+        "then through (1,0)'s own consumption to d_beyond_10"
+    assert c11.aliases_down == set() and c11.forced_by == set()
+
+
+def _tile_scoped_blocked_brute_force(m, ci, cj, M):
+    """Independent reimplementation of update_blocked's own base-level
+    logic, scoped (like update_blocked itself, for now) to exactly one
+    tile's own cells' .forced_by/.forces - not the whole board. Used to
+    cross-check update_blocked without testing its own code against
+    itself."""
+    r0, c0 = ci * M, cj * M
+    interior_ids = {(r0 + di, c0 + dj) for di in range(M) for dj in range(M)}
+    forward_edges = {}
+    status_of = {}
+    for cid in interior_ids:
+        item = m[cid]
+        status_of[cid] = item.placement_status
+        for cond in item.forced_by:
+            if len(cond) == 1:
+                fid, fstatus = next(iter(cond))
+                forward_edges.setdefault(fid, set()).add(cid)
+                status_of.setdefault(fid, fstatus)
+    exit_edges = {}
+    for cid in interior_ids:
+        for b, conds in m[cid].forces:
+            if b in interior_ids:
+                continue
+            if any(len(c) == 1 for c in conds):
+                exit_edges.setdefault(cid, set()).add(b)
+
+    def full_reach(origin):
+        frontier = {origin}
+        visited = set()
+        reached = {origin}
+        while frontier:
+            nxt = set()
+            for node in frontier:
+                if node in visited:
+                    continue
+                visited.add(node)
+                reached.add(node)
+                reached |= exit_edges.get(node, set())
+                for t in forward_edges.get(node, ()):
+                    if t in interior_ids and t not in visited:
+                        nxt.add(t)
+            frontier = nxt
+        return reached
+
+    def is_diag(a, b):
+        return abs(a[0] - b[0]) == 1 and abs(a[1] - b[1]) == 1
+
+    candidates = [cid for cid in interior_ids if status_of.get(cid) == PlacementStatus.candidate]
+    expected = set()
+    for id1 in candidates:
+        reach1 = full_reach(id1)
+        for id2 in candidates:
+            if any(is_diag(x, id2) for x in reach1):
+                expected.add((id1, id2) if id1 <= id2 else (id2, id1))
+    return expected
+
+
+def test_update_blocked_matches_tile_scoped_brute_force():
+    """Ivo (2026-10-28): .blocked is a set of (id1, id2) pairs excluding
+    each other - id1's own forcing chain reaches a cell diagonally adjacent
+    to id2, so id1 and id2 can never both be chosen. Verified against an
+    independent, tile-scoped brute-force reimplementation (not the whole
+    board's global reach, which update_blocked does not claim to capture
+    yet - a first, GLOBAL-scoped cross-check attempt found a real
+    discrepancy that turned out to be the brute-force script's own fault,
+    not a bug in update_blocked: it used the whole board's forward_edges,
+    an apples-to-oranges comparison against update_blocked's explicitly
+    tile-scoped definition) - for all 4 placement tiles on the 5-phase-swept
+    map1."""
+    n, M = 7, 3
+    m, N = build_swept_map(n, M)
+    for ci, cj in placement_core_indices(n):
+        core = _base_tile(m, ci, cj, M)
+        core.update_blocked()
+        expected = _tile_scoped_blocked_brute_force(m, ci, cj, M)
+        assert core.blocked == expected, f"mismatch at tile ({ci},{cj})"
+
+
+def test_update_blocked_pairs_are_canonical_and_within_this_tiles_candidates():
+    """Every .blocked pair is stored low-id-first (same convention as
+    .conflicts - see this module's own docstring) and both ids are among
+    this tile's own candidate cells - update_blocked's own documented
+    scope (cross-tile exclusion is not yet computed)."""
+    n, M = 7, 3
+    m, N = build_swept_map(n, M)
+    for ci, cj in placement_core_indices(n):
+        r0, c0 = ci * M, cj * M
+        candidates = {(r0 + di, c0 + dj) for di in range(M) for dj in range(M)
+                      if m[r0 + di, c0 + dj].placement_status == PlacementStatus.candidate}
+        core = _base_tile(m, ci, cj, M)
+        core.update_blocked()
+        for id1, id2 in core.blocked:
+            assert id1 <= id2
+            assert id1 in candidates and id2 in candidates
+
+
+def test_update_blocked_finds_a_genuine_self_blocking_case():
+    """Confirms Ivo's own "self-blocking included" case actually occurs,
+    not just in theory: on the 5-phase-swept map1, tile (1,1)'s own
+    candidate (3,5) self-blocks - its own forcing chain reaches a cell
+    diagonally adjacent to itself, a genuine contradiction (it could never
+    validly have been chosen). Cross-checked directly against the chain:
+    the diagonal neighbor it reaches is found explicitly, not just asserted
+    to exist."""
+    n, M = 7, 3
+    m, N = build_swept_map(n, M)
+    core = _base_tile(m, 1, 1, M)
+    core.update_blocked()
+    assert ((3, 5), (3, 5)) in core.blocked
+
+    expected = _tile_scoped_blocked_brute_force(m, 1, 1, M)
+    reach = set()
+    # reconstruct (3,5)'s own full reach the same way update_blocked does,
+    # to directly exhibit which diagonal neighbor causes the contradiction
+    interior_ids = {(3 + di, 3 + dj) for di in range(M) for dj in range(M)}
+    forward_edges = {}
+    for cid in interior_ids:
+        for cond in m[cid].forced_by:
+            if len(cond) == 1:
+                fid, _ = next(iter(cond))
+                forward_edges.setdefault(fid, set()).add(cid)
+    exit_edges = {}
+    for cid in interior_ids:
+        for b, conds in m[cid].forces:
+            if b in interior_ids:
+                continue
+            if any(len(c) == 1 for c in conds):
+                exit_edges.setdefault(cid, set()).add(b)
+    frontier = {(3, 5)}
+    visited = set()
+    while frontier:
+        nxt = set()
+        for node in frontier:
+            if node in visited:
+                continue
+            visited.add(node)
+            reach.add(node)
+            reach |= exit_edges.get(node, set())
+            for t in forward_edges.get(node, ()):
+                if t in interior_ids and t not in visited:
+                    nxt.add(t)
+        frontier = nxt
+
+    diagonal_hits = [x for x in reach if abs(x[0] - 3) == 1 and abs(x[1] - 5) == 1]
+    assert diagonal_hits, "expected to find the specific cell causing (3,5)'s own self-block"
+    assert ((3, 5), (3, 5)) in expected
+
+
+def test_unblock_path_resolves_a_real_self_blocking_candidate():
+    """Ivo (2026-10-29): "to unblock a path, call a new function
+    unblock_path. It places the blocked cell and recomputes the tile from
+    .state. Check again to conversion. Then proceed to compute
+    CoreItem.forced_by." The new architecture's own analog of the old
+    pipeline's dissolve_blocked_paths + do_closure_intern's second-pass
+    recompute (see squareplacement_superlattice_refactor memory note,
+    2026-10-29 entries) - locks in the real self-blocking case already
+    found on the 5-phase-swept map1: tile (1,1)'s own candidate (3,5).
+
+    Checks all three things Ivo asked for, in order: (1) unblock_path
+    actually blocks the cell; (2) re-checking .blocked afterward ("check
+    again to conversion") finds no self-blocking left anywhere, not just at
+    (3,5) itself - this is a one-shot check, not a loop, since this
+    particular scenario happens to converge in a single application, but
+    the check covers every placement tile, not just the one (3,5) belongs
+    to, in case blocking (3,5) revealed a self-block elsewhere; (3)
+    CoreItem.forced_by, recomputed after, no longer has (3,5) as an origin
+    anywhere - compute_conditions's own existing "drop a condition with any
+    blocked member" rule removes every trace of (3,5) as a valid condition
+    member board-wide, with no special-casing needed in update_forced_by
+    itself."""
+    n, M = 7, 3
+    m, N = build_swept_map(n, M)
+
+    core = _base_tile(m, 1, 1, M)
+    core.update_blocked()
+    self_blocking = {id1 for id1, id2 in core.blocked if id1 == id2}
+    assert self_blocking == {(3, 5)}, "expected the known (3,5) self-blocking case"
+
+    core.update_forced_by()
+    before_origins = {a for a, _b in core.forced_by if a == (3, 5)}
+    assert before_origins, "expected (3,5) to have real forced_by entries before unblock_path"
+
+    assert m[3, 5].state == StateEnum.free
+    unblock_path(m, (3, 5))
+    assert m[3, 5].state == StateEnum.blocked
+
+    for ci, cj in placement_core_indices(n):
+        tile = _base_tile(m, ci, cj, M)
+        tile.update_blocked()
+        remaining_self_blocking = {id1 for id1, id2 in tile.blocked if id1 == id2}
+        assert remaining_self_blocking == set(), \
+            f"expected no self-blocking left at tile ({ci},{cj}) after unblock_path"
+
+    core_after = _base_tile(m, 1, 1, M)
+    core_after.update_forced_by()
+    after_origins = {a for a, _b in core_after.forced_by if a == (3, 5)}
+    assert after_origins == set(), \
+        "expected (3,5) to no longer appear as a forced_by origin after unblock_path"
+
+
+def test_update_blocked_recursive_finds_transitive_self_blocking():
+    """Ivo (2026-10-29): "if an item A from the 3x3 child array has (id1,
+    id2) blocking each other and id0 from item A forces both items, id0 is
+    blocked." A second, transitive way a candidate can be self-blocking,
+    discovered one level up the hierarchy rather than via direct diagonal
+    adjacency: if some id0's own forcing chain (composed across every
+    child's own .forced_by) reaches BOTH sides of a child's own known
+    .blocked pair (id1, id2) - which already means id1 and id2 can never
+    both be chosen - then id0 itself could never validly be chosen either.
+
+    Built directly with synthetic CoreItems (elements=None for the
+    children, since update_blocked's own recursive branch only ever reads
+    their .blocked/.forced_by/.placement_reach, never .elements) rather
+    than depending on a real sweep happening to produce this specific
+    configuration."""
+    child_a = CoreItem(elements=None, margin=None, realm=((0, 9), (0, 9)))
+    child_b = CoreItem(elements=None, margin=None, realm=((0, 9), (9, 18)))
+
+    id1, id2 = (3, 3), (6, 6)
+    id0 = (5, 10)
+
+    child_a.blocked = {(id1, id2)}
+    child_a.forced_by = {(id1, id2)}  # lets the combined graph continue id1 -> id2
+    child_a.placement_reach = set()
+
+    child_b.blocked = set()
+    child_b.forced_by = {(id0, id1)}
+    child_b.placement_reach = {(id0, id1)}  # id0 is a confirmed candidate
+
+    elements = np.array([[child_a, child_b]], dtype=object)
+    parent = CoreItem(elements, margin=None, realm=((0, 9), (0, 18)))
+    parent.update_blocked()
+
+    assert (id1, id2) in parent.blocked, "the original child pair should survive the union"
+    assert (id0, id0) in parent.blocked, "id0 should be discovered self-blocking"
+
+
+def test_update_blocked_recursive_matches_tile_scoped_brute_force():
+    """Cross-checks the recursive update_blocked branch on real board data -
+    a 3x3 group of base tiles (rows/cols 0-8) on the 5-phase-swept map1,
+    which includes the known self-blocking tile (1,1) - against an
+    independent brute-force reimplementation scoped to exactly the same 9
+    tiles' own cells (not the whole board), same methodology as the
+    base-level cross-check."""
+    n, M = 7, 3
+    m, N = build_swept_map(n, M)
+
+    base = {}
+    for ci in range(3):
+        for cj in range(3):
+            core = _base_tile(m, ci, cj, M)
+            core.update_forced_by()
+            core.update_placement_reach()
+            core.update_blocked()
+            base[(ci, cj)] = core
+
+    elements = np.empty((3, 3), dtype=object)
+    for ci in range(3):
+        for cj in range(3):
+            elements[ci, cj] = base[(ci, cj)]
+    parent = CoreItem(elements, margin=None, realm=((0, 9), (0, 9)))
+    parent.update_blocked()
+
+    r0, r1, c0, c1 = 0, 9, 0, 9
+    forward_edges = {}
+    for i in range(r0, r1):
+        for j in range(c0, c1):
+            for cond in m[i, j].forced_by:
+                if len(cond) == 1:
+                    fid, _fstatus = next(iter(cond))
+                    forward_edges.setdefault(fid, set()).add((i, j))
+
+    def in_realm(x):
+        return r0 <= x[0] < r1 and c0 <= x[1] < c1
+
+    def full_reach(origin):
+        frontier = {origin}
+        visited = set()
+        reached = {origin}
+        while frontier:
+            nxt = set()
+            for node in frontier:
+                if node in visited:
+                    continue
+                visited.add(node)
+                reached.add(node)
+                for t in forward_edges.get(node, ()):
+                    reached.add(t)
+                    if in_realm(t) and t not in visited:
+                        nxt.add(t)
+            frontier = nxt
+        return reached
+
+    candidates = [(i, j) for i in range(r0, r1) for j in range(c0, c1)
+                  if m[i, j].placement_status == PlacementStatus.candidate]
+
+    child_blocked_pairs = set()
+    for core in base.values():
+        child_blocked_pairs |= core.blocked
+
+    expected = set(child_blocked_pairs)
+    for id0 in candidates:
+        reach0 = full_reach(id0)
+        for id1, id2 in child_blocked_pairs:
+            if id1 in reach0 and id2 in reach0:
+                expected.add((id0, id0))
+
+    assert parent.blocked == expected
+
+
+def test_push_down_leaves_a_doubly_external_forced_by_pair_where_it_already_is():
+    """push_down's rule 2 (see its own docstring, corrected 2026-10-31): a
+    .forced_by pair that in_realm can't route to any of this core's own
+    children (both ids external even to every child) is never actually
+    ownerless - _compose_up's own first-hop short-circuit (see its own
+    docstring) guarantees such a pair already exists, unchanged, as a
+    literal member of exactly one child's own .forced_by before this
+    core's own union ever ran, and push_down can never later push anything
+    into a position where that stops holding (see the docstring's own
+    proof) - so this is structurally impossible to get wrong, not merely
+    unobserved; no special-case code is needed or present for it. Reproduces
+    the concrete 2026-10-31 example (((6,9),(9,6)), traced to child (2,2))
+    with synthetic CoreItems rather than a real sweep, so the scenario is
+    exact rather than incidental - push_down must leave the pair exactly
+    where it already was (not copy it anywhere else, not raise)."""
+    children = {}
+    for ci in range(3):
+        for cj in range(3):
+            r0, c0 = ci * 3, cj * 3
+            child = CoreItem(elements=None, margin=None,
+                              realm=((r0, r0 + 3), (c0, c0 + 3)))
+            child.forced_by = set()
+            child.blocked = set()
+            children[(ci, cj)] = child
+
+    doubly_external = ((6, 9), (9, 6))
+    children[(2, 2)].forced_by = {doubly_external}
+
+    elements = np.empty((3, 3), dtype=object)
+    for ci in range(3):
+        for cj in range(3):
+            elements[ci, cj] = children[(ci, cj)]
+    parent = CoreItem(elements, margin=None, realm=((0, 9), (0, 9)))
+    # inherited verbatim into the parent, exactly as _compose_up would leave it
+    parent.forced_by = {doubly_external}
+    parent.blocked = set()
+
+    parent.push_down()  # must not raise - the pair is already homed in (2,2)
+
+    for (ci, cj), child in children.items():
+        if (ci, cj) == (2, 2):
+            assert child.forced_by == {doubly_external}
+        else:
+            assert doubly_external not in child.forced_by
+
+
+def test_forced_by_on_realm_matches_initial_map_for_an_interior_core():
+    """conditions.forced_by_on_realm (added 2026-10-31, "compute on the
+    superlattice") against conditions.initial_map's own whole-board build,
+    sliced to the same cells, for a core nowhere near the true board edge -
+    the case where FORCED_BY_REACH=2 alone (no off-board filtering) should
+    already make the two identical, since every real triple member is
+    guaranteed inside the core+margin-2 window regardless of the true
+    board's own size."""
+    shape = (15, 15)
+    whole = initial_map(shape)
+    realm = ((6, 9), (6, 9))  # core (2,2) on a 3x3-of-3x3 split, far from every true edge
+
+    actual = forced_by_on_realm(realm, shape)
+    (row_start, row_end), (col_start, col_end) = realm
+    for i in range(row_start, row_end):
+        for j in range(col_start, col_end):
+            assert actual[i - row_start, j - col_start].forced_by == whole[i, j].forced_by
+
+
+def test_forced_by_on_realm_matches_initial_map_for_a_corner_core():
+    """Same cross-check as above, but for a core touching the true board's
+    own corner (realm (0,3)x(0,3) on a 15x15 board) - the case that
+    actually exercises off-board filtering (clear_of_every_edge is False
+    for cells this close to row/col 0), so a mismatch here would mean
+    forced_by_on_realm's own `shape`-relative on_board check is wrong, not
+    just redundant."""
+    shape = (15, 15)
+    whole = initial_map(shape)
+    realm = ((0, 3), (0, 3))
+
+    actual = forced_by_on_realm(realm, shape)
+    (row_start, row_end), (col_start, col_end) = realm
+    for i in range(row_start, row_end):
+        for j in range(col_start, col_end):
+            assert actual[i - row_start, j - col_start].forced_by == whole[i, j].forced_by

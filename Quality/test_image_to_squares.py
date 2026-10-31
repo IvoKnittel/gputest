@@ -162,6 +162,28 @@ def test_supersuperlattice_ordered():
     assert min_distances == pytest.approx([min_distances[0]] * len(min_distances))
     assert min_distances[0] == pytest.approx(2 * sz_tile)
 
+def test_supersuperlattice_random_order2():
+    """test_supersuperlattice_ordered on a lattice where every cell is replaced by a
+    2x2 block, so each 3x3 core becomes a 6x6 block: a 3x3 core is all boundary, a 6x6
+    has interior. The 16 kernel calls still run on the cell-level lattice; the 2x2
+    expansion is applied only for measuring and display."""
+    num_tiles = (10, 13)
+    sz = (3*num_tiles[0]+2, 3*num_tiles[1]+2)
+    m = -np.ones(sz)
+    num_tiles_expand_noshift_shift = tile_counts_2d(sz)
+    min_distances = []
+    for colorcode in range(16):
+        m = insert_tile(m, num_tiles_expand_noshift_shift, colorcode, super=True)
+        big = np.kron(m, np.ones((2, 2)))
+        min_distances.append(min_placement_distance(big, colorcode))
+        if DISPLAY:
+            show_highlighted(big, colorcode, f"test_supersuperlattice_random_order2: colorcode={colorcode}")
+
+    big = np.kron(m, np.ones((2, 2)))
+    assert set(range(16)) <= set(np.unique(big).astype(int))
+    assert min_distances == pytest.approx([min_distances[0]] * len(min_distances))
+    assert min_distances[0] == pytest.approx(2 * 2 * sz_tile)
+
 
 def test_supersuperlattice_random_order():
     """Same 16 kernel calls as test_supersuperlattice_ordered, issued in a random
@@ -246,10 +268,10 @@ def test_square_placement_random_order_supersuperlattice():
 
     2. Convergence is slow because each kernel call places one square at a time, not the
        group that must be placed together. insert_best's best_allowed pick is a fresh,
-       alert-bookkeeping-free cell (no .forces yet), so do_closure's forced_closure
+       alert-bookkeeping-free cell (no .forces1 yet), so do_closure's forced_closure
        call on it typically returns just {that one cell} - the rest of whatever patch it
        actually belongs to is only discovered later, one do_closure pass at a time, as
-       find_alerts/assign_paths gradually builds up .forces elsewhere on the board. Every
+       find_alerts/assign_paths gradually builds up .forces1 elsewhere on the board. Every
        kernel call pays for a full do_closure pass but usually only banks one square.
     """
     _, _, square_map = build_quality_map(seed=42)

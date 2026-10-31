@@ -22,7 +22,7 @@ from itertools import combinations, product
 
 import numpy as np
 
-from map_of_squares import SquareItem
+from map_of_squares import SquareItem, PlacementStatus
 from bruteforce import init_vacuum
 
 _DIAGONALS = ((-1, -1), (-1, 1), (1, -1), (1, 1))
@@ -179,3 +179,63 @@ def initial_map(shape):
                 m[i, j].forces = kept_forces
 
     return m
+
+
+def forced_by_on_realm(realm, shape):
+    """conditions.initial_map's own .forced_by construction (see its own
+    docstring for FORCED_BY_REACH/off-board filtering), scoped to just the
+    cells inside `realm` - the "compute on the superlattice" counterpart
+    (Ivo, 2026-10-31): correct without ever building, or needing, the rest
+    of the `shape`-sized board. This works because FORCED_BY_REACH (2,
+    confirmed empirically in initial_map's own docstring) bounds how far
+    any real triple member can be from its own cell - a core's own margin
+    of width 2 is always enough for .forced_by alone, independent of
+    where the core sits inside the larger board.
+
+    .forces is deliberately left out here (Ivo, 2026-10-31: "only switch
+    .forced_by to per-core computation now") - its own nested conditions
+    need reach 3, not 2 (see initial_map's own docstring on why using
+    margin 2 for that check would be wrong: a cell exactly 2 cells from
+    an edge can have a nested member one cell past it). .forces is still
+    built the old way, over the whole board, via conditions.initial_map/
+    bruteforce.update_forces.
+
+    No cross-cell data is read: at this construction stage every member's
+    embedded placement_status is PlacementStatus.unknown regardless of
+    position (SquareItem's own default, matching what initial_map's
+    tag_condition would read off a freshly built, not-yet-retagged board)
+    - so this needs only `realm` and `shape`, never an existing map.
+
+    Returns an (rows, cols)-shaped object array of SquareItem, one per
+    cell inside realm (local-indexed, (0, 0) is realm's own (row_start,
+    col_start)), each with .forced_by populated and every other field at
+    its own default - the same per-cell .forced_by conditions.initial_map
+    would give for these exact cells on a real `shape`-sized board,
+    confirmed byte-for-byte (see test_context_tiles.py).
+    """
+    (row_start, row_end), (col_start, col_end) = realm
+    rows, cols = shape
+    FORCED_BY_REACH = 2
+
+    def on_board(id_):
+        r, c = id_
+        return 0 <= r < rows and 0 <= c < cols
+
+    def clear_of_every_edge(i, j, margin):
+        return margin <= i < rows - margin and margin <= j < cols - margin
+
+    def tag_condition(condition):
+        return frozenset((member, PlacementStatus.unknown) for member in condition)
+
+    out = np.empty((row_end - row_start, col_end - col_start), dtype=object)
+    for i in range(row_start, row_end):
+        for j in range(col_start, col_end):
+            item = SquareItem()
+            forced_by, _forces = init_vacuum((i, j))
+            if clear_of_every_edge(i, j, FORCED_BY_REACH):
+                item.forced_by = {tag_condition(condition) for condition in forced_by}
+            else:
+                item.forced_by = {tag_condition(condition) for condition in forced_by
+                                   if all(on_board(member) for member in condition)}
+            out[i - row_start, j - col_start] = item
+    return out

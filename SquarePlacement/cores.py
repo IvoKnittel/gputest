@@ -26,13 +26,24 @@ Information flows both ways:
 - down: .aliases_down (populated 2026-10-25 by update_aliases_down - see its
   own docstring; the descending pass for .forced_by/.placement_reach
   specifically, informing a sibling child of cross-child reach that its own
-  up-composed data alone can never reveal) and .blocked (still not built -
-  .blocked is the set of path ids of this core that may not be placed in the
-  current kernel call because they conflict with a path of another core
-  placed simultaneously; it is recomputed per colorcode). .aliases_down is a
-  one-shot inbox, not a permanent record: update_aliases_down immediately
-  folds each informed child's own .aliases_down into that child's own
+  up-composed data alone can never reveal). .aliases_down is a one-shot
+  inbox, not a permanent record: update_aliases_down immediately folds
+  each informed child's own .aliases_down into that child's own
   .forced_by (via _consume_aliases_down) and clears it again, every call.
+
+.blocked (populated 2026-10-28 by update_blocked, base level only so far -
+redefined from its own original, never-implemented design intent, see
+below): a set of (id1, id2) pairs, stored low-id-first (same convention as
+.conflicts), where id1's own forcing chain reaches a cell diagonally
+adjacent to id2 - id1 and id2 can never both be chosen. id1==id2 is
+explicitly included (self-blocking: id1's own chain reaches a diagonal
+neighbor of itself, a genuine contradiction). Scoped for now to one tile's
+own candidate cells only, both as id1 and id2 - see update_blocked's own
+docstring for the full reasoning, and why this is a from-scratch, properly-
+grounded replacement for .blocked's own original 2026-09-26 design intent
+("the set of path ids of this core that may not be placed in the current
+kernel call because they conflict with a path of another core placed
+simultaneously; recomputed per colorcode"), which was never implemented.
 
 .forced_by (added 2026-10-22, redesigned 2026-10-23; .forced and .forces
 also exist but are still unused): a set of plain (id_in, id_out) pairs,
@@ -545,6 +556,250 @@ class CoreItem:
                 self.forced_by |= self._reach(origin, {b}, interior_ids, forward_edges, exit_edges)
 
         self.aliases_down = set()
+
+    def update_blocked(self):
+        """Recompute .blocked: a set of (id1, id2) pairs, stored low-id-first
+        (same convention as .conflicts - see this module's own docstring),
+        where id1's own forcing chain reaches a cell diagonally adjacent to
+        id2 - confirmed with Ivo: choosing id1 would eventually force
+        something that diagonally blocks id2, so id1 and id2 can never both
+        be chosen ("excluding each other"). id1==id2 (self-blocking,
+        explicitly included, not a degenerate edge case excluded by
+        construction) means id1's own chain reaches a diagonal neighbor of
+        itself - a genuine contradiction, since id1 being chosen would
+        eventually force something that blocks id1 itself; id1 could
+        therefore never have validly been chosen in the first place.
+
+        At the base level (added 2026-10-28; elements are SquareItem), "id1's
+        own forcing chain reaches a cell" means the FULL set of cells the
+        chain touches - every interior waypoint along the way, not just the
+        final boundary-crossing exits .forced_by/.placement_reach report. A
+        diagonal neighbor of id2 can easily be an ordinary interior cell
+        that never itself becomes a reported exit, so this needs its own
+        walk (ids reached, not just the boundary of them), built from the
+        same _base_edges() this core already uses elsewhere. Scoped to this
+        tile's own candidate cells only - both as id1 and id2.
+
+        One level up (added 2026-10-29; elements are CoreItem), a second,
+        transitive way for a candidate to be self-blocking, found by Ivo:
+        "if an item A from the 3x3 child array has (id1, id2) blocking each
+        other and id0 from item A forces both items, id0 is blocked." A
+        child's own .blocked pair (id1, id2) already means id1 and id2 can
+        never both be chosen; if some id0's own forcing chain (now composed
+        across every child's own .forced_by, the same combined graph
+        _compose_up builds, not just id0's own home child's local view)
+        reaches BOTH id1 and id2, choosing id0 would force a contradiction
+        it can never resolve - id0 is therefore self-blocking too, exactly
+        the same consequence as the base-level diagonal case, just
+        discovered transitively through another child's own .blocked fact
+        instead of directly through geometry. "In the upstream pass, the
+        blocked paths are merely collected and treated in the downstream
+        pass" - this method (the upstream/composing direction) only ever
+        COLLECTS these newly-found self-blocking pairs into .blocked; it
+        does not itself call unblock_path or otherwise act on them - that
+        is left to a separate, not-yet-built downstream step, the same
+        staged split update_aliases_down/_consume_aliases_down already
+        established (inform first, consume/act separately, once each half
+        is verified on its own).
+
+        origins for this transitive check are confirmed candidates only -
+        the union of every child's own .placement_reach keys, same
+        reasoning as everywhere else in this file: "is there a path FROM
+        id0" means from an actual placement decision, not an arbitrary cell
+        that merely happens to have an edge. The reach walk itself uses the
+        union of every child's own .forced_by (not just .placement_reach),
+        same widening update_aliases_down's own relay fix already needed -
+        id1/id2 can easily be ordinary interior cells a plain
+        .placement_reach-only graph would never reach.
+
+        Cross-tile exclusion at THIS level is still scoped to what this
+        supertile's own children can see - a candidate belonging to a
+        sibling supertile entirely outside this one is not yet reachable
+        here, same staged build-up .aliases_down went through.
+
+        Full recompute every call, same discipline as every other update_*
+        method here.
+        """
+        first = self.elements.flat[0]
+        if isinstance(first, CoreItem):
+            children = list(self.elements.flat)
+
+            child_blocked_pairs = set()
+            edge_pairs = set()
+            candidate_origins = set()
+            for child in children:
+                child_blocked_pairs |= child.blocked
+                edge_pairs |= child.forced_by
+                candidate_origins |= {a for a, _b in child.placement_reach}
+
+            edges = {}
+            for a, b in edge_pairs:
+                edges.setdefault(a, set()).add(b)
+
+            def full_reach(origin):
+                frontier = {origin}
+                visited = set()
+                reached = {origin}
+                while frontier:
+                    next_frontier = set()
+                    for node in frontier:
+                        if node in visited:
+                            continue
+                        visited.add(node)
+                        reached.add(node)
+                        for nxt in edges.get(node, ()):
+                            reached.add(nxt)
+                            if in_realm(nxt, self.realm) and nxt not in visited:
+                                next_frontier.add(nxt)
+                    frontier = next_frontier
+                return reached
+
+            blocked = set(child_blocked_pairs)
+            for id0 in candidate_origins:
+                reach0 = full_reach(id0)
+                for id1, id2 in child_blocked_pairs:
+                    if id1 in reach0 and id2 in reach0:
+                        blocked.add((id0, id0))
+
+            self.blocked = blocked
+            return
+
+        interior_ids, forward_edges, exit_edges, status_of = self._base_edges()
+        candidates = [cid for cid in interior_ids if status_of[cid] == PlacementStatus.candidate]
+
+        def full_reach(origin):
+            frontier = {origin}
+            visited = set()
+            reached = {origin}
+            while frontier:
+                next_frontier = set()
+                for node in frontier:
+                    if node in visited:
+                        continue
+                    visited.add(node)
+                    reached.add(node)
+                    reached |= exit_edges.get(node, set())
+                    for nxt in forward_edges.get(node, ()):
+                        if nxt in interior_ids and nxt not in visited:
+                            next_frontier.add(nxt)
+                frontier = next_frontier
+            return reached
+
+        def is_diagonal(a, b):
+            return abs(a[0] - b[0]) == 1 and abs(a[1] - b[1]) == 1
+
+        blocked = set()
+        for id1 in candidates:
+            reach1 = full_reach(id1)
+            for id2 in candidates:
+                if any(is_diagonal(x, id2) for x in reach1):
+                    blocked.add((id1, id2) if id1 <= id2 else (id2, id1))
+
+        self.blocked = blocked
+
+    def push_down(self):
+        """Distribute this core's own .forced_by and .blocked entries down
+        to its children, in place (added 2026-10-31 - Ivo's own three rules,
+        stated for any level above base):
+
+        1. An entry containing an id that belongs to (is in_realm of) one of
+           this core's own children is passed down to that child, and no
+           other.
+        2. An entry whose ids are ALL outside this core's own realm (belong
+           to none of its children) is passed down to EVERY child on
+           .blocked (a self-blocking (id0, id0) pair can have id0 be a
+           candidate that reached in from outside this core entirely, via
+           .placement_reach's own reach-preserved-regardless-of-realm
+           origins - see update_placement_reach's own docstring).
+
+           On .forced_by, a doubly-external pair (id_in ALSO external to
+           every one of this core's own children, not just id_out, which
+           always is) is NOT broadcast, and needs no handling at all -
+           corrected 2026-10-31 from this docstring's own earlier, wrong
+           claim that "there is no child this fact is about." There IS
+           exactly one, always, structurally: _compose_up's own walk (see
+           its docstring) only ever records a result on the very first BFS
+           hop when that hop already lands outside the realm being
+           composed - which means the raw (id_in, id_out) edge already
+           existed, unchanged, as a literal member of exactly one child's
+           own .forced_by before this core's own update_forced_by ever ran
+           (confirmed concretely, 2026-10-31: `((6,9),(9,6))` traced back
+           to child (2,2)'s own .forced_by, verbatim, both ids already
+           external to (2,2) too). The same holds for anything this core's
+           own push_down might otherwise try to push further down later: a
+           pushed-down entry's id_in is always, by construction, a
+           PlacementStatus.candidate interior to whichever child received
+           it (that is the only way an interior id_in gets into .forced_by
+           at all - see update_forced_by's own docstring), and a candidate
+           is one fixed physical cell, which is interior to exactly one
+           grandchild too - so the same owning_child lookup always
+           succeeds again one level further down, recursively, all the
+           way to base. So a doubly-external .forced_by pair being
+           genuinely unhomed in every child is not a case push_down needs
+           to guard against - it is structurally impossible, confirmed
+           2026-10-31 (see squareplacement_superlattice_refactor memory
+           note, same date) - briefly handled explicitly via an
+           already_homed/assert check before this was proven, now removed
+           again since it could never fire. push_down's own job for such a
+           pair is simply to leave it exactly where it already is: in
+           this core's own .forced_by, redundant but not orphaned.
+        3. An entry naming ids that belong to two DIFFERENT children of this
+           same core cannot exist on .forced_by or .blocked - this is not
+           handled as a case here because it is a structural invariant of
+           how both fields are built (verified, not just assumed - every
+           .blocked pair's own two ids are always either the same id or
+           both confirmed to belong to the same child by construction; see
+           update_blocked's own base-level "this tile's own candidates
+           only" scope and its own recursive branch's candidate_origins,
+           and _compose_up's own single-origin walk for .forced_by).
+
+        What "passed down" means concretely: for .forced_by, the pair is
+        added directly to the receiving child's own .forced_by (not
+        .aliases_down - unlike aliases_down's own (origin, node) pairs,
+        where node is INSIDE the receiving core and still needs its own
+        further reach discovered, a pushed-down .forced_by pair's id_out is
+        already external to the receiving child too (the child is a subset
+        of this core's own realm), so it is already a complete, valid
+        .forced_by fact for that child with nothing further to consume).
+        For .blocked, the pair is added directly to the receiving
+        child's/children's own .blocked - already a complete, self-
+        contained fact needing no further processing either.
+
+        elements-are-SquareItem (base) level: does nothing (no CoreItem
+        children to push down to).
+        """
+        first = self.elements.flat[0]
+        if not isinstance(first, CoreItem):
+            return
+
+        children = list(self.elements.flat)
+
+        def owning_child(id_):
+            for child in children:
+                if in_realm(id_, child.realm):
+                    return child
+            return None
+
+        for id_in, id_out in self.forced_by:
+            owner = owning_child(id_in)
+            if owner is not None:
+                owner.forced_by.add((id_in, id_out))
+
+        for id1, id2 in self.blocked:
+            owner1 = owning_child(id1)
+            owner2 = owning_child(id2)
+            if owner1 is not None:
+                owner1.blocked.add((id1, id2))
+                if owner2 is not None and owner2 is not owner1:
+                    raise AssertionError(
+                        f"blocked pair {(id1, id2)} belongs to two different "
+                        f"children ({owner1.realm}, {owner2.realm}) - violates "
+                        f"the structural invariant push_down relies on")
+            elif owner2 is not None:
+                owner2.blocked.add((id1, id2))
+            else:
+                for child in children:
+                    child.blocked.add((id1, id2))
 
     def update_links(self):
         """Recompute .links: old-sense direct links, (forced_id, forcer_id)
