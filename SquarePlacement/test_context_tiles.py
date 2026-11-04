@@ -12,9 +12,10 @@ import numpy as np
 
 from conditions import initial_map, forced_by_on_realm
 from closure import place_square
-from bruteforce import compute_conditions, retag_forced_by, prune_same_core_candidates, unblock_path
+from bruteforce import (compute_conditions, retag_forced_by, prune_same_core_candidates,
+                         unblock_path, collapse_synced_ids)
 from cores import CoreItem
-from map_of_squares import StateEnum, PlacementStatus
+from map_of_squares import StateEnum, PlacementStatus, SquareItem
 
 
 def build_framed_map(n, M):
@@ -1326,3 +1327,57 @@ def test_forced_by_on_realm_matches_initial_map_for_a_corner_core():
     for i in range(row_start, row_end):
         for j in range(col_start, col_end):
             assert actual[i - row_start, j - col_start].forced_by == whole[i, j].forced_by
+
+
+def test_collapse_synced_ids_simplifies_a_triple_and_updates_forces():
+    """bruteforce.collapse_synced_ids (implemented 2026-11-01, step 1 of
+    Ivo's own base-level ordering): replacing id1/id2 with id0 wherever
+    they appear as .forced_by condition members collapses a triple down to
+    a pair via plain frozenset dedup ("creating more links"), and
+    update_forces(m) at the end keeps .forces consistent with the
+    now-simplified .forced_by - without touching the CoreItem pyramid at
+    all (not even built here), matching "don't recompute the tile yet"."""
+    m = np.empty((5, 5), dtype=object)
+    for i in range(5):
+        for j in range(5):
+            m[i, j] = SquareItem()
+
+    id0, id1, id2, idx = (0, 0), (1, 1), (2, 2), (3, 3)
+    target = (4, 4)
+    m[id0].placement_status = PlacementStatus.candidate
+    triple = frozenset({(id1, PlacementStatus.unknown),
+                         (id2, PlacementStatus.unknown),
+                         (idx, PlacementStatus.unknown)})
+    m[target].forced_by = {triple}
+
+    collapse_synced_ids(m, id0, {id1, id2})
+
+    assert m[target].forced_by == {
+        frozenset({(id0, PlacementStatus.candidate), (idx, PlacementStatus.unknown)})}
+    assert any(b == target for b, _conditions in m[id0].forces)
+
+
+def test_collapse_synced_ids_collapses_a_pair_entirely_into_a_single_link():
+    """The further edge of the triple->pair test above: when EVERY member
+    of a condition maps to the same id0 (a pair {id1, id2} with both
+    syncing), the frozenset rebuild in collapse_synced_ids produces the
+    identical (id0, status) tuple once per original member, so it
+    collapses all the way to a size-1 condition - "(id0, id0)" becoming
+    plain id0, exactly the old pipeline's own single-link fact (.links'
+    own shape) - with no special-case code needed for it, same frozenset
+    dedup mechanism as the partial (triple->pair) case."""
+    m = np.empty((5, 5), dtype=object)
+    for i in range(5):
+        for j in range(5):
+            m[i, j] = SquareItem()
+
+    id0, id1, id2 = (0, 0), (1, 1), (2, 2)
+    target = (4, 4)
+    m[id0].placement_status = PlacementStatus.candidate
+    pair = frozenset({(id1, PlacementStatus.unknown), (id2, PlacementStatus.unknown)})
+    m[target].forced_by = {pair}
+
+    collapse_synced_ids(m, id0, {id1, id2})
+
+    assert m[target].forced_by == {frozenset({(id0, PlacementStatus.candidate)})}
+

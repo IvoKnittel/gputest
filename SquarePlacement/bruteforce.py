@@ -331,13 +331,14 @@ def unblock_path(m, id_):
 
 
 def collapse_synced_ids(m, id0, synced_ids):
-    """STUB (2026-10-31) - action intentionally left open, not yet
-    implemented. Covers points 1 and 2 of Ivo's own downstream planning
-    note (see squareplacement_superlattice_refactor memory note, same
-    date): id0's own forcing chain forces every id in synced_ids (id1,
-    id2, ... - discovered via CoreItem.update_blocked's own transitive
-    rule, 2026-10-29, which already finds the id0/id1/id2 triple this acts
-    on). Two cases share this one mechanism:
+    """Implemented 2026-11-01 (step 1 of Ivo's own base-level ordering,
+    same day: "the case id1,id2 ... is identified with some id0, creating
+    additional links"). Covers points 1 and 2 of Ivo's own downstream
+    planning note (see squareplacement_superlattice_refactor memory note,
+    2026-10-31): id0's own forcing chain forces every id in synced_ids
+    (id1, id2, ... - discovered via CoreItem.update_blocked's own
+    transitive rule, 2026-10-29, which already finds the id0/id1/id2
+    triple this acts on). Two cases share this one mechanism:
 
     1. synced_ids also mutually exclude each other (the self-blocking case
        update_blocked already detects): id0 itself can then never validly
@@ -354,60 +355,474 @@ def collapse_synced_ids(m, id0, synced_ids):
     own separate identity carries no more information than id0's already
     does.
 
-    Intended eventual action (not yet implemented): replace every
-    occurrence of every id in synced_ids with id0 itself, wherever it
-    appears as a condition member in ANY SquareItem's own .forced_by/
-    .forces, map-wide - collapsing any n-ary term that named two or more of
-    these ids as separate members down to however many DISTINCT ids remain
-    once the substitution is applied (e.g. a triple naming {id1, id2, id3}
-    collapses to the pair {id0, id3} once id1 and id2 both become id0) -
-    "creating more links," Ivo's own words, since a smaller, more-reduced
-    term is a stronger, more immediately actionable fact than the original
-    triple ever was (same "n-aries just link paths together" mechanism
-    already confirmed 2026-10-23, now triggered by an explicit rewrite
-    instead of compute_conditions's own gradual one-member-at-a-time
-    shrinking). Callers would then be responsible for recomputing
-    CoreItem.forced_by/.blocked (and .placement_reach/.aliases_down as
-    relevant) on whichever tiles the change reaches - same discipline
-    unblock_path already established; this function would not do that
-    itself, same as unblock_path doesn't either.
+    Action: replace every occurrence of every id in synced_ids with id0
+    itself, wherever it appears as a condition member in ANY SquareItem's
+    own .forced_by, map-wide, re-tagging the replaced member's own
+    embedded placement_status to id0's current one (same discipline as
+    retag_forced_by) - a condition that named two or more of these ids as
+    separate members collapses down to however many DISTINCT ids remain,
+    for free, via ordinary frozenset deduplication (e.g. a triple naming
+    {id1, id2, id3} collapses to the pair {id0, id3} once id1 and id2 both
+    become id0) - "creating more links," Ivo's own words, since a smaller,
+    more-reduced term is a stronger, more immediately actionable fact than
+    the original triple ever was (same "n-aries just link paths together"
+    mechanism already confirmed 2026-10-23, now triggered by an explicit
+    rewrite instead of compute_conditions's own gradual one-member-at-a-
+    time shrinking). The same dedup carries all the way down: if every
+    member of a condition maps to id0 (e.g. a pair {id1, id2} both
+    syncing), it collapses to a plain size-1 condition {id0} - "(id0, id0)
+    becomes id0" (Ivo, 2026-11-01), the old pipeline's own single-link
+    shape - with no special case needed, since the comprehension below
+    produces the same (id0, status) tuple once per original member and
+    frozenset() dedups identical tuples on its own. update_forces(m) is
+    called at the end to keep .forces consistent with the now-simplified
+    .forced_by - same discipline as every other .forced_by mutator in
+    this file.
+
+    Deliberately does NOT recompute the CoreItem pyramid (Ivo, same day:
+    "Don't recompute the tile yet") - callers remain responsible for
+    recomputing CoreItem.forced_by/.blocked (and .placement_reach/
+    .aliases_down as relevant) on whichever tiles the change reaches, same
+    discipline unblock_path already established; this function does not do
+    that itself, same as unblock_path doesn't either.
     """
-    raise NotImplementedError(
-        "collapse_synced_ids: action intentionally left open - see its own docstring")
+    replacement = {sid: id0 for sid in synced_ids}
+    rows, cols = m.shape
+    for i in range(rows):
+        for j in range(cols):
+            item = m[i, j]
+            item.forced_by = {
+                frozenset(
+                    (replacement.get(member_id, member_id),
+                     m[replacement.get(member_id, member_id)].placement_status)
+                    for member_id, _status in condition)
+                for condition in item.forced_by
+            }
+    update_forces(m)
 
 
-def create_virtual_sync_id(m, ids):
-    """STUB (2026-10-31) - action intentionally left open, not yet
-    implemented. Covers point 3 of Ivo's own downstream planning note (see
-    squareplacement_superlattice_refactor memory note, same date): ids
+def create_compound_ids(ids):
+    """Implemented 2026-11-01 (step 2 of Ivo's own base-level ordering,
+    same day). Renamed from "virtual id" to "compound id" (Ivo, same day) -
+    covers point 3 of Ivo's own downstream planning note (see
+    squareplacement_superlattice_refactor memory note, 2026-10-31): ids
     (idx, idy, ... - at least 2) belong to DIFFERENT placement tiles, each
     independently choosable in the same round, with no forcing chain
     linking them (unlike collapse_synced_ids's own case) - so they CAN be
     chosen together, but don't have to be, and neither implies the other
     the way a forced id does. This makes any n-ary term naming two or more
-    of them relevant/activatable once they are in fact chosen together, but
-    WITHOUT collapsing their own separate identities away (Ivo's own words:
-    "keeping id1 and id2") - unlike collapse_synced_ids, which does replace
-    them.
+    of them relevant/activatable once they are in fact chosen together,
+    but WITHOUT collapsing their own separate identities away (Ivo's own
+    words: "keeping id1 and id2") - unlike collapse_synced_ids, which does
+    replace them.
 
-    Intended eventual action (not yet implemented): for every non-trivial
-    subset of size >= 2 of the given ids (for 3 ids id1/id2/id3: the three
-    pairs (id1,id2)/(id2,id3)/(id1,id3), plus the full triple
-    (id1,id2,id3) - Ivo's own worked example), create a virtual id -
-    represented as the frozenset of its own constituent ids, e.g. a virtual
-    id literally named frozenset({id1, id2}) - standing in for "this
-    specific subset, all chosen together" as a single compound fact, usable
-    the same way any other id is used as a condition member, without
-    removing or replacing the original ids anywhere. Exactly which n-ary
-    terms should actually get rewritten to reference a virtual id instead
-    of their own original members, and how a virtual id's own eventual
-    "chosen" status gets determined from its own constituents (presumably:
-    chosen once every one of its constituents is independently chosen, via
-    their own separate placement tiles' own simultaneous choices), is not
-    yet designed.
+    Changed from the earlier plan (2026-10-31): a compound id's own value
+    is now arbitrary - only required to be unique, not a deterministic
+    encoding of its own members (the earlier docstring's own
+    "frozenset({id1, id2})" idea) - with the (compound_id, members) mapping
+    tracked separately, in the returned compound_ids set, rather than
+    folded into the id's own structure. Tagged ("compound", n) rather than
+    a bare integer so a compound id can never collide with a real (row,
+    col) cell id.
+
+    For every non-trivial subset of size >= 2 of ids (n > 3 included -
+    Ivo, 2026-11-01: "i still maintain n-aries with n>3 matter" - so for 3
+    ids id1/id2/id3: the three pairs (id1,id2)/(id2,id3)/(id1,id3), plus
+    the full triple (id1,id2,id3), matching Ivo's own worked example),
+    creates one fresh compound id standing in for "this specific subset,
+    all chosen together."
+
+    Returns compound_ids, a set of (compound_id, members, is_subset_of)
+    triples (expanded from the original (compound_id, members) pairs,
+    Ivo, 2026-11-01) - members itself a tuple, the subset this compound_id
+    stands for; is_subset_of a frozenset of every OTHER compound_id whose
+    own members is a superset of this entry's own members (the compound
+    ids that "contain A as a subset"), computed only when len(members) <=
+    3 - above that, is_subset_of is always the empty frozenset, Ivo's own
+    instruction ("Do this only for A with number of id1,id2... <=3. Empty
+    otherwise") - matching the standing "a real board condition is capped
+    at 3 members" fact: only a size-<=3 compound id could ever actually
+    substitute into one, so only those need to know what bigger compound
+    id(s) they're also a part of. No restriction on the SIZE of the
+    containing compound id itself - a size-2 or size-3 A can be recorded
+    as a subset of a B with more than 3 members.
+
+    Deliberately does nothing beyond building this set (Ivo, same day,
+    twice: "I will tell later how to proceed") - not yet wired into any
+    SquareItem field, condition, or CoreItem; which n-ary terms should
+    actually get rewritten to reference a compound id, and how a compound
+    id's own eventual "chosen" status gets determined from its own
+    constituents, is not yet decided.
     """
-    raise NotImplementedError(
-        "create_virtual_sync_id: action intentionally left open - see its own docstring")
+    ids = tuple(ids)
+    entries = []
+    counter = 0
+    for size in range(2, len(ids) + 1):
+        for members in combinations(ids, size):
+            entries.append((("compound", counter), members))
+            counter += 1
+
+    compound_ids = set()
+    for cid, members in entries:
+        if len(members) <= 3:
+            members_set = set(members)
+            is_subset_of = frozenset(
+                other_cid for other_cid, other_members in entries
+                if other_cid != cid and members_set <= set(other_members))
+        else:
+            is_subset_of = frozenset()
+        compound_ids.add((cid, members, is_subset_of))
+    return compound_ids
+
+
+def generate_compound_candidates(tile_choices):
+    """Added 2026-11-01 - refines create_compound_ids's own generation step
+    (Ivo, same day: "a subtle change in our generation of compound ids").
+
+    create_compound_ids took a flat set of ids and enumerated every
+    non-trivial subset, as if any id could independently coexist with any
+    other. That's too permissive: in reality a tile's borders are reached
+    by several DIFFERENT placement tiles (Ivo's own a/b/c), and a single
+    placement tile can itself offer more than one alternative choice (b1
+    or b2 - two different placements on tile b) - but only ONE of a given
+    placement tile's own alternatives can ever be chosen at once, since
+    they occupy the same placement tile. A flat subset-of-ids enumeration
+    doesn't know this, and would (wrongly) allow e.g. {b1, b2} together.
+
+    tile_choices is a mapping {tile: (choice_1, choice_2, ...)} - one entry
+    per placement tile, its own value the tuple of ids it could contribute
+    (a tile with only one way to reach the target cell has a single-id
+    tuple, like Ivo's own a=(id1,)).
+
+    Returns a set of (members, is_subset_of) pairs ("the sets" - Ivo added
+    "is subset of" the same day, filled in here the same way
+    create_compound_ids already fills it for its own entries), one per way
+    to pick one or more placement TILEs and then exactly one choice from
+    each picked tile: for every subset of tile_choices's own keys of size
+    >= 1, the cross product of those tiles' own choice-tuples, one
+    combination per member of the product. For >=2 tiles this is Ivo's
+    own worked example exactly: tiles {a: (id1,), b: (id2, id3), c: (id4,
+    id5)} produces the same 12 sets Ivo listed by hand ({a,b1}, {a,b2},
+    {b1,c1}, ... {a,b2,c2}).
+
+    The size->=2 floor from the first version of this function is GONE
+    (Ivo, 2026-11-01: "drop the condition 'number of ids in a compound
+    >1'... turn id1, id2 ... the single items into compounds and put them
+    on the list") - a single tile's own single choices now also become
+    their own size-1 candidates (id1, id2, id3, id4, id5 each get their
+    own singleton entry too, on top of the 12 multi-tile ones above). A
+    size-1 candidate still gets a real is_subset_of (every bigger
+    candidate containing it, same <=3 cap as everything else) - it's only
+    the floor on candidate SIZE that's gone, not the is_subset_of rule.
+    create_compound_ids's own floor (size >= 2 of a flat id list, a
+    different function for a different case - point 3 of the downstream
+    plan) is untouched; this change is to generate_compound_candidates
+    only.
+
+    members is a frozenset - itself the candidate's own unique handle, no
+    separate arbitrary compound id needed (unlike create_compound_ids,
+    which needs one because its own entries get referenced BY id
+    elsewhere; nothing here does yet). is_subset_of is the frozenset of
+    every OTHER candidate's own members that is a proper superset of this
+    entry's own members - computed only when len(members) <= 3, same rule
+    and same reasoning as create_compound_ids's own is_subset_of ("only a
+    size-<=3 term could ever substitute into a real board condition"),
+    always the empty frozenset above that.
+
+    Deliberately stops at the sets and is_subset_of - no compound id
+    values assigned yet (unlike create_compound_ids); Ivo's own
+    instruction this round was only "create functions to generate the
+    sets, and to prune them. No use yet." - prune_compound_candidates and
+    prune_blocked_compound_candidates (below) are the companion pruning
+    steps; neither this nor they are wired into anything.
+    """
+    tiles = tuple(tile_choices)
+    all_members = []
+    for size in range(1, len(tiles) + 1):
+        for subset in combinations(tiles, size):
+            for combo in product(*(tile_choices[tile] for tile in subset)):
+                all_members.append(frozenset(combo))
+
+    candidates = set()
+    for members in all_members:
+        if len(members) <= 3:
+            is_subset_of = frozenset(
+                other for other in all_members
+                if other != members and members <= other)
+        else:
+            is_subset_of = frozenset()
+        candidates.add((members, is_subset_of))
+    return candidates
+
+
+def prune_compound_candidates(candidates, forces):
+    """Added 2026-11-01, companion to generate_compound_candidates (same
+    Ivo instruction: "create functions to generate the sets, and to prune
+    them").
+
+    generate_compound_candidates's own cross product doesn't know about
+    forcing relationships BETWEEN different placement tiles' choices - e.g.
+    Ivo's own "id2 (= b1) forces id4 (= c1)": choosing b1 necessarily also
+    means id4 ends up chosen, whether or not tile c's own slot was even
+    included in a given candidate, and REGARDLESS of which of tile c's own
+    alternatives that candidate happened to name. So a candidate naming b1
+    without also naming c1 (whether c is missing entirely, like {a, b1}, or
+    present with the wrong choice, like {b1, c2}) describes something that
+    can't actually happen - it has to be discarded.
+
+    candidates is generate_compound_candidates's own (members, is_subset_of)
+    pairs - this function only ever looks at each pair's own members, never
+    its is_subset_of, and passes a surviving entry through unchanged
+    (is_subset_of still describes that entry's relationship to the full,
+    pre-pruning candidate universe, same as create_compound_ids's own
+    is_subset_of is never pruning-aware either).
+
+    forces is an iterable of (id_a, id_b) pairs, same direction as
+    SquareItem.forces itself (id_a forces id_b - id_b only ever becomes
+    eligible once id_a is chosen). Returns a new set containing only the
+    (members, is_subset_of) pairs from `candidates` where, for every
+    (id_a, id_b) in forces, id_a in members implies id_b in members too.
+
+    Matches Ivo's own worked example exactly: with forces = {(id2, id4)},
+    discards exactly {a, b1} (= {id1, id2}), {b1, c2} (= {id2, id5}), and
+    {a, b1, c2} (= {id1, id2, id5}) out of the 12 candidates above, keeping
+    the other 9 - "it discards {a,b1}, {b1,c2}, and {a,b1,c2}," Ivo's own
+    words.
+    """
+    return {
+        (members, is_subset_of) for members, is_subset_of in candidates
+        if all(id_b in members for id_a, id_b in forces if id_a in members)
+    }
+
+
+def prune_blocked_compound_candidates(candidates, blocked):
+    """Added 2026-11-01, second companion to generate_compound_candidates
+    (Ivo, same day: "check the compound list also against the .blocked
+    list. remove blocking items from the compound list").
+
+    prune_compound_candidates (above) removes candidates contradicted by a
+    FORCING relation. This is the same idea for `.blocked` instead:
+    `.blocked` (cores.CoreItem.update_blocked) is a set of (id1, id2) pairs
+    - unordered, same "stored low-id-first" convention as .conflicts -
+    meaning id1 and id2 can never both be chosen, period, regardless of
+    which placement tiles they came from. A compound candidate is a claim
+    that every one of its own members IS chosen simultaneously, so a
+    candidate naming both halves of a `.blocked` pair describes something
+    that can never actually happen, exactly like a forcing contradiction -
+    it has to be discarded too.
+
+    candidates is generate_compound_candidates's own (members, is_subset_of)
+    pairs (same convention as prune_compound_candidates above) - only
+    members is inspected, is_subset_of passes through unchanged on a
+    surviving entry.
+
+    blocked is an iterable of (id1, id2) pairs (order within a pair doesn't
+    matter - checked both ways). Returns a new set containing only the
+    (members, is_subset_of) pairs from `candidates` whose members contain
+    at most one id from every blocked pair.
+
+    Worked extension of Ivo's own example: with the same 9 candidates
+    prune_compound_candidates already kept (forces = {(id2, id4)}), adding
+    blocked = {(id3, id4)} (b2 and c1 mutually exclusive) discards {b2, c1}
+    (= {id3, id4}) and {a, b2, c1} (= {id1, id3, id4}) too, leaving 7.
+    """
+    return {
+        (members, is_subset_of) for members, is_subset_of in candidates
+        if not any(id1 in members and id2 in members for id1, id2 in blocked)
+    }
+
+
+def get_or_create_compound(compounds, members):
+    """Added 2026-11-01, shared helper for compoundize_forced_by/
+    propagate_compound_links (below). `compounds` is a registry dict
+    `{members_frozenset: compound_id}`, built up incrementally (unlike
+    create_compound_ids/generate_compound_candidates, which both enumerate
+    a whole pool up front) - "if possible" (Ivo, 2026-11-01: "replace ...
+    by compounds if possible") means "if a matching compound already
+    exists in the registry," with this function as the fallback that
+    mints one on first use rather than requiring it pre-built. Same
+    arbitrary-but-unique, tagged convention as create_compound_ids's own
+    compound ids (`("compound", n)`, never colliding with a real (row,
+    col) cell id) - the counter is just `len(compounds)`, safe because
+    entries are only ever added, never removed.
+
+    Returns the existing compound id for `members` if already registered
+    (mutates nothing), otherwise creates, registers, and returns a fresh
+    one.
+    """
+    members = frozenset(members)
+    if members not in compounds:
+        compounds[members] = ("compound", len(compounds))
+    return compounds[members]
+
+
+def compoundize_forced_by(m, realm, compounds=None):
+    """Added 2026-11-01 (Ivo: "now replace all ids, tuple terms and triple
+    terms in .forced_by and .forces in the 3x3 of SquareItems by compounds
+    if possible"). Step 1 of 2 - see propagate_compound_links for step 2.
+
+    For every cell in `realm` (same (( row_start, row_end), (col_start,
+    col_end)) convention as forced_by_on_realm/compute_eligibility), for
+    every term in that cell's own `.forced_by`:
+    - if a compound already exists (in `compounds`, the registry - see
+      get_or_create_compound) whose own members are EXACTLY this term's
+      full id set, the whole term is replaced by that one compound - "if
+      possible" succeeds, collapsing a tuple/triple term straight to a
+      single compound reference in one step.
+    - otherwise ("if possible" fails - no compound for the FULL term
+      exists yet), each individual id in the term is replaced by ITS OWN
+      singleton compound instead (minted on first use, reused on every
+      later occurrence of that same id anywhere in `realm`) - the term's
+      own arity is preserved (a triple of ids becomes a triple of
+      singleton compounds, not collapsed), since there is nothing yet to
+      collapse it to. This is always possible, so a single bare id (a
+      size-1 term, e.g. after collapse_synced_ids's own dedup) always
+      ends up wrapped in its own singleton compound too - "turn id1, id2
+      ... the single items into compounds" (Ivo, same instruction as
+      generate_compound_candidates's own size->=1 change).
+
+    Every compound-tagged entry written here uses PlacementStatus.unknown,
+    uniformly, regardless of what the original real id's own tag said -
+    deliberately NOT carrying over a real id's own placement_status,
+    since a compound is a different entity whose own "chosen" status
+    (are ALL of its members chosen?) is a standing open design question
+    (see TODO.md item 2's own note: "whether a virtual id can itself
+    become a member of some FURTHER condition... Recommend deciding up
+    front") - asserting a borrowed per-id status here would misrepresent
+    that, not yet-decided, fact.
+
+    `.forces` is cleared (`item.forces = set()`), not rebuilt the normal
+    way (bruteforce.update_forces): once every term's ids are replaced by
+    compounds, no REAL id appears as a forcer anywhere in `realm` any
+    more, so a real cell's own `.forces` (keyed by real, array-indexable
+    ids) has nothing left to hold - update_forces's own `m[a].forces = ..`
+    line would in fact raise, since a compound id isn't a valid array
+    index. Where this information actually goes now is the separate
+    `compound_forces` registry propagate_compound_links builds - "a
+    forced_by list for compounds to terminals" (Ivo) lives there, not on
+    any SquareItem.
+
+    Mutates every cell's `.forced_by`/`.forces` in `realm`, in place.
+    `compounds` is also mutated in place (new entries added via
+    get_or_create_compound) and returned, so the same registry can be
+    threaded into propagate_compound_links afterward; pass `None` (the
+    default) to start a fresh one.
+    """
+    if compounds is None:
+        compounds = {}
+    (row_start, row_end), (col_start, col_end) = realm
+    for i in range(row_start, row_end):
+        for j in range(col_start, col_end):
+            item = m[i, j]
+            new_forced_by = set()
+            for term in item.forced_by:
+                ids_in_term = frozenset(id_ for id_, _status in term)
+                if ids_in_term in compounds:
+                    cid = compounds[ids_in_term]
+                    new_forced_by.add(frozenset({(cid, PlacementStatus.unknown)}))
+                else:
+                    new_forced_by.add(frozenset(
+                        (get_or_create_compound(compounds, frozenset({id_})), PlacementStatus.unknown)
+                        for id_ in ids_in_term))
+            item.forced_by = new_forced_by
+            item.forces = set()
+    return compounds
+
+
+def propagate_compound_links(m, realm, compounds):
+    """Added 2026-11-01, step 2 of 2 - see compoundize_forced_by (step 1)
+    for the "replace by compounds if possible" half this continues from.
+    Must be called after compoundize_forced_by has already converted
+    every term in `realm` to compounds (same `m`/`realm`/`compounds` as
+    that call).
+
+    Ivo's own worked illustration (paraphrased): a term (A, B, C) in some
+    cell id6's own `.forced_by`, with A/B/C all compounds (exactly
+    compoundize_forced_by's own "preserve arity" fallback case above) -
+    "find the compound Q that is the union of A, B and C. The such-created
+    new link is only for Q." Then: "a link for A is also a link for any
+    compound id P that A is subset of ... all links for A,B,C that lead to
+    the Q link above are also links for Q" - i.e. Q, being a strict
+    superset of A/B/C's own members, inherits everything each of them
+    forces too, since choosing Q's own members necessarily means A's (and
+    B's, and C's) own members all got chosen along with it.
+
+    Two passes over every cell b in `realm`:
+
+    1. Build compound_forces - the new "forced_by list for compounds to
+       terminals" (Ivo) this function returns - a dict {compound_id: set
+       of real ids}, the compound-side analog of SquareItem.forces, kept
+       in a separate dict rather than on any SquareItem for the same
+       reason compoundize_forced_by clears `.forces` (no array slot for a
+       compound id). For every term in b's own (already-compoundized)
+       `.forced_by`, every compound named in it gets b added to its own
+       compound_forces entry - same "participates in" semantics as the
+       real .forces field (SquareItem.forces's own docstring: B gets
+       added to A's forces whenever A appears in any of B's own .forced_by
+       conditions, not only when A alone, unconditionally, forces B) - so
+       a direct size-1 term {(A, _)} means "A forces id7" outright, while
+       A merely appearing alongside B/C in a size-3 term means "A
+       participates in forcing id6," exactly mirroring the real field's
+       own looser relationship.
+
+    2. For every multi-compound term (A, B, C, ...) found in some cell
+       b's own `.forced_by` (size > 1 - a size<=1 term has nothing to
+       union, already fully handled by pass 1): compute `full_members`,
+       the union of every one of the term's own compounds' own members;
+       `Q = get_or_create_compound(compounds, full_members)` finds Q if
+       some earlier call already created it (for this exact combination,
+       possibly discovered via a totally different cell's own term), or
+       mints it fresh otherwise. Adds b directly to Q's own
+       compound_forces entry ("the such-created new link is only for Q" -
+       not for A, B, or C individually at this new link, though each of
+       them may separately already force other things of their own from
+       pass 1). Also records this new fact back into b's own `.forced_by`
+       itself, as a new size-1 term {(Q, unknown)} - .forced_by and the
+       compound_forces side table are kept as two views of the same fact,
+       same discipline as the real .forced_by/.forces pair.
+
+       Then inherits: for EVERY other compound in the registry (not just
+       A, B, and C - "and others", Ivo's own words) whose own members are
+       a subset of `full_members`, Q's own compound_forces entry absorbs
+       that compound's own compound_forces entry too. This is not capped
+       at <=3 members the way create_compound_ids/generate_compound_
+       candidates's own is_subset_of is - that cap was about whether a
+       SMALL compound bothers recording a pointer up to its own bigger
+       supersets (only relevant once it could actually substitute into a
+       real, <=3-member board condition); this is the reverse query, FROM
+       Q looking down at whatever already exists beneath it, with no such
+       cap.
+
+    Mutates every b's own `.forced_by` in `realm` (adding Q links) and
+    `compounds` (new Q entries) in place. Returns compound_forces.
+    """
+    members_by_compound = {cid: members for members, cid in compounds.items()}
+    (row_start, row_end), (col_start, col_end) = realm
+
+    compound_forces = {}
+    for i in range(row_start, row_end):
+        for j in range(col_start, col_end):
+            b = (i, j)
+            for term in m[b].forced_by:
+                for cid, _status in term:
+                    compound_forces.setdefault(cid, set()).add(b)
+
+    for i in range(row_start, row_end):
+        for j in range(col_start, col_end):
+            b = (i, j)
+            for term in list(m[b].forced_by):
+                if len(term) <= 1:
+                    continue
+                cids = {cid for cid, _status in term}
+                full_members = frozenset().union(*(members_by_compound[cid] for cid in cids))
+                q = get_or_create_compound(compounds, full_members)
+                members_by_compound[q] = full_members
+                compound_forces.setdefault(q, set()).add(b)
+                for other_cid, other_members in members_by_compound.items():
+                    if other_cid != q and other_members <= full_members:
+                        compound_forces[q] |= compound_forces.get(other_cid, set())
+                m[b].forced_by.add(frozenset({(q, PlacementStatus.unknown)}))
+    return compound_forces
 
 
 def compute_eligibility(m, realm):
