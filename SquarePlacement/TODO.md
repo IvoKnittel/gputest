@@ -340,6 +340,38 @@ or whether one pass ever suffices. Traced directly from the code
   "terminates" isn't the same as "terminates in one pass," and that's the
   open part.
 
+## 3a. "Last cell inside" convention (implemented 2026-11-07) - open downstream points
+
+`CoreItem.forced_by`/`.placement_reach` id_out is now the LAST cell INSIDE
+the tile that has a link pointing out (was: the first cell outside), and
+every CoreItem keeps `.exits` = (last_inside, first_outside) links. A
+parent joins child pairs directly (one child's id_out is the next child's
+id_in), takes start points by the realm rule (id_in outside the parent, or
+inside its own reporting child = a candidate), and records a pair when the
+reached cell has an exit link out of the parent. Before this, every chain
+was cut at the first border between two children. Tests:
+`test_upstream_forced_by.py`; pictures: `upstream-forced-by.html` (this
+convention) and `upstream-forced-by-current.html` (what the OLD code
+produced on the same scenario). `update_aliases_down` now also informs the
+sibling an exit link points into; `_consume_aliases_down` records the last
+cell inside.
+
+Still open:
+- **`push_down` home child**: it hands a parent pair to the owner of id_in.
+  A parent pair spanning several children (e.g. candidate in (1,1), last
+  cell in (1,2)) then lands in a child whose own realm doesn't contain
+  id_out, breaking the convention; a pair starting outside the parent has
+  no home at all. Decide: owner of id_in or of id_out.
+- **Dying chains vs `.blocked`**: a chain that enters a sibling and dies
+  there (no exit) forces cells no list mentions except `.exits`; no
+  `update_blocked` level checks those cells against the sibling's
+  candidates.
+- **Consumed facts lose candidate status going up**: `_consume_aliases_down`
+  writes only `.forced_by`, never `.placement_reach`.
+- **Re-running the up pass from base erases the down pass** (base
+  `update_forced_by` is a full recompute) - a second up pass must start one
+  level above the children (see #3).
+
 ## 4. Possible explosion in `create_compound_ids` - reopened, the "capped
    at 3" assumption below no longer holds
 

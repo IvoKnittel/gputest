@@ -517,13 +517,14 @@ def test_update_links_matches_direct_scan_base_and_one_level_up():
     assert len(actual_parent) > 0, "expected at least some links in this swept scenario"
 
 
-def test_forced_by_and_placement_reach_entries_never_point_inside_own_tile():
-    """Every (id_in, id_out) pair recorded by a tile's own .forced_by or
-    .placement_reach has id_out outside that SAME tile's own realm, for
-    every one of the 49 base tiles - confirmed empirically 2026-10-25 (the
-    "entries in the map are all inside the tile they belong to?" exchange):
-    an entry names where reach LANDS, never territory the owning tile
-    claims for itself."""
+def test_forced_by_and_placement_reach_id_out_is_last_cell_inside_own_tile():
+    """"Last cell inside" convention (Ivo, 2026-11-07 - replaces the
+    2026-10-25 rule that id_out is always OUTSIDE the tile): for every one
+    of the 49 base tiles, every (id_in, id_out) pair in .forced_by or
+    .placement_reach has id_out INSIDE that same tile, and id_out has at
+    least one exit link out of the tile recorded in .exits. id_in is either
+    outside the tile or a candidate inside it - never an ordinary cell of
+    the tile itself."""
     n, M = 7, 3
     m, N = build_swept_map(n, M)
 
@@ -537,9 +538,17 @@ def test_forced_by_and_placement_reach_entries_never_point_inside_own_tile():
             core = _base_tile(m, ci, cj, M)
             core.update_forced_by()
             core.update_placement_reach()
-            for _id_in, id_out in core.forced_by | core.placement_reach:
-                if core_of(id_out) == (ci, cj):
-                    violations.append(((ci, cj), id_out))
+            leaves = {a for a, _b in core.exits}
+            for id_in, id_out in core.forced_by | core.placement_reach:
+                if core_of(id_out) != (ci, cj):
+                    violations.append(("id_out outside own tile", (ci, cj), id_out))
+                if id_out not in leaves:
+                    violations.append(("id_out has no exit link", (ci, cj), id_out))
+                if core_of(id_in) == (ci, cj) and m[id_in].placement_status != PlacementStatus.candidate:
+                    violations.append(("id_in inside but not a candidate", (ci, cj), id_in))
+            for a, b in core.exits:
+                if core_of(a) != (ci, cj) or core_of(b) == (ci, cj):
+                    violations.append(("exit link not inside -> outside", (ci, cj), (a, b)))
     assert violations == []
 
 
@@ -846,33 +855,42 @@ def test_aliases_down_applies_the_same_way_one_level_up():
     cleared by the end regardless of which sibling was actually informed
     (consumption's own last step), so it can no longer distinguish
     "informed then cleared" from "never touched" on its own; .forced_by
-    growth is what proves specifically c, not a or b, was the one reached."""
+    growth is what proves specifically c, not a or b, was the one reached.
+
+    Restated 2026-11-07 for the "last cell inside" convention: each pair's
+    id_out is the tile's own last cell, and where its link points is in
+    .exits. b's candidate (5,10) reaches b's last cell (5,17), which links
+    into c at (5,18); c's grandchild continues from (5,17) to its own last
+    cell (5,26), which links out of c at (5,27)."""
     a = CoreItem(elements=None, margin=None, realm=((0, 9), (0, 9)))
     b = CoreItem(elements=None, margin=None, realm=((0, 9), (9, 18)))
     a.placement_reach = set()
     a.forced_by = set()
-    b.placement_reach = {((5, 10), (5, 20))}
-    b.forced_by = {((5, 10), (5, 20))}
+    b.placement_reach = {((5, 10), (5, 17))}
+    b.forced_by = {((5, 10), (5, 17))}
+    b.exits = {((5, 17), (5, 18))}
 
-    # c: a real one-child CoreItem whose own grandchild already knows
-    # (5,20) [the cell b's reach touches c at] forces (5,30), external to
-    # c's own realm (cols 18:27) - so consumption has something concrete to
-    # discover, landing genuinely outside c, not just outside gc.
+    # c: a real one-child CoreItem whose own grandchild already knows the
+    # chain entering from (5,17) reaches its last cell (5,26), which links
+    # out of c's own realm (cols 18:27) - so consumption has something
+    # concrete to discover, leaving genuinely outside c, not just gc.
     gc = CoreItem(elements=None, margin=None, realm=((0, 9), (18, 27)))
-    gc.forced_by = {((5, 20), (5, 30))}
+    gc.forced_by = {((5, 17), (5, 26))}
     gc.placement_reach = set()
+    gc.exits = {((5, 26), (5, 27))}
     c = CoreItem(np.array([[gc]], dtype=object), margin=None, realm=((0, 9), (18, 27)))
     c.placement_reach = set()
     c.forced_by = set()
+    c.exits = {((5, 26), (5, 27))}
 
     parent = CoreItem(np.array([[a, b, c]], dtype=object), margin=None, realm=((0, 9), (0, 27)))
     parent.update_aliases_down()
 
     assert a.aliases_down == set() and a.forced_by == set()
-    assert b.aliases_down == set() and b.forced_by == {((5, 10), (5, 20))}
+    assert b.aliases_down == set() and b.forced_by == {((5, 10), (5, 17))}
     assert c.aliases_down == set()
-    assert c.forced_by == {((5, 10), (5, 30))}, \
-        "expected c's own consumption to relay b's origin through to (5,25)"
+    assert c.forced_by == {((5, 10), (5, 26))}, \
+        "expected c's own consumption to relay b's origin through to its last cell (5,26)"
 
 
 def test_aliases_down_relays_through_a_siblings_own_forced_by():
@@ -900,39 +918,49 @@ def test_aliases_down_relays_through_a_siblings_own_forced_by():
     CoreItems .forced_by and clear the .aliases_down list") has real
     structure to extend through and leaves an observable .forced_by trace -
     .aliases_down alone can no longer prove the relay happened, since it is
-    always cleared by the end regardless."""
+    always cleared by the end regardless.
+
+    Restated 2026-11-07 for the "last cell inside" convention: origin_a's
+    chain ends in 'other' at its last cell (5,9), linking into (0,0) at
+    (5,8); (0,0) carries it from (5,9) to its own last cell (8,5), linking
+    down into (1,0) at (9,5); (1,0)'s grandchild carries it from (8,5) to
+    its last cell (17,2), linking out of (1,0) at (18,2)."""
     other = CoreItem(elements=None, margin=None, realm=((0, 9), (9, 18)))
     c00 = CoreItem(elements=None, margin=None, realm=((0, 9), (0, 9)))
     c11 = CoreItem(elements=None, margin=None, realm=((9, 18), (9, 18)))
 
     origin_a = (5, 15)       # foreign candidate, lives in 'other'
-    b_in_00 = (5, 5)         # touched cell inside (0,0)'s own realm
-    c_in_10 = (12, 5)        # external to (0,0), lands inside (1,0)
-    d_beyond_10 = (20, 2)    # external to (1,0) (realm rows 9:18) - (1,0)'s own further reach from c_in_10
+    last_in_other = (5, 9)   # other's last cell, links into (0,0)
+    b_in_00 = (8, 5)         # (0,0)'s last cell on the chain, links down into (1,0)
+    d_last_10 = (17, 2)      # (1,0)'s last cell on the chain, links out of (1,0) (rows 9:18)
 
-    other.placement_reach = {(origin_a, b_in_00)}
-    other.forced_by = {(origin_a, b_in_00)}
+    other.placement_reach = {(origin_a, last_in_other)}
+    other.forced_by = {(origin_a, last_in_other)}
+    other.exits = {(last_in_other, (5, 8))}
     c00.placement_reach = set()
-    c00.forced_by = {(b_in_00, c_in_10)}
+    c00.forced_by = {(last_in_other, b_in_00)}
+    c00.exits = {(b_in_00, (9, 5))}
     c11.placement_reach = set()
     c11.forced_by = set()
 
     gc10 = CoreItem(elements=None, margin=None, realm=((9, 18), (0, 9)))
-    gc10.forced_by = {(c_in_10, d_beyond_10)}
+    gc10.forced_by = {(b_in_00, d_last_10)}
     gc10.placement_reach = set()
+    gc10.exits = {(d_last_10, (18, 2))}
     c10 = CoreItem(np.array([[gc10]], dtype=object), margin=None, realm=((9, 18), (0, 9)))
     c10.placement_reach = set()
     c10.forced_by = set()
+    c10.exits = {(d_last_10, (18, 2))}
 
     elements = np.array([[other, c00], [c10, c11]], dtype=object)
     parent = CoreItem(elements, margin=None, realm=((0, 18), (0, 18)))
     parent.update_aliases_down()
 
-    assert c00.aliases_down == set() and c00.forced_by == {(b_in_00, c_in_10)}
+    assert c00.aliases_down == set() and c00.forced_by == {(last_in_other, b_in_00)}
     assert c10.aliases_down == set()
-    assert c10.forced_by == {(origin_a, d_beyond_10)}, \
+    assert c10.forced_by == {(origin_a, d_last_10)}, \
         "expected origin_a's reach to relay through (0,0)'s forced_by into (1,0), " \
-        "then through (1,0)'s own consumption to d_beyond_10"
+        "then through (1,0)'s own consumption to its last cell d_last_10"
     assert c11.aliases_down == set() and c11.forced_by == set()
 
 

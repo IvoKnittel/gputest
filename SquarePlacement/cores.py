@@ -105,6 +105,7 @@ class CoreItem:
         self.forces = set()
         self.links = set()
         self.placement_reach = set()
+        self.exits = set()
 
     def update_dependencies(self):
         """Recompute .dependencies from the elements.
@@ -231,11 +232,22 @@ class CoreItem:
     @staticmethod
     def _reach(origin, start_nodes, interior_ids, forward_edges, exit_edges):
         """Breadth-first walk from start_nodes through interior_ids-only
-        waypoints (via forward_edges), recording (origin, out_id) whenever a
+        waypoints (via forward_edges), recording (origin, node) whenever a
         visited node has its own exit_edges entry. Shared base-level BFS
         core for update_forced_by and update_placement_reach - see
         _base_edges's own docstring for what the three edge/lookup
         structures mean.
+
+        "Last cell inside" convention (Ivo, 2026-11-07): id_out is the LAST
+        cell INSIDE the tile that has a link pointing out, not the cell
+        outside it links to. That cell is then exactly the id_in of the
+        neighbouring tile's own pair for the same chain (its forcer from
+        outside), so a parent can join the two pairs directly. Where the
+        link actually points is kept separately, in .exits (see
+        _base_exits). Replaces the earlier "first cell outside" id_out,
+        which never matched the next tile's id_in - see
+        test_upstream_forced_by.py and upstream-forced-by.html /
+        upstream-forced-by-current.html (project root).
         """
         frontier = {node for node in start_nodes if node in interior_ids}
         visited = set()
@@ -246,13 +258,30 @@ class CoreItem:
                 if node in visited:
                     continue
                 visited.add(node)
-                for out_id in exit_edges.get(node, ()):
-                    found.add((origin, out_id))
+                if exit_edges.get(node):
+                    found.add((origin, node))
                 for nxt in forward_edges.get(node, ()):
                     if nxt in interior_ids and nxt not in visited:
                         next_frontier.add(nxt)
             frontier = next_frontier
         return found
+
+    def _base_exits(self, exit_edges):
+        """Base level: .exits is every single link from a cell inside this
+        tile to a cell outside it, as (last_inside, first_outside) pairs -
+        exit_edges flattened. Needed alongside .forced_by under the "last
+        cell inside" convention (see _reach): a pair's id_out is inside the
+        tile, so whether the chain leaves a bigger realm, or continues into
+        a sibling, can only be read off where that cell's own links point.
+        """
+        self.exits = {(cell_id, b) for cell_id, outs in exit_edges.items() for b in outs}
+
+    def _compose_exits(self):
+        """Recursive level: this core's .exits is every child's own exit
+        link whose target is outside THIS core's realm - links between two
+        children are internal here and dropped."""
+        self.exits = {(a, b) for child in self.elements.flat for a, b in child.exits
+                      if not in_realm(b, self.realm)}
 
     def update_forced_by(self):
         """Recompute .forced_by. Redesigned 2026-10-23 (supersedes the
@@ -306,14 +335,29 @@ class CoreItem:
         """
         first = self.elements.flat[0]
         if isinstance(first, CoreItem):
+            # Start points (Ivo, 2026-11-07, "if it is an id_in and belongs
+            # to the tile's realm, it must be a candidate"): every child
+            # id_in outside this realm (a chain entering from outside), plus
+            # every child id_in inside the realm of the child that reported
+            # it (a candidate there). An id_in inside this realm but outside
+            # its reporting child is an ordinary cell of a sibling - a relay
+            # waypoint, not a start - and is dropped here. This replaces the
+            # earlier require_external_origin + "| self.placement_reach"
+            # combination, so update_placement_reach no longer has to run
+            # first.
             child_pairs = set()
+            origins = set()
             for child in self.elements.flat:
                 child_pairs |= child.forced_by
-            external_part = _compose_up(child_pairs, self.realm, require_external_origin=True)
-            self.forced_by = external_part | self.placement_reach
+                for a, _b in child.forced_by:
+                    if not in_realm(a, self.realm) or in_realm(a, child.realm):
+                        origins.add(a)
+            self._compose_exits()
+            self.forced_by = _compose_up(child_pairs, self.exits, origins)
             return
 
         interior_ids, forward_edges, exit_edges, status_of = self._base_edges()
+        self._base_exits(exit_edges)
 
         results = set()
 
@@ -360,13 +404,23 @@ class CoreItem:
         """
         first = self.elements.flat[0]
         if isinstance(first, CoreItem):
+            # Start points: every candidate any child knows of (inside this
+            # realm or not). The walk itself uses every child's .forced_by,
+            # not only .placement_reach - a candidate's chain may continue
+            # through a sibling at an ordinary cell, which only the
+            # sibling's .forced_by records (same widening update_aliases_down
+            # already uses for its own edges).
             child_pairs = set()
+            origins = set()
             for child in self.elements.flat:
-                child_pairs |= child.placement_reach
-            self.placement_reach = _compose_up(child_pairs, self.realm)
+                child_pairs |= child.forced_by
+                origins |= {a for a, _b in child.placement_reach}
+            self._compose_exits()
+            self.placement_reach = _compose_up(child_pairs, self.exits, origins)
             return
 
         interior_ids, forward_edges, exit_edges, status_of = self._base_edges()
+        self._base_exits(exit_edges)
 
         results = set()
         candidate_ids = {cid for cid, status in status_of.items()
@@ -460,9 +514,12 @@ class CoreItem:
 
         origin_pairs = set()
         edge_pairs = set()
+        exits_of = {}
         for child in children:
             origin_pairs |= child.placement_reach
             edge_pairs |= child.forced_by
+            for a, b in child.exits:
+                exits_of.setdefault(a, set()).add(b)
 
         edges = {}
         for a, b in edge_pairs:
@@ -486,11 +543,27 @@ class CoreItem:
                     if node in visited:
                         continue
                     visited.add(node)
+                    # Under the "last cell inside" convention (2026-11-07)
+                    # a visited node is some child's last cell, so the
+                    # sibling the chain ENTERS next is found through that
+                    # cell's exit links, not by where the node itself lies.
+                    # Inform both: the node's own owner (the chain passes
+                    # through it) and every sibling an exit link points
+                    # into (the chain enters it from node).
+                    informed = set()
                     owner = owning_child(node)
                     if owner is not None and owner is not src_child:
+                        informed.add(id(owner))
                         owner.aliases_down.add((origin, node))
+                    for target in exits_of.get(node, ()):
+                        if not in_realm(target, self.realm):
+                            continue
+                        entered = owning_child(target)
+                        if entered is not None and entered is not src_child and id(entered) not in informed:
+                            informed.add(id(entered))
+                            entered.aliases_down.add((origin, node))
                     for nxt in edges.get(node, ()):
-                        if in_realm(nxt, self.realm) and nxt not in visited:
+                        if nxt not in visited:
                             next_frontier.add(nxt)
                 frontier = next_frontier
 
@@ -530,10 +603,14 @@ class CoreItem:
 
         first = self.elements.flat[0]
         if isinstance(first, CoreItem):
+            # "Last cell inside" convention (2026-11-07, see _reach /
+            # _compose_up): record (origin, node) when node has an exit
+            # link out of this realm, not (origin, first cell outside).
             edges = {}
             for child in self.elements.flat:
                 for a, b in child.forced_by:
                     edges.setdefault(a, set()).add(b)
+            leaves = {a for a, _b in self.exits}
             for origin, b in self.aliases_down:
                 frontier = {b}
                 visited = set()
@@ -543,17 +620,22 @@ class CoreItem:
                         if node in visited:
                             continue
                         visited.add(node)
+                        if node in leaves:
+                            self.forced_by.add((origin, node))
                         for nxt in edges.get(node, ()):
-                            if in_realm(nxt, self.realm):
-                                if nxt not in visited:
-                                    next_frontier.add(nxt)
-                            else:
-                                self.forced_by.add((origin, nxt))
+                            if nxt not in visited:
+                                next_frontier.add(nxt)
                     frontier = next_frontier
         else:
             interior_ids, forward_edges, exit_edges, _status_of = self._base_edges()
             for origin, b in self.aliases_down:
-                self.forced_by |= self._reach(origin, {b}, interior_ids, forward_edges, exit_edges)
+                # b is either one of this tile's own cells (the chain passes
+                # through it) or, under the "last cell inside" convention, the
+                # cell just outside that links in (the chain enters here) - in
+                # that case start from the cells it links to, the same way
+                # update_forced_by starts from an external id_in.
+                start = {b} if b in interior_ids else forward_edges.get(b, set())
+                self.forced_by |= self._reach(origin, start, interior_ids, forward_edges, exit_edges)
 
         self.aliases_down = set()
 
@@ -852,58 +934,40 @@ def in_realm(id_, realm):
     return row_start <= row < row_end and col_start <= col < col_end
 
 
-def _compose_up(child_pairs, realm, require_external_origin=False):
-    """Compose a set of children's own (id_in, id_out) pairs (same shape as
-    CoreItem.forced_by/.placement_reach) into the bigger realm's own
-    version of the same field - shared by both fields' recursive
-    (elements-are-CoreItem) branch (added 2026-10-25, "follow the hierarchy
-    up").
+def _compose_up(child_pairs, exits, origins):
+    """Compose children's (id_in, id_out) pairs (same shape as
+    CoreItem.forced_by/.placement_reach) into the bigger realm's own version
+    of the same field - shared by both fields' recursive
+    (elements-are-CoreItem) branch.
 
-    child_pairs, unioned across all of this core's own children, already
-    describes a directed graph: id_in reaches id_out in one step. An id that
-    was external to one specific child can now be internal to this bigger
-    realm (it belongs to a sibling child) - in that case the chain
-    continues through it (using whatever further pairs THAT id has, from
-    whichever child(ren) established them) rather than stopping there,
-    since a sibling's own pairs already capture every entry-to-exit path
-    through its own interior exhaustively (recomputing that internal detail
-    here would be redundant, not more correct).
+    Rewritten 2026-11-07 for the "last cell inside" convention (see
+    CoreItem._reach): a child's id_out is its own last cell, and that same
+    cell is the id_in of the neighbouring child's pair for the same chain.
+    So child_pairs, unioned across all children, chains directly: a -> b
+    in one child, b -> c in the next. The earlier version (id_out = first
+    cell outside) never found a continuation, because the next child's
+    pair started one cell earlier - every chain was cut at the first border
+    between two children (test_three_tile_straight_chain_joins_across_
+    child_borders).
 
-    require_external_origin controls which ids from child_pairs are walked
-    again as origins here - a correction (2026-10-25, same day) to this
-    function's own first version, which treated every id that was EVER an
-    origin for ANY child as unconditionally still an origin here. That is
-    right for a confirmed-candidate origin (candidate status never changes
-    with realm size - see update_placement_reach, which is NOT affected by
-    this parameter and always wants the unconditional behaviour, the
-    default False), but wrong for a plain external-entry origin: a
-    non-candidate id that was merely external to one small child can become
-    interior to this bigger realm (it belongs to a sibling child now folded
-    in) - at that point it is not a placement decision and not external to
-    anything anymore, so it should stop being tracked as a source, not keep
-    being one just because some smaller child once saw it that way. Caught
-    by cross-checking a composed multi-level .forced_by against a single
-    CoreItem built directly over the same bigger realm - the unconditional
-    version produced extra, spurious pairs the direct computation did not
-    (see squareplacement_superlattice_refactor memory note, 2026-10-25
-    entry, for the worked example). With require_external_origin=True,
-    origins are re-filtered to exactly the ids NOT in_realm(this realm);
-    CoreItem.update_forced_by then unions in self.placement_reach itself to
-    recover the candidate-origin half, rather than this function trying to
-    rediscover candidate status (which it has no way to check) on its own.
+    exits: THIS core's own .exits - (last_inside, first_outside) links
+    whose target is outside this realm (see CoreItem._compose_exits).
+    origins: the ids to start from; the caller decides (update_forced_by:
+    outside the realm, or a candidate inside its own child;
+    update_placement_reach: candidates).
 
-    Every surviving origin is walked breadth-first through in_realm(this
-    realm) waypoints, recording (origin, out_id) for every out_id reached
-    that is NOT in_realm(this realm).
+    Each origin is walked breadth-first along child_pairs; whenever a
+    visited node has an exit link out of this realm, (origin, node) is
+    recorded - node is then this core's own last cell inside, the parent-
+    level id_out. A node whose links only point into a sibling continues
+    via that sibling's pairs starting at it; if the sibling has none (the
+    chain died inside it), the walk ends there and nothing is recorded.
     """
     edges = {}
     for a, b in child_pairs:
         edges.setdefault(a, set()).add(b)
+    leaves = {a for a, _b in exits}
 
-    if require_external_origin:
-        origins = {a for a, _b in child_pairs if not in_realm(a, realm)}
-    else:
-        origins = {a for a, _b in child_pairs}
     results = set()
     for origin in origins:
         frontier = {origin}
@@ -914,11 +978,10 @@ def _compose_up(child_pairs, realm, require_external_origin=False):
                 if node in visited:
                     continue
                 visited.add(node)
+                if node in leaves:
+                    results.add((origin, node))
                 for nxt in edges.get(node, ()):
-                    if in_realm(nxt, realm):
-                        if nxt not in visited:
-                            next_frontier.add(nxt)
-                    else:
-                        results.add((origin, nxt))
+                    if nxt not in visited:
+                        next_frontier.add(nxt)
             frontier = next_frontier
     return results
