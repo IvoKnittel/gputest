@@ -312,7 +312,7 @@ def unblock_path(m, id_):
     machinery instead of .path_id/.forces1.
 
     id_ is expected to already be a confirmed self-blocking candidate - see
-    cores.CoreItem.update_blocked's own docstring: id_'s own forcing chain
+    the former cores.CoreItem.update_blocked (removed 2026-11-07): id_'s own forcing chain
     reaches a diagonal neighbour of itself, a genuine contradiction, so id_
     could never validly have been chosen in the first place. This function
     does not itself check that (callers are expected to have found id_ via
@@ -321,9 +321,8 @@ def unblock_path(m, id_):
 
     Mutates id_'s own .state (free -> blocked) and, via compute_conditions,
     every cell's own .forced_by/.forces map-wide - NOT any CoreItem's own
-    .forced_by/.placement_reach/.blocked, which are each their own,
-    separate, explicit recompute (update_forced_by/update_placement_reach/
-    update_blocked) a caller runs afterward over whichever tile(s) the
+    .forced_by/.blocked, which are each their own, separate, explicit
+    recompute (update_links) a caller runs afterward over whichever tile(s) the
     change actually reaches, same as after any other board mutation.
     """
     m[id_].state = StateEnum.blocked
@@ -336,7 +335,7 @@ def collapse_synced_ids(m, id0, synced_ids):
     additional links"). Covers points 1 and 2 of Ivo's own downstream
     planning note (see squareplacement_superlattice_refactor memory note,
     2026-10-31): id0's own forcing chain forces every id in synced_ids
-    (id1, id2, ... - discovered via CoreItem.update_blocked's own
+    (id1, id2, ... - discovered via the former CoreItem.update_blocked's own
     transitive rule, 2026-10-29, which already finds the id0/id1/id2
     triple this acts on). Two cases share this one mechanism:
 
@@ -381,8 +380,8 @@ def collapse_synced_ids(m, id0, synced_ids):
 
     Deliberately does NOT recompute the CoreItem pyramid (Ivo, same day:
     "Don't recompute the tile yet") - callers remain responsible for
-    recomputing CoreItem.forced_by/.blocked (and .placement_reach/
-    .aliases_down as relevant) on whichever tiles the change reaches, same
+    recomputing CoreItem.forced_by/.blocked (and update_aliases_down as
+    relevant) on whichever tiles the change reaches, same
     discipline unblock_path already established; this function does not do
     that itself, same as unblock_path doesn't either.
     """
@@ -602,7 +601,7 @@ def prune_blocked_compound_candidates(candidates, blocked):
 
     prune_compound_candidates (above) removes candidates contradicted by a
     FORCING relation. This is the same idea for `.blocked` instead:
-    `.blocked` (cores.CoreItem.update_blocked) is a set of (id1, id2) pairs
+    `.blocked` (the former cores.CoreItem.update_blocked, removed 2026-11-07) is a set of (id1, id2) pairs
     - unordered, same "stored low-id-first" convention as .conflicts -
     meaning id1 and id2 can never both be chosen, period, regardless of
     which placement tiles they came from. A compound candidate is a claim
@@ -832,7 +831,7 @@ def compute_eligibility(m, realm):
     may still name an inside cell rather than what makes that cell eligible.
 
     This replaces the earlier, geometric in_realm-only carry-up rule used in
-    cores.CoreItem.update_dependencies (see squareplacement_superlattice_
+    the former cores.CoreItem.update_dependencies, removed 2026-11-07 (see squareplacement_superlattice_
     refactor memory note - that rule was wrong): a condition fully inside
     realm is not automatically trustworthy just because every member happens
     to be geographically inside - each of those members can itself only

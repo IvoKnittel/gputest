@@ -342,6 +342,37 @@ or whether one pass ever suffices. Traced directly from the code
 
 ## 3a. "Last cell inside" convention (implemented 2026-11-07) - open downstream points
 
+**Restructured 2026-11-07** (Ivo: "Create a class Pyramid, with classes
+Upstream, Downstream as members ... a class Base ... Base also contains the
+map"): `CoreItem` is data only. `Base` (holds the map) has everything on
+SquareItems - `tile`/`tiles`, `edges`, `reach`, and the base halves
+`update_links` / `consume_aliases_down`; `Upstream` has `update_links` for
+CoreItem children, `compose_up`, `build()` (the whole up pass);
+`Downstream` has `update_aliases_down(core, level)`,
+`consume_aliases_down`, `push_down`; `Pyramid` owns one of each and the
+shared static helpers (`in_realm`, `is_candidate`, `set_placement_tiles`,
+`owning_child`, `child_exits`, `candidate_links`, `fold_into`). Former
+CoreItem method names below refer to these.
+
+**Flow (Ivo, 2026-11-07)** - `Pyramid.onepass()`:
+`base.generate_core_items()` (base level, links computed) ->
+`upstream.build(base_items)` (hierarchy kept as `upstream.pyramid`, base
+first, top last) -> `downstream.run(upstream.pyramid)` (top to level 1,
+per core `update_aliases_down(core, level, inherited)`) -> `base.map_onepass` =
+the updated base level (same array as `upstream.pyramid[0]`). Running
+`inherited` is the inbox the core's parent filled for it, kept by `run` as a
+local variable from level to level.
+
+**Renamed 2026-11-07:** `CoreItem.forced_by` is now `CoreItem.links`
+(`update_forced_by` -> `update_links`), holding `(id_in, id_out, id_exit)`
+triples - the exit link is the third item, so the separate `.exits` field
+is gone; a dying in is `(id_in, DUMMY, DUMMY)`. The old `CoreItem.links`
+(direct links from size-1 conditions) and `CoreItem.forces` were removed;
+`candidate_pairs()` is now `candidate_links()`. Also removed the same day:
+`.dependencies`, `.blocked`, `.conflicts` (see "Blocking - postponed"
+below). Older items in this file still use the old names. `SquareItem.forced_by` (per-cell conditions) is
+unchanged.
+
 `CoreItem.forced_by`/`.placement_reach` id_out is now the LAST cell INSIDE
 the tile that has a link pointing out (was: the first cell outside), and
 every CoreItem keeps `.exits` = (last_inside, first_outside) links. A
@@ -356,18 +387,43 @@ produced on the same scenario). `update_aliases_down` now also informs the
 sibling an exit link points into; `_consume_aliases_down` records the last
 cell inside.
 
+**Ins that die inside a tile (2026-11-07, Ivo: "a clear bug in the
+upstream")**: a start whose chain forces a cell inside the tile but reaches
+no exit is now kept as `(id_in, cores.DUMMY)` - at base level, in
+`_compose_up` at every level above, and in `_consume_aliases_down`. Before,
+it was dropped, and could never be connected further up (identified with a
+candidate shared with another path, it can form new links through n-ary
+conditions back at base level). On the swept maps 30-73% of parent pairs
+are such dummies. A start with at least one exit gets no DUMMY, even if
+another of its branches dies (C's (4,4) in the scenario) - decided by Ivo,
+2026-11-07: "partly dying starts get no dummy".
+
 Still open:
-- **`push_down` home child**: it hands a parent pair to the owner of id_in.
-  A parent pair spanning several children (e.g. candidate in (1,1), last
-  cell in (1,2)) then lands in a child whose own realm doesn't contain
-  id_out, breaking the convention; a pair starting outside the parent has
-  no home at all. Decide: owner of id_in or of id_out.
-- **Dying chains vs `.blocked`**: a chain that enters a sibling and dies
-  there (no exit) forces cells no list mentions except `.exits`; no
-  `update_blocked` level checks those cells against the sibling's
-  candidates.
-- **Consumed facts lose candidate status going up**: `_consume_aliases_down`
-  writes only `.forced_by`, never `.placement_reach`.
+- **How to process DUMMY** (Ivo: "we then have to work out how to process
+  dummy"). Nothing reads it yet beyond carrying it up.
+- ~~`push_down` home child~~ - resolved 2026-11-07 (Ivo: "all candidates
+  must be copied down, including those outside P, like Z"): `push_down` no
+  longer copies the core's own triples to a child. It walks every
+  `(candidate, cell)` the core received from its parent along the
+  children's triples and tells every child the chain enters or passes
+  through; each child derives its own triples for the candidate in the
+  consume step. Test:
+  `test_push_down_copies_an_outside_candidate_into_every_child_its_chain_touches`;
+  picture: `downstream-z.html` (project root).
+- **Blocking - postponed ("entirely for another day", Ivo, 2026-11-07)**:
+  `CoreItem.dependencies`, `.blocked`, `.conflicts` and their update_*
+  methods were removed for simplicity, with the 6 tests that only checked
+  `update_blocked` (`bruteforce.unblock_path` itself is kept, now without a
+  test). Points to remember for that day: a chain that enters a sibling
+  and dies there forces cells no CoreItem list names (only its
+  `(id_in, DUMMY, DUMMY)` survives); and between CoreItem children there
+  is no way to tell whether they block each other.
+- ~~Consumed facts lose candidate status going up~~ - resolved 2026-11-07:
+  `.placement_reach` was removed. A candidate is whatever
+  `cores.Pyramid.is_candidate` says (global placement-tile layout, every cell of a
+  placement tile); `CoreItem.candidate_pairs()` is the candidate-started
+  part of `.forced_by`, computed on demand, so pairs added on the way down
+  count too.
 - **Re-running the up pass from base erases the down pass** (base
   `update_forced_by` is a full recompute) - a second up pass must start one
   level above the children (see #3).

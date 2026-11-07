@@ -8,7 +8,7 @@ condition once some cell becomes chosen or blocked - see conditions.py), so
 every condition is still a full triple everywhere. The question this asks is
 how the *boundary-crossing* conditions of one realm - the ones a CoreItem
 would have to carry up because at least one triple member reaches outside it,
-see cores.py's in_realm/CoreItem.update_dependencies - behave as that realm
+see cores.py's in_realm/the former CoreItem.update_dependencies - behave as that realm
 grows.
 
 The realm sizes (3, 9, 27, 81) follow cores.py's own pyramid exactly - each
@@ -44,7 +44,7 @@ def boundary_crossing(m, realm):
     condition (one of cell's own .forced_by triples) has at least one member
     outside realm - i.e. exactly what a CoreItem covering realm would still
     have to carry upward, since bruteforce.compute_conditions/
-    cores.CoreItem.update_dependencies both only ever drop a pair/condition
+    the former cores.CoreItem.update_dependencies both only ever drop a pair/condition
     once every member lies inside one realm.
     """
     (r0, r1), (c0, c1) = realm
