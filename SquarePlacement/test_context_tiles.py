@@ -14,7 +14,7 @@ from conditions import initial_map, forced_by_on_realm
 from closure import place_square
 from bruteforce import (compute_conditions, retag_forced_by, prune_same_core_candidates,
                          unblock_path, collapse_synced_ids)
-from cores import CoreItem, Pyramid, Base, Upstream, Downstream, DUMMY
+from cores import CoreItem, DeviceMemory, Pyramid, Base, Upstream, Downstream, DUMMY
 from map_of_squares import StateEnum, PlacementStatus, SquareItem
 
 
@@ -627,8 +627,7 @@ def test_build_upstream_every_level_matches_direct_computation():
     at the edge."""
     n, M = 7, 3
     m, N = build_swept_map(n, M)
-    pyramid = Pyramid(m, M)
-    levels = pyramid.upstream.build(pyramid.base.generate_core_items())
+    levels = Pyramid.upward(DeviceMemory(m, M))
     assert [lv.shape for lv in levels] == [(7, 7), (3, 3), (1, 1)]
     assert levels[1][2, 2].elements.shape == (1, 1)
     assert levels[-1][0, 0].realm == ((0, N), (0, N))
@@ -638,6 +637,56 @@ def test_build_upstream_every_level_matches_direct_computation():
             direct = CoreItem(m[r0:r1, c0:c1], margin=None, realm=core.realm)
             Base.update_links(direct)
             assert core.links == direct.links, core.realm
+
+
+def _state_only_copy(m):
+    """What the CPU main hands to the device (2026-11-08): a fresh map of
+    SquareItems with nothing set but .state, copied from m."""
+    fresh = np.empty(m.shape, dtype=object)
+    for idx in np.ndindex(m.shape):
+        fresh[idx] = SquareItem()
+        fresh[idx].state = m[idx].state
+    return fresh
+
+
+def test_init_map_from_state_matches_cpu_preprocessing():
+    """Base.init_map (2026-11-08, "move all map preprocessing to Base"):
+    from a map with only .state set, plus the placement-tile layout, it
+    derives exactly the .forced_by, .forces and .placement_status the
+    CPU-side preprocessing of build_swept_map produced (initial_map,
+    mark_placement_cores, retag_forced_by, compute_conditions after every
+    placement phase, prune_same_core_candidates) - on every cell. One
+    reduction with the final states is enough, since states only ever go
+    free -> chosen / blocked."""
+    n, M = 7, 3
+    m, N = build_swept_map(n, M)          # also sets the placement-tile layout
+    mem = DeviceMemory(_state_only_copy(m), M)
+    Base.init_map(mem)
+    for idx in np.ndindex(m.shape):
+        cell, ref = mem.map[idx], m[idx]
+        assert cell.state == ref.state, idx
+        assert cell.forced_by == ref.forced_by, idx
+        assert cell.forces == ref.forces, idx
+        assert cell.placement_status == ref.placement_status, idx
+
+
+def test_onepass_from_state_only_matches_preprocessed_map():
+    """The CPU main end to end (Pyramid.onepass, 2026-11-08): a map with only
+    .state set goes into DeviceMemory, Base.init_map derives the conditions,
+    then the up and down passes run. Its .map_after has, tile by tile,
+    exactly the .links of the same passes run on the CPU-preprocessed map."""
+    n, M = 7, 3
+    m, N = build_swept_map(n, M)
+    ref = DeviceMemory(m, M)
+    Pyramid.upward(ref)
+    Pyramid.downward(ref)
+
+    mem = DeviceMemory(_state_only_copy(m), M)
+    after = Pyramid.onepass(mem)
+    assert after is mem.map_after and after.shape == (n, n)
+    assert [lv.shape for lv in mem.pyramid] == [lv.shape for lv in ref.pyramid]
+    for idx in np.ndindex(after.shape):
+        assert after[idx].links == ref.map_after[idx].links, idx
 
 
 def test_nary_conditions_cannot_resolve_in_a_single_placement_round():

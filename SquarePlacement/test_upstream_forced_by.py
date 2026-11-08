@@ -33,7 +33,7 @@ origin 1.
 """
 import numpy as np
 from bruteforce import update_forces
-from cores import CoreItem, Pyramid, Base, Upstream, Downstream, DUMMY
+from cores import CoreItem, DeviceMemory, Pyramid, Base, Upstream, Downstream, DUMMY
 from map_of_squares import SquareItem, PlacementStatus
 
 
@@ -218,15 +218,16 @@ def test_parent_joins_matching_child_pairs_and_drops_the_rest():
 
 
 def test_build_upstream_reproduces_the_drawing():
-    """Upstream.build (the up pass over the whole board, 2026-11-07)
-    on the drawing's map: tiles start at array index 1 (the drawing's cell
-    0, see `at`), so the 11x11 map holds exactly P's 3x3 child tiles and
-    the pyramid is two levels - the 9 children, then P itself. Both levels
-    match the expected lists of the tests above."""
+    """The up half of the CPU main (Pyramid.upward, 2026-11-08) on the
+    drawing's map: Base.build_level0 writes DeviceMemory.pyramid[0],
+    Upstream.build_level writes .pyramid[1]. Tiles start at array index 1
+    (the drawing's cell 0, see `at`), so the 11x11 map holds exactly P's 3x3
+    child tiles and the pyramid is two levels - the 9 children, then P
+    itself. Both levels match the expected lists of the tests above."""
     m = build_map((11, 11), CHAINS)
-    pyramid = Pyramid(m, 3, origin=GRID_ORIGIN)
-    levels = pyramid.upstream.build(pyramid.base.generate_core_items())
-    assert pyramid.upstream.pyramid is levels
+    mem = DeviceMemory(m, 3, origin=GRID_ORIGIN)
+    levels = Pyramid.upward(mem)
+    assert levels is mem.pyramid
     assert [lv.shape for lv in levels] == [(3, 3), (1, 1)]
     assert {(i, j): levels[0][i, j].links for i in range(3) for j in range(3)} == EXPECTED_CHILD_LINKS
     top = levels[1][0, 0]
@@ -235,11 +236,35 @@ def test_build_upstream_reproduces_the_drawing():
     assert top.links == EXPECTED_PARENT_LINKS
 
 
-def test_onepass_writes_the_updated_base_level_back_to_base():
-    """Pyramid.onepass (2026-11-07): Base generates the base-level
-    CoreItems, Upstream builds .pyramid up to the top, Downstream runs from
-    the top down and writes the updated base level back to
-    Base.map_onepass - the same array as Upstream.pyramid[0], updated in
+def test_each_step_reads_one_level_and_writes_the_next():
+    """The steps one by one (2026-11-08, Ivo: "each step uses only data from
+    one level"): Base.build_level0 turns mem.map into mem.pyramid[0];
+    Upstream.build_level(mem, 1) turns mem.pyramid[0] into mem.pyramid[1];
+    Downstream.down_level(mem, 1) reads mem.pyramid[1] and mem.inbox[1],
+    and writes mem.inbox[0] and mem.map_after."""
+    m = build_map((11, 11), CHAINS)
+    mem = DeviceMemory(m, 3, origin=GRID_ORIGIN)
+    assert mem.pyramid == [] and mem.map_after is None
+
+    base = Base.build_level0(mem)
+    assert mem.pyramid == [base] and base.shape == (3, 3)
+    top = Upstream.build_level(mem, 1)
+    assert len(mem.pyramid) == 2 and mem.pyramid[1] is top and top.shape == (1, 1)
+    assert all(top[0, 0].elements[idx] is base[idx] for idx in np.ndindex(3, 3))
+
+    mem.inbox = [None, Pyramid.empty_inbox((1, 1))]
+    Downstream.down_level(mem, 1)
+    assert mem.map_after is mem.pyramid[0]
+    assert mem.inbox[0].shape == (3, 3)
+    assert mem.inbox[0][1, 2] == {(at(4, 4), at(4, 5)), (at(4, 4), at(4, 8)),
+                                  (at(4, 5), at(4, 5)), (at(4, 5), at(4, 8))}
+
+
+def test_onepass_writes_the_updated_base_level_to_map_after():
+    """The CPU main without its init step (Pyramid.upward + downward,
+    2026-11-08): Base builds DeviceMemory.pyramid[0] from .map, Upstream builds the levels above up
+    to the top, Downstream runs from the top down and leaves the updated
+    base level in .map_after - the same array as .pyramid[0], updated in
     place.
 
     On the drawing (P is the top, so it receives nothing from above), every
@@ -250,12 +275,14 @@ def test_onepass_writes_the_updated_base_level_back_to_base():
     Nothing else - in particular (1,1) no longer receives copies of P's own
     triples (the push_down of before 2026-11-07, see push_down)."""
     m = build_map((11, 11), CHAINS)
-    pyramid = Pyramid(m, 3, origin=GRID_ORIGIN)
-    onepass = pyramid.onepass()
+    mem = DeviceMemory(m, 3, origin=GRID_ORIGIN)
+    # the drawing's conditions are hand-built, not derived from .state, so
+    # this skips onepass's first step (Base.init_map)
+    Pyramid.upward(mem)
+    after = Pyramid.downward(mem)
 
-    assert onepass is pyramid.base.map_onepass
-    assert onepass is pyramid.upstream.pyramid[0]
-    assert pyramid.downstream.pyramid is pyramid.upstream.pyramid
+    assert after is mem.map_after
+    assert after is mem.pyramid[0]
 
     gained = {
         (0, 1): links(((4, 4), D, D)),
@@ -263,7 +290,7 @@ def test_onepass_writes_the_updated_base_level_back_to_base():
     }
     for i in range(3):
         for j in range(3):
-            assert onepass[i, j].links == EXPECTED_CHILD_LINKS[i, j] | gained.get((i, j), set()), (i, j)
+            assert after[i, j].links == EXPECTED_CHILD_LINKS[i, j] | gained.get((i, j), set()), (i, j)
 
 
 Z_DRAWN = (-1, -1)  # Z's cell in drawing coordinates (outside P)
@@ -286,18 +313,22 @@ def test_push_down_copies_an_outside_candidate_into_every_child_its_chain_touche
     """The Z case (Ivo, 2026-11-07: "all candidates must be copied down,
     including those outside P, like Z"): P's own parent told P that
     candidate Z, outside P, reaches the cells where chains A, E and F enter
-    P - (Z, (1,-1)), (Z, (-1,5)), (Z, (2,-1)). P's down step
-    (update_aliases_down with these as `inherited`; push_down walks them)
+    P - (Z, (1,-1)), (Z, (-1,5)), (Z, (2,-1)), in DeviceMemory.inbox[1].
+    P's down step (Downstream.down_level(mem, 1); push_down walks them)
     delivers Z to every child those chains enter or pass through, and each
     child derives its own triples for Z: its last cell and exit, as for any
     start. downstream-z.html (project root) shows the same."""
     m = build_map((11, 11), CHAINS)
-    pyramid = Pyramid(m, 3, origin=GRID_ORIGIN)
-    levels = pyramid.upstream.build(pyramid.base.generate_core_items())
-    P = levels[1][0, 0]
+    mem = DeviceMemory(m, 3, origin=GRID_ORIGIN)
+    levels = Pyramid.upward(mem)
+    # what P's own parent's down step would have left for P (P is the top
+    # here, so the test puts it into P's inbox by hand)
+    mem.inbox = [None, Pyramid.empty_inbox((1, 1))]
+    mem.inbox[1][0, 0] = set(Z_INHERITED)
 
-    inbox = Downstream.update_aliases_down(P, 1, Z_INHERITED)
+    inbox = Downstream.down_level(mem, 1)
 
+    assert inbox is mem.inbox[0]
     z_told = {idx: {cell for origin, cell in inbox[idx] if origin == Z} for idx in np.ndindex(3, 3)}
     assert z_told == {
         (0, 0): {at(1, -1), at(1, 2), at(2, -1), at(2, 2)},

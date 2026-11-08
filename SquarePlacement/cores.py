@@ -4,40 +4,51 @@ motivating it).
 
 A patch id is a cell's own (row, col) index in the base lattice.
 
-Structure (2026-11-07, Ivo: "Create a class Pyramid, with classes Upstream,
-Downstream as members ... Create a class Base and make all functions
-processing SquareItems its members. Base also contains the map as a
-member."):
+Structure (2026-11-08, Ivo: "rewrite the new class structure towards later
+CPU / GPU implementation ... move the map, the map_after and the .pyramid
+list out of the classes ... to a new class DeviceMemory. The "main" of the
+algo would be on CPU. Base, Upstream and Downstream function will later
+become kernel calls ... each step uses only data from one level"):
 
-- CoreItem: one node of the pyramid, data only - a 3x3 array of elements
+- DeviceMemory: all data between steps - .map (the cells), .pyramid (a list
+  of object arrays of CoreItems, index = level, 0 = base tiles), .inbox
+  (the down pass's messages, laid out like .pyramid), .map_after (the base
+  level after the down pass), and the tiling constants tile_size, origin.
+- CoreItem: one node of the pyramid, data only - an array of elements
   (SquareItem for a base tile, CoreItems above that), a margin of read-only
   references around them, the rectangular realm ((row_start, row_end),
   (col_start, col_end)) of base-lattice ids it owns, and .links.
-- Base: holds the map (.map) and everything that works on SquareItems -
-  generating the base-level CoreItems (generate_core_items), reading their
-  single links, and the base-level halves of the up and down steps. After
-  a down pass it also holds .map_onepass, the updated base level.
-- Upstream: the up step for a CoreItem whose children are CoreItems, and
-  build(base_items), the whole up pass; holds the hierarchy as .pyramid.
-- Downstream: the down step for a CoreItem whose children are CoreItems
-  (update_aliases_down, the CoreItem half of the consume step, push_down),
-  and run(pyramid), the whole down pass.
-- Pyramid: owns one of each (.base, .upstream, .downstream), runs them in
-  order (onepass), and holds the functions both directions share.
+- Base, Upstream, Downstream: no state of their own. Each has steps that
+  read one level from DeviceMemory and write the next level there (kernel
+  calls later), plus the per-item functions the steps apply (a kernel's
+  per-item work):
+    Base.init_map(mem)            .map (.state)   -> .map (conditions)
+    Base.build_level0(mem)        .map            -> .pyramid[0]
+    Upstream.build_level(mem, k)  .pyramid[k-1]   -> .pyramid[k]
+    Downstream.down_level(mem, k) .pyramid[k], .inbox[k]
+                                  -> .pyramid[k-1] (.links updated), .inbox[k-1]
+                                     (and .map_after when k == 1)
+- Pyramid: the CPU main (onepass), which only sequences those steps, and
+  the functions the steps share (static).
 
-Flow (Ivo, 2026-11-07: "Base initializes the map and generates CoreItems
-from SquareItems. The result is fed into Upstream. Upstream also holds the
-CoreItem hierarchy as a list .pyramid. Reaching the top, .pyramid is given
-to Downstream. After updating the lowest CoreItem level Downstream writes
-the lowest-level array back to Base into .map_onepass"):
+Flow (Pyramid.onepass; Ivo, 2026-11-08: "The main (CPU) sets only
+map.state and moves map to DeviceMemory (of GPU). Then Base calls some init
+function setting .condition etc (kernel call). Then main calls another Base
+function converting .map to .pyramid[0] (next kernel call) Then Upstream
+functions are called by main etc. until map_after is done"):
 
-    base_items = base.generate_core_items()   # level 0, .links computed
-    upstream.build(base_items)                # upstream.pyramid, base .. top
-    downstream.run(upstream.pyramid)          # top .. base; sets base.map_onepass
+    mem = DeviceMemory(map_with_only_state, tile_size, origin)   # CPU
+    Base.init_map(mem)             # .state -> .forced_by, .forces, .placement_status
+    Base.build_level0(mem)         # .map -> .pyramid[0]
+    Upstream.build_level(mem, k)   # .pyramid[k-1] -> .pyramid[k], k = 1, 2, ... to the top
+    Downstream.down_level(mem, k)  # k = top .. 1; k == 1 writes .map_after
+
+All map preprocessing happens in Base.init_map; the CPU sets nothing but
+.state (and the global placement-tile layout, a constant).
 
 Functions that used to branch on "elements are SquareItem / CoreItem" are
-now two functions, one in Base and one in Upstream/Downstream; the caller
-picks by level (level 0 = base tiles).
+two functions, one in Base and one in Upstream/Downstream; the caller picks
+by level (level 0 = base tiles).
 
 .links (named .forced_by until 2026-11-07; .forced also exists but is
 still unused): a set of (id_in, id_out, id_exit) triples - a chain of
@@ -110,29 +121,85 @@ class CoreItem:
         self.links = set()
 
 
-class Pyramid:
-    """The whole pyramid over one map: .base (Base, holding the map),
-    .upstream (Upstream, holding the hierarchy as .pyramid after build),
-    .downstream (Downstream). Also holds the functions both directions
-    share, as static methods.
+class DeviceMemory:
+    """All data the steps read and write (2026-11-08) - what later lives in
+    GPU memory, while the CPU main (Pyramid.onepass) only sequences steps.
 
-    map_: the map (object array of SquareItem); may be None for pyramids
-    built by hand from synthetic CoreItems that never touch the map.
-    tile_size, origin: base tiles are tile_size x tile_size, starting at
-    row/col `origin`.
+    .map: the cells (object array of SquareItem), put here by the CPU. For
+      now with their conditions (.forced_by, .forces) already computed -
+      see the module docstring.
+    .tile_size, .origin: base tiles are tile_size x tile_size cells of .map,
+      starting at row/col origin (constants for the Base step).
+    .pyramid: list of object arrays of CoreItems, index = level - [0] the
+      base tiles (Base.build_level0), [k] the parents of [k-1]
+      (Upstream.build_level), the last one 1x1 (the top).
+    .inbox: list laid out like .pyramid - .inbox[k][i, j] is the set of
+      (candidate, cell) messages the down step of CoreItem
+      .pyramid[k][i, j]'s parent left for it (empty for the top). Written
+      by Downstream.down_level(mem, k+1), read by down_level(mem, k). Was
+      a local variable carried between levels before 2026-11-08; between
+      two separate steps it has to live here.
+    .map_after: the base level after the down pass - the same array as
+      .pyramid[0], its CoreItems' .links holding the up-pass triples plus
+      everything the down pass added (None until Downstream reaches level
+      1; was Base.map_onepass).
     """
     def __init__(self, map_, tile_size=3, origin=0):
-        self.base = Base(map_, tile_size, origin)
-        self.upstream = Upstream(self)
-        self.downstream = Downstream(self)
+        self.map = map_
+        self.tile_size = tile_size
+        self.origin = origin
+        self.pyramid = []
+        self.inbox = []
+        self.map_after = None
 
-    def onepass(self):
-        """One up pass and one down pass over the whole map, in the order of
-        the module docstring's "Flow". Returns base.map_onepass."""
-        base_items = self.base.generate_core_items()
-        self.upstream.build(base_items)
-        self.downstream.run(self.upstream.pyramid)
-        return self.base.map_onepass
+
+class Pyramid:
+    """The CPU main (onepass) and the functions the steps share, as static
+    methods. Holds no data - everything lives in DeviceMemory."""
+
+    @staticmethod
+    def upward(mem):
+        """CPU main, up half: Base.build_level0, then Upstream.build_level
+        for level 1, 2, ... until a level holds a single CoreItem. Returns
+        mem.pyramid."""
+        Base.build_level0(mem)
+        while mem.pyramid[-1].shape != (1, 1):
+            Upstream.build_level(mem, len(mem.pyramid))
+        return mem.pyramid
+
+    @staticmethod
+    def downward(mem):
+        """CPU main, down half: an empty inbox for the top, then
+        Downstream.down_level from the top level down to level 1 (which
+        writes mem.map_after). Returns mem.map_after."""
+        top = len(mem.pyramid) - 1
+        mem.inbox = [None] * len(mem.pyramid)
+        mem.inbox[top] = Pyramid.empty_inbox(mem.pyramid[top].shape)
+        for level in range(top, 0, -1):
+            Downstream.down_level(mem, level)
+        return mem.map_after
+
+    @staticmethod
+    def onepass(mem):
+        """The CPU main (2026-11-08): the CPU has put a map with only .state
+        set into mem.map; Base.init_map derives the conditions from it, then
+        one up pass and one down pass follow - a sequence of steps that each
+        read one level of mem and write the next. Returns mem.map_after.
+
+        (upward/downward alone skip init_map - for a map whose conditions
+        are already in place, e.g. hand-built in a test.)"""
+        Base.init_map(mem)
+        Pyramid.upward(mem)
+        return Pyramid.downward(mem)
+
+    @staticmethod
+    def empty_inbox(shape):
+        """An object array of empty sets - one (candidate, cell) inbox per
+        CoreItem of a level (see DeviceMemory.inbox)."""
+        inbox = np.empty(shape, dtype=object)
+        for idx in np.ndindex(shape):
+            inbox[idx] = set()
+        return inbox
 
     # --- shared ---------------------------------------------------------------
 
@@ -220,60 +287,102 @@ class Pyramid:
 
 
 class Base:
-    """The map and everything that works on SquareItems.
+    """Everything that works on SquareItems - stateless; the cells are in
+    DeviceMemory.map.
 
-    .map: the map (object array of SquareItem). Prerequisites for the up and
-    down steps, not done here: every cell's SquareItem.forced_by holds its
-    current conditions and SquareItem.forces matches it
-    (bruteforce.update_forces), and the global placement-tile layout is set
-    (Pyramid.set_placement_tiles).
+    Prerequisite, set by the CPU: the global placement-tile layout
+    (Pyramid.set_placement_tiles). Everything else about the cells beyond
+    .state is derived here, by init_map.
 
     A base tile is a CoreItem whose elements are a tile_size x tile_size
-    slice of .map (tile / tiles / generate_core_items).
-
-    .map_onepass: the base-level array of CoreItems after a down pass,
-    written by Downstream.run (None until then). It is the same array as
-    Upstream.pyramid[0], updated in place - its CoreItems' .links now hold
-    the up-pass triples plus everything the down pass added.
+    slice of mem.map (tile / tiles).
     """
-    def __init__(self, map_, tile_size=3, origin=0):
-        self.map = map_
-        self.tile_size = tile_size
-        self.origin = origin
-        self.map_onepass = None
 
-    def generate_core_items(self):
-        """The base level: every whole tile of .map as a CoreItem (tiles),
-        with its .links computed (update_links). This is what Upstream.build
-        takes as input."""
-        grid = self.tiles()
+    @staticmethod
+    def init_map(mem):
+        """The Base init step (a kernel later; 2026-11-08, Ivo: "move all map
+        preprocessing to Base. The main (CPU) sets only map.state and moves
+        map to DeviceMemory ... Then Base calls some init function setting
+        .condition etc"): reads each cell's .state in mem.map and the global
+        placement-tile layout, and writes the cell's .forced_by (its
+        conditions), .forces (their reverse index) and .placement_status, in
+        place. Whatever those fields held before is overwritten.
+
+        1. Vacuum conditions from the board's geometry alone
+           (conditions.initial_map): every triple whose three placements lie
+           on the board, members tagged with their placement_status.
+        2. .placement_status from the layout (is_candidate: every cell of a
+           placement tile is a candidate, every other cell unknown), and
+           the condition tags refreshed to match (bruteforce.retag_forced_by)
+           - what test_context_tiles.mark_placement_cores + retag_forced_by
+           did on the CPU before.
+        3. Reduce by .state (bruteforce.compute_conditions): drop every
+           condition with a blocked member, remove chosen members, clear the
+           conditions of non-free cells. States only ever go free -> chosen
+           or free -> blocked, so one reduction with the final states gives
+           what reducing after every placement phase gave.
+        4. Drop conditions naming two candidates of the same placement tile
+           (bruteforce.prune_same_core_candidates) - a placement tile only
+           ever has one of its own cells chosen.
+
+        .forces is kept consistent with .forced_by throughout (each of the
+        bruteforce functions ends with update_forces).
+        """
+        # imported here: bruteforce imports cores (in_realm), so importing it
+        # at module level would be circular
+        from conditions import initial_map
+        from bruteforce import retag_forced_by, compute_conditions, prune_same_core_candidates
+        from map_of_squares import PlacementStatus
+
+        m = mem.map
+        vacuum = initial_map(m.shape)
+        for idx in np.ndindex(m.shape):
+            cell = m[idx]
+            cell.forced_by = vacuum[idx].forced_by
+            cell.forces = vacuum[idx].forces
+            cell.placement_status = (PlacementStatus.candidate if Pyramid.is_candidate(idx)
+                                     else PlacementStatus.unknown)
+        retag_forced_by(m)
+        compute_conditions(m)
+        prune_same_core_candidates(m, mem.tile_size, mem.origin)
+
+    @staticmethod
+    def build_level0(mem):
+        """The Base step (a kernel later): reads mem.map, writes
+        mem.pyramid[0] - every whole tile of the map as a CoreItem (tiles),
+        with its .links computed (update_links). Starts a new pyramid:
+        any earlier levels are dropped."""
+        grid = Base.tiles(mem)
         for tile in grid.flat:
             Base.update_links(tile)
+        mem.pyramid = [grid]
         return grid
 
-    def tile(self, ci, cj):
-        """Base tile (ci, cj): a CoreItem over .map's cells origin + ci*tile_size
-        .. +tile_size (rows) and the same for columns. Its .links is empty
-        until update_links runs."""
-        size = self.tile_size
-        r0, c0 = self.origin + ci * size, self.origin + cj * size
-        return CoreItem(self.map[r0:r0 + size, c0:c0 + size], margin=None,
+    @staticmethod
+    def tile(mem, ci, cj):
+        """Base tile (ci, cj): a CoreItem over mem.map's cells origin +
+        ci*tile_size .. +tile_size (rows) and the same for columns. Its
+        .links is empty until update_links runs."""
+        size = mem.tile_size
+        r0, c0 = mem.origin + ci * size, mem.origin + cj * size
+        return CoreItem(mem.map[r0:r0 + size, c0:c0 + size], margin=None,
                         realm=((r0, r0 + size), (c0, c0 + size)))
 
-    def tiles(self):
-        """Every whole tile of .map, as an object array of base CoreItems
+    @staticmethod
+    def tiles(mem):
+        """Every whole tile of mem.map, as an object array of base CoreItems
         indexed (ci, cj); cells before `origin` or in a partial tile at the
         far edge belong to no tile. .links not yet computed."""
-        rows, cols = self.map.shape
-        n_r = max(0, (rows - self.origin) // self.tile_size)
-        n_c = max(0, (cols - self.origin) // self.tile_size)
+        rows, cols = mem.map.shape
+        n_r = max(0, (rows - mem.origin) // mem.tile_size)
+        n_c = max(0, (cols - mem.origin) // mem.tile_size)
         if n_r == 0 or n_c == 0:
-            raise ValueError(f"no whole {self.tile_size}x{self.tile_size} tile fits in a "
-                             f"{rows}x{cols} map from origin {self.origin}")
+            raise ValueError(f"no whole {mem.tile_size}x{mem.tile_size} tile fits in a "
+                             f"{rows}x{cols} map from origin {mem.origin}")
         grid = np.empty((n_r, n_c), dtype=object)
         for ci in range(n_r):
             for cj in range(n_c):
-                grid[ci, cj] = self.tile(ci, cj)
+                grid[ci, cj] = Base.tile(mem, ci, cj)
         return grid
 
     @staticmethod
@@ -448,13 +557,7 @@ class Base:
 
 
 class Upstream:
-    """The up step for CoreItems whose children are CoreItems, and build(),
-    the whole up pass. owner: the owning Pyramid. .pyramid: the CoreItem
-    hierarchy built by build() - a list of object arrays of CoreItems, the
-    base level first, the 1x1 top last (empty until build runs)."""
-    def __init__(self, owner):
-        self.owner = owner
-        self.pyramid = []
+    """The up step - stateless; reads and writes DeviceMemory.pyramid."""
 
     @staticmethod
     def update_links(core):
@@ -535,84 +638,69 @@ class Upstream:
             results |= found or {(origin, DUMMY, DUMMY)}
         return results
 
-    def build(self, base_items):
-        """The up pass over the whole board (added 2026-11-07, Ivo: "recall
-        the upstream procedure starting with base level ... implement it").
-
-        base_items: the base level, as Base.generate_core_items returns it -
-        an object array of base CoreItems with .links already computed.
-
-        1. Parent level: the CoreItems of the level below, grouped 3x3; at
-           the far edge a group may be smaller (2 or 1 rows/cols) when the
-           count is not a multiple of 3. A parent's realm is the bounding
-           box of its children's realms. Upstream.update_links on each,
-           children first.
-        2. Repeat 1 until a single CoreItem remains.
-
-        Stores the hierarchy in .pyramid - base_items first, the 1x1 top
-        last - and returns it.
-        """
-        levels = [base_items]
-        while levels[-1].shape != (1, 1):
-            below = levels[-1]
-            b_r, b_c = below.shape
-            level = np.empty(((b_r + 2) // 3, (b_c + 2) // 3), dtype=object)
-            for pi in range(level.shape[0]):
-                for pj in range(level.shape[1]):
-                    children = below[3 * pi:3 * pi + 3, 3 * pj:3 * pj + 3]
-                    first, last = children[0, 0].realm, children[-1, -1].realm
-                    realm = ((first[0][0], last[0][1]), (first[1][0], last[1][1]))
-                    parent = CoreItem(children.copy(), margin=None, realm=realm)
-                    Upstream.update_links(parent)
-                    level[pi, pj] = parent
-            levels.append(level)
-        self.pyramid = levels
-        return levels
+    @staticmethod
+    def build_level(mem, level):
+        """The Upstream step (a kernel later): reads mem.pyramid[level-1],
+        writes mem.pyramid[level] - the CoreItems of the level below,
+        grouped 3x3 (at the far edge a group may be smaller, 2 or 1
+        rows/cols, when the count is not a multiple of 3), each with its
+        .links computed (update_links). A parent's realm is the bounding box
+        of its children's realms. level must be len(mem.pyramid) (the next
+        level to build)."""
+        assert level == len(mem.pyramid), (level, len(mem.pyramid))
+        below = mem.pyramid[level - 1]
+        b_r, b_c = below.shape
+        grid = np.empty(((b_r + 2) // 3, (b_c + 2) // 3), dtype=object)
+        for pi in range(grid.shape[0]):
+            for pj in range(grid.shape[1]):
+                children = below[3 * pi:3 * pi + 3, 3 * pj:3 * pj + 3]
+                first, last = children[0, 0].realm, children[-1, -1].realm
+                realm = ((first[0][0], last[0][1]), (first[1][0], last[1][1]))
+                parent = CoreItem(children.copy(), margin=None, realm=realm)
+                Upstream.update_links(parent)
+                grid[pi, pj] = parent
+        mem.pyramid.append(grid)
+        return grid
 
 
 class Downstream:
-    """The down step for CoreItems whose children are CoreItems, and run(),
-    the whole down pass. owner: the owning Pyramid. .pyramid: the hierarchy
-    run() was given (Upstream.pyramid), updated in place."""
-    def __init__(self, owner):
-        self.owner = owner
-        self.pyramid = []
+    """The down step - stateless; reads and writes DeviceMemory.pyramid and
+    DeviceMemory.inbox."""
 
-    def run(self, pyramid):
-        """The down pass over the whole hierarchy (2026-11-07): `pyramid` is
-        Upstream.pyramid (base level first, top last), handed over once the
-        up pass reached the top.
+    @staticmethod
+    def down_level(mem, level):
+        """The Downstream step for one level (a kernel later): reads
+        mem.pyramid[level] and mem.inbox[level], updates the .links of
+        mem.pyramid[level-1] and writes mem.inbox[level-1].
 
-        From the top level down to level 1, for every CoreItem of the level,
-        update_aliases_down(core, level, inherited): every candidate whose
+        For every CoreItem of the level, update_aliases_down(core, level,
+        inherited) with inherited = its own inbox: every candidate whose
         chain reaches into a child - the children's own candidates
         (siblings informing each other) and every candidate the core
-        received from its own parent (`inherited`, including candidates
-        outside the core, like Z - Ivo, 2026-11-07: "all candidates must be
-        copied down, including those outside P") - is delivered to each
-        child it enters or passes through, and each child consumes that
-        into its own .links (at level 1 the children are base tiles:
-        Base.consume_aliases_down).
+        received from its own parent, including candidates outside the core,
+        like Z (Ivo, 2026-11-07: "all candidates must be copied down,
+        including those outside P") - is delivered to each child it enters
+        or passes through, and each child consumes that into its own .links
+        (at level 1 the children are base tiles: Base.consume_aliases_down).
+        The inbox each child was given goes to mem.inbox[level-1] at the
+        child's own grid position (parent (pi, pj) has children (3*pi + i,
+        3*pj + j)).
 
-        `inherited` for a core is the inbox its parent's call filled for it
-        - kept here, level to level, as local variables only (the top level
-        receives nothing).
-
-        After level 1 has updated the base level, the base-level array is
-        written back to the owning Pyramid's Base as .map_onepass (the same
-        array object as pyramid[0], updated in place). Returns it.
+        At level 1 the base level is final: mem.map_after = mem.pyramid[0]
+        (Ivo, 2026-11-07: "After updating the lowest CoreItem level
+        Downstream writes the lowest-level array back").
         """
-        self.pyramid = pyramid
-        inherited = {}
-        for level in range(len(pyramid) - 1, 0, -1):
-            next_inherited = {}
-            for core in pyramid[level].flat:
-                inbox = Downstream.update_aliases_down(core, level, inherited.get(id(core), set()))
-                for idx in np.ndindex(core.elements.shape):
-                    next_inherited[id(core.elements[idx])] = inbox[idx]
-            inherited = next_inherited
-        self.owner.base.map_onepass = pyramid[0]
-        return pyramid[0]
+        parents = mem.pyramid[level]
+        children = mem.pyramid[level - 1]
+        child_inbox = Pyramid.empty_inbox(children.shape)
+        for (pi, pj), core in np.ndenumerate(parents):
+            told = Downstream.update_aliases_down(core, level, mem.inbox[level][pi, pj])
+            for (i, j), messages in np.ndenumerate(told):
+                child_inbox[3 * pi + i, 3 * pj + j] = messages
+        mem.inbox[level - 1] = child_inbox
+        if level == 1:
+            mem.map_after = mem.pyramid[0]
+        return child_inbox
 
     @staticmethod
     def update_aliases_down(core, level, inherited=frozenset()):
@@ -639,9 +727,10 @@ class Downstream:
         The inbox is a LOCAL variable, `aliases_down`: an object array with
         the same shape as core.elements, one set per child, built fresh on
         every call (Ivo, 2026-11-07: "make .aliases_down a local variable, a
-        3x3 array of set type"). Returns it, so the caller (run, or a test)
-        can see who was told what, and hand each child its inbox as that
-        child's `inherited` one level further down.
+        3x3 array of set type"). Returns it, so the caller (down_level, or a
+        test) can see who was told what; down_level stores it in
+        DeviceMemory.inbox as each child's `inherited` one level further
+        down.
         """
         aliases_down = np.empty(core.elements.shape, dtype=object)
         for idx in np.ndindex(core.elements.shape):

@@ -342,26 +342,32 @@ or whether one pass ever suffices. Traced directly from the code
 
 ## 3a. "Last cell inside" convention (implemented 2026-11-07) - open downstream points
 
-**Restructured 2026-11-07** (Ivo: "Create a class Pyramid, with classes
-Upstream, Downstream as members ... a class Base ... Base also contains the
-map"): `CoreItem` is data only. `Base` (holds the map) has everything on
-SquareItems - `tile`/`tiles`, `edges`, `reach`, and the base halves
-`update_links` / `consume_aliases_down`; `Upstream` has `update_links` for
-CoreItem children, `compose_up`, `build()` (the whole up pass);
-`Downstream` has `update_aliases_down(core, level)`,
-`consume_aliases_down`, `push_down`; `Pyramid` owns one of each and the
-shared static helpers (`in_realm`, `is_candidate`, `set_placement_tiles`,
-`owning_child`, `child_exits`, `candidate_links`, `fold_into`). Former
-CoreItem method names below refer to these.
-
-**Flow (Ivo, 2026-11-07)** - `Pyramid.onepass()`:
-`base.generate_core_items()` (base level, links computed) ->
-`upstream.build(base_items)` (hierarchy kept as `upstream.pyramid`, base
-first, top last) -> `downstream.run(upstream.pyramid)` (top to level 1,
-per core `update_aliases_down(core, level, inherited)`) -> `base.map_onepass` =
-the updated base level (same array as `upstream.pyramid[0]`). Running
-`inherited` is the inbox the core's parent filled for it, kept by `run` as a
-local variable from level to level.
+**Restructured 2026-11-08 towards CPU/GPU** (Ivo: "move the map, the
+map_after and the .pyramid list out of the classes ... to a new class
+DeviceMemory ... Base, Upstream and Downstream function will later become
+kernel calls ... each step uses only data from one level"):
+`DeviceMemory` holds all data between steps - `.map`, `.pyramid` (index =
+level), `.inbox` (down-pass messages, laid out like `.pyramid`; was a local
+variable between levels), `.map_after` (was `Base.map_onepass`), and the
+constants `tile_size`, `origin`. `CoreItem` is data only. `Base`,
+`Upstream`, `Downstream` hold no data; each has one level step plus the
+per-CoreItem functions it applies:
+`Base.build_level0(mem)` (.map -> .pyramid[0]),
+`Upstream.build_level(mem, k)` (.pyramid[k-1] -> .pyramid[k]),
+`Downstream.down_level(mem, k)` (.pyramid[k] + .inbox[k] -> .pyramid[k-1]
+links + .inbox[k-1]; at k == 1 also .map_after). `Pyramid` is the CPU main
+(`upward`, `downward`, `onepass(mem)`) plus the shared static helpers
+(`in_realm`, `is_candidate`, `set_placement_tiles`, `owning_child`,
+`child_exits`, `candidate_links`, `fold_into`, `empty_inbox`).
+**Same day, preprocessing moved to Base** (Ivo: "The main (CPU) sets only
+map.state ... Then Base calls some init function setting .condition etc"):
+`Base.init_map(mem)` derives `.forced_by`, `.forces`, `.placement_status`
+from `.state` + the placement layout (initial_map, retag, one
+compute_conditions with the final states, prune_same_core_candidates) -
+identical, cell by cell, to the old CPU-side preprocessing
+(`test_init_map_from_state_matches_cpu_preprocessing`).
+`Pyramid.onepass(mem)` = `init_map` + `upward` + `downward`. Former method names below (CoreItem.*, Pyramid instances,
+`build`, `run`, `map_onepass`) refer to these.
 
 **Renamed 2026-11-07:** `CoreItem.forced_by` is now `CoreItem.links`
 (`update_forced_by` -> `update_links`), holding `(id_in, id_out, id_exit)`
@@ -482,3 +488,78 @@ compute_eligibility's own disaster - flattening-with-substitution across
 multiple levels). Recommend deciding up front that virtual ids do NOT
 recurse into further virtual-id creation, rather than discovering this the
 hard way.
+
+## 5. N-ary link generation during the passes - option 2 (decided 2026-11-08)
+
+**Situation (Ivo, 2026-11-08):** base tiles now receive simultaneous
+entries - several candidates whose chains enter the same tile (the down
+pass delivers them: `(candidate, last cell, exit)` and
+`(candidate, DUMMY, DUMMY)` triples in a base tile's `.links`). Entered
+cells chosen together can complete an n-ary condition (a pair or triple
+in some cell's `SquareItem.forced_by`) and so create a NEW single link,
+from the compound of those candidates. The functions for this exist but
+are untested in combination and not integrated:
+`bruteforce.collapse_synced_ids`, `create_compound_ids`,
+`generate_compound_candidates`, `prune_compound_candidates`,
+`prune_blocked_compound_candidates`, `compoundize_forced_by`,
+`propagate_compound_links` (see item 2). "Testing is a challenge, many
+situations arise here and we have no overview or theoretical grasp."
+
+**Three ways (Ivo):**
+1. generate n-ary links once, on `.map_after` - OPTIMIZATIONS.md #7;
+2. after EACH up step and EACH down step, take the new candidate links
+   of that level down to base level, generate the n-ary links there, and
+   climb back up to that level - (log n)^2 instead of log n, but easier
+   to understand - **chosen, "for now we do 2"**;
+3. move some n-ary information up, so links can be generated from one
+   level's own data - OPTIMIZATIONS.md #8.
+
+**Option 2, as a procedure (proposed, not yet built):** for the step at
+level k (`Upstream.build_level(mem, k)` or `Downstream.down_level(mem, k)`):
+1. Find the new candidate links of level k - the `candidate_links` that
+   the step added.
+2. Down: follow each to the base tiles its chain enters (the same
+   walk-and-inbox mechanism as the down pass).
+3. At base level: from each such tile's simultaneous entries, generate the
+   n-ary links (compounds), and write them as new size-1 conditions into
+   the cells' `SquareItem.forced_by` in `.map` (so everything downstream
+   reads them the normal way).
+4. Up: `Base.update_links` for the changed tiles, `Upstream.update_links`
+   for their ancestors, up to level k.
+5. Repeat 1-4 until the step adds no new candidate links (only additions
+   ever happen, so this terminates).
+
+**Open - to decide before building:**
+- What a compound looks like in `.links`: as id_in of a triple (a
+  `("compound", n)` id, as `get_or_create_compound` mints them)? What
+  `is_candidate` says for it?
+- How DUMMY is processed - a dying in is exactly a chain whose cells may
+  complete an n-ary condition together with another candidate's.
+- Whether a compound can itself become a member of a further compound
+  (item 4 recommends NO, to avoid compute_eligibility's blow-up).
+
+**Testing idea (proposed):** an independent oracle instead of
+hand-enumerating situations - brute-force forward propagation on the whole
+map: choose a set S of candidates (one per placement tile), mark them
+chosen, apply every condition (single, pair, triple) to a fixed point, and
+record the forced cells F(S). Then:
+- soundness: every link the algorithm generates for a compound S forces
+  only cells in F(S);
+- completeness (small maps): for every small S (pairs, triples of
+  candidates from different placement tiles), every cell in F(S) that no
+  single member of S forces alone is explained by some generated link.
+Run it on the hand-built scenarios first, then on swept maps.
+
+**After n-ary links: blocking and unblocking (Ivo, 2026-11-08)** - the
+next stage once item 5's link generation works. Blocking paths alone can
+lead to situations where the placement options run out; then the
+unblocking procedure has to step in. Blocking and unblocking are two more
+sources of complexity - another reason for option 2: each up/down step is
+followed by a full, easy-to-follow round trip to base level, into which
+blocking and unblocking can later be hooked the same way as n-ary link
+generation. Existing pieces to revisit then: `bruteforce.unblock_path`
+(blocks a self-blocking cell, recomputes conditions), the old pipeline's
+`closure.get_blocked_links` / `dissolve_blocked_paths`, the paused
+kernel-style blocked-paths prototype in closure.py (memory note
+c0-blocked-paths-mechanism-paused), and the CoreItem `.blocked` field
+removed 2026-11-07 (item 3a, "Blocking - postponed").

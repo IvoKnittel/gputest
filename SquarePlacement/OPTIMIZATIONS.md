@@ -78,6 +78,25 @@ don't need re-discovering later.
    once this becomes worth the precision - the 9x (or worse) oversized
    recompute is the accepted cost for now.
 
+7. **N-ary link generation once, on `.map_after`** (option 1 of Ivo's
+   three, 2026-11-08). Instead of generating links from n-ary conditions
+   after every up and down step (option 2, the one being built - see
+   TODO.md item 5), run it a single time on the final base level
+   (`DeviceMemory.map_after`), when every base tile already knows all the
+   candidates whose chains enter it. Cheapest, but new links found then
+   are not propagated through the pyramid in the same pass - it needs to
+   be shown that one more pass (or none) is enough.
+
+8. **Move n-ary information up the pyramid** (option 3 of Ivo's three,
+   2026-11-08, "a compromise: move some n-ary information up allowing to
+   generate links with level-only information"). Option 2 descends to base
+   level and climbs back for every step, (log n)^2 instead of log n. If each
+   CoreItem carried a summary of the n-ary conditions its chains can still
+   complete, a step could generate the new links from its own level's data
+   only. Needs a representation for that summary - which is what is not
+   understood yet; revisit once option 2 works and shows which n-ary
+   situations actually arise.
+
 ## Shared theme
 
 #2, #3, #5 are all the same underlying pattern: a deliberate "full
