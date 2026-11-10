@@ -514,7 +514,44 @@ situations arise here and we have no overview or theoretical grasp."
 3. move some n-ary information up, so links can be generated from one
    level's own data - OPTIMIZATIONS.md #8.
 
-**Option 2, as a procedure (proposed, not yet built):** for the step at
+**Implemented 2026-11-10 (skeleton, n-ary step still a stub)** - Ivo:
+"each time links of a supertile are generated, we go down the pyramid to
+base level, generate links by n-ary (not yet fully implemented, don't
+bother), go up to that level. Downstream, we do the same."
+`Pyramid.round_trip(mem, level, inbox)`, repeated by `round_trips` until it
+changes nothing; called by the CPU main after every `Upstream.build_level`
+(from that level, empty inbox) and every `Downstream.down_level` (from the
+level just updated, its `mem.inbox`). Down: `Downstream.inform_level`, the
+down pass's message walk without the consume step (read-only). Base:
+`Base.nary_level` / `Base.nary_links(mem, tile, entries)` - THE STUB, returns
+False; its docstring says what it should do. Up: `Base.relink_level`,
+`Upstream.relink_level` - recompute changed tiles and their ancestors up to
+the level and ADD to `.links` (union; replacing would erase down-pass
+facts). Granularity is a whole level per round trip (a step builds a whole
+level at once). Tests (test_upstream_forced_by.py): entries delivered on
+the way up, Z delivered from an inherited inbox, and the climb back with a
+stand-in n-ary step that adds one single link.
+
+**`Base.nary_links`, first version (2026-11-10)** - Ivo: "candidate (6,7)
+forces (6,6). one level up (6,6) gets alias (6,7). This affects all
+.conditions, including tile (2,2). in cell (8,7) a term collapses, creating
+a link." Per base tile and candidate c among its simultaneous entries (plus
+the tile's own free candidates): aliases = c, its entry cells, and the
+tile's cells c's chain reaches from there; every free cell y within reach
+whose PAIR or TRIPLE condition consists of aliases only gets the single
+link c -> y (conditions kept, size-1 ones never collapsed - that would only
+add shortcuts). Returns the changed cells - y AND c (c's .forces gains y, a
+possible new exit of c's tile) - so `nary_level` marks every affected tile,
+also in other tiles than the one whose entries produced the link. Adding
+links keeps the dummy rule across unions (`Pyramid.add_links` drops
+(x, DUMMY, DUMMY) once x has a real triple). Not yet: partial collapses
+(triple -> pair) and compounds of several candidates. Frozen area: the new
+link (6,7) -> (8,7) appears (test_nary_isolation.py). Swept maps: 55 / 22 /
+32 new links for seeds 0 / 1 / 2; seed 0's are dominated by (3,5), the known
+self-blocking candidate - its chain forces cells it would block itself, so
+its aliases collapse many conditions (blocking: "for another day").
+
+**Option 2, as first proposed (2026-11-08):** for the step at
 level k (`Upstream.build_level(mem, k)` or `Downstream.down_level(mem, k)`):
 1. Find the new candidate links of level k - the `candidate_links` that
    the step added.

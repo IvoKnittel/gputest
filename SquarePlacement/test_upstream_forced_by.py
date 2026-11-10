@@ -340,3 +340,108 @@ def test_push_down_copies_an_outside_candidate_into_every_child_its_chain_touche
     for i in range(3):
         for j in range(3):
             assert levels[0][i, j].links == EXPECTED_CHILD_LINKS[i, j] | EXPECTED_Z_GAINED.get((i, j), set()), (i, j)
+
+
+# --- option 2: round trip down to base level and back (2026-11-10) -----------------
+
+def _record_entries(monkeypatch):
+    """Replace the n-ary step by one that records, per base tile (by realm),
+    the simultaneous entries each round trip delivered to it, and changes
+    nothing."""
+    calls = []
+
+    def recorder(mem, tile, entries):
+        calls.append((tile.realm, frozenset(entries)))
+        return set()
+
+    monkeypatch.setattr(Base, "nary_links", staticmethod(recorder))
+    return calls
+
+
+def _tile_realm(i, j):
+    r0, c0 = at(3 * i, 3 * j)
+    return ((r0, r0 + 3), (c0, c0 + 3))
+
+
+def test_round_trip_on_the_way_up_delivers_sibling_candidates_to_base(monkeypatch):
+    """Pyramid.upward (option 2, 2026-11-10): right after Upstream builds P
+    (level 1), a round trip goes down to base level and hands every base
+    tile its simultaneous entries - here the chains of candidates (4,4) and
+    (4,5) entering (1,2), and of (3,4)/(4,4) entering (0,1) - then comes
+    back up. The descent is read-only: with an n-ary step that adds
+    nothing, every level ends exactly as the plain up pass leaves it."""
+    calls = _record_entries(monkeypatch)
+    m = build_map((11, 11), CHAINS)
+    mem = DeviceMemory(m, 3, origin=GRID_ORIGIN)
+    levels = Pyramid.upward(mem)
+
+    entries = {realm: e for realm, e in calls}
+    assert len(calls) == 9 and len(entries) == 9      # one round trip, every base tile
+    assert entries[_tile_realm(1, 2)] == {(at(4, 4), at(4, 5)), (at(4, 4), at(4, 8)),
+                                          (at(4, 5), at(4, 5)), (at(4, 5), at(4, 8))}
+    assert entries[_tile_realm(0, 1)] == {(at(3, 4), at(3, 4)), (at(4, 4), at(3, 4))}
+    for i in range(3):
+        for j in range(3):
+            if (i, j) not in ((1, 2), (0, 1)):
+                assert entries[_tile_realm(i, j)] == set(), (i, j)
+    assert {(i, j): levels[0][i, j].links for i in range(3) for j in range(3)} == EXPECTED_CHILD_LINKS
+    assert levels[1][0, 0].links == EXPECTED_PARENT_LINKS
+
+
+def test_round_trip_delivers_an_inherited_candidate_to_base(monkeypatch):
+    """A round trip from P whose inbox holds what P's parent sent - Z's
+    messages, as in the push_down test - delivers Z to exactly the base
+    tiles Z's chains enter or pass through, as their simultaneous entries."""
+    calls = _record_entries(monkeypatch)
+    m = build_map((11, 11), CHAINS)
+    mem = DeviceMemory(m, 3, origin=GRID_ORIGIN)
+    Pyramid.upward(mem)
+    calls.clear()
+
+    inbox = Pyramid.empty_inbox((1, 1))
+    inbox[0, 0] = set(Z_INHERITED)
+    assert Pyramid.round_trip(mem, 1, inbox) is False   # the recorder changes nothing
+
+    z_entries = {realm: {cell for origin, cell in e if origin == Z} for realm, e in calls}
+    assert z_entries == {
+        _tile_realm(0, 0): {at(1, -1), at(1, 2), at(2, -1), at(2, 2)},
+        _tile_realm(0, 1): {at(-1, 5), at(0, 5), at(1, 2), at(1, 5), at(2, 2)},
+        _tile_realm(0, 2): {at(0, 5), at(0, 8), at(1, 5), at(1, 8)},
+        _tile_realm(1, 0): set(), _tile_realm(1, 1): set(), _tile_realm(1, 2): set(),
+        _tile_realm(2, 0): set(), _tile_realm(2, 1): set(), _tile_realm(2, 2): set(),
+    }
+
+
+def test_round_trip_climbs_back_with_the_links_a_new_condition_creates(monkeypatch):
+    """The way back up (option 2): a stand-in for the n-ary step adds one new
+    single link, (7,1) -> (8,2), inside base tile (2,0), the first time it
+    sees that tile, and reports the changed cell. The round trip then
+    recomputes (2,0) and its parent P and ADDS what is new:
+    - (2,0): chain B, entering at (9,1), now also reaches (8,2), whose link
+      leaves the tile at (8,3);
+    - P: from (8,2) the chain continues through (2,1)'s existing triple
+      ((8,2), (8,5), (9,5)) and leaves P at (9,5).
+    Everything already there stays. The next round trip changes nothing, so
+    the loop stops after one productive round trip."""
+    done = []
+
+    def one_new_link(mem, tile, entries):
+        if done or not Pyramid.in_realm(at(8, 2), tile.realm):
+            return set()
+        cell = mem.map[at(8, 2)]
+        cell.forced_by.add(frozenset({(at(7, 1), mem.map[at(7, 1)].placement_status)}))
+        done.append(True)
+        return {at(8, 2)}
+
+    monkeypatch.setattr(Base, "nary_links", staticmethod(one_new_link))
+    m = build_map((11, 11), CHAINS)
+    mem = DeviceMemory(m, 3, origin=GRID_ORIGIN)
+    levels = Pyramid.upward(mem)
+
+    assert done == [True]
+    assert levels[0][2, 0].links == EXPECTED_CHILD_LINKS[2, 0] | links(((9, 1), (8, 2), (8, 3)))
+    assert levels[1][0, 0].links == EXPECTED_PARENT_LINKS | links(((9, 1), (8, 5), (9, 5)))
+    for i in range(3):
+        for j in range(3):
+            if (i, j) != (2, 0):
+                assert levels[0][i, j].links == EXPECTED_CHILD_LINKS[i, j], (i, j)

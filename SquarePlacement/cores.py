@@ -79,6 +79,8 @@ placement-tile layout - every cell of a placement tile).
 """
 import numpy as np
 
+from map_of_squares import StateEnum
+
 
 # id_out and id_exit of a .links triple whose chain dies inside the tile
 # (added 2026-11-07, Ivo: "ins that die within P need to be in P's
@@ -159,25 +161,83 @@ class Pyramid:
 
     @staticmethod
     def upward(mem):
-        """CPU main, up half: Base.build_level0, then Upstream.build_level
-        for level 1, 2, ... until a level holds a single CoreItem. Returns
-        mem.pyramid."""
+        """CPU main, up half: Base.build_level0, then for level 1, 2, ...
+        until a level holds a single CoreItem: Upstream.build_level, followed
+        by the round trip from that level (option 2, see round_trip).
+        Returns mem.pyramid."""
         Base.build_level0(mem)
         while mem.pyramid[-1].shape != (1, 1):
-            Upstream.build_level(mem, len(mem.pyramid))
+            level = len(mem.pyramid)
+            Upstream.build_level(mem, level)
+            Pyramid.round_trips(mem, level, Pyramid.empty_inbox(mem.pyramid[level].shape))
         return mem.pyramid
 
     @staticmethod
     def downward(mem):
-        """CPU main, down half: an empty inbox for the top, then
-        Downstream.down_level from the top level down to level 1 (which
-        writes mem.map_after). Returns mem.map_after."""
+        """CPU main, down half: an empty inbox for the top, then from the
+        top level down to level 1: Downstream.down_level (which updates the
+        level below and writes its inbox; at level 1 also mem.map_after),
+        followed by the round trip from the level just updated (option 2,
+        see round_trip). Returns mem.map_after."""
         top = len(mem.pyramid) - 1
         mem.inbox = [None] * len(mem.pyramid)
         mem.inbox[top] = Pyramid.empty_inbox(mem.pyramid[top].shape)
         for level in range(top, 0, -1):
             Downstream.down_level(mem, level)
+            Pyramid.round_trips(mem, level - 1, mem.inbox[level - 1])
         return mem.map_after
+
+    @staticmethod
+    def round_trips(mem, level, inbox):
+        """Repeat round_trip until it changes nothing (n-ary generation only
+        ever adds conditions, so this terminates). Returns the number of
+        round trips that changed something."""
+        changed = 0
+        while Pyramid.round_trip(mem, level, inbox):
+            changed += 1
+        return changed
+
+    @staticmethod
+    def round_trip(mem, level, inbox):
+        """Option 2 of TODO item 5 (Ivo, 2026-11-08/10: "each time links of a
+        supertile are generated, we go down the pyramid to base level,
+        generate links by n-ary ..., go up to that level. Downstream, we do
+        the same."). Called by the CPU main right after the step that
+        generated mem.pyramid[level]'s links - after Upstream.build_level on
+        the way up, after Downstream.down_level (which updated this level)
+        on the way down.
+
+        inbox: what each CoreItem of the level knows about candidates from
+        above, laid out like mem.pyramid[level] - empty sets on the way up
+        (nothing from above yet), mem.inbox[level] on the way down.
+
+        1. Down (Downstream.inform_level, level by level to 1): each
+           CoreItem tells its children which candidates' chains enter or
+           pass through them - the down pass's message walk, but read-only
+           (nothing is consumed into .links). At base level every tile then
+           has its simultaneous entries.
+        2. At base level (Base.nary_level): generate links from n-ary
+           conditions out of each tile's simultaneous entries - writes new
+           conditions into mem.map, reports which tiles changed. A stub for
+           now (Base.nary_links changes nothing).
+        3. Up (Base.relink_level, then Upstream.relink_level to `level`):
+           recompute the changed tiles and their ancestors, ADDING the
+           result to their .links - only additions ever happen in a pass,
+           and replacing would erase what the down pass already delivered.
+
+        Returns True if step 2 changed anything (the caller repeats until
+        it does not).
+        """
+        entries = inbox
+        for j in range(level, 0, -1):
+            entries = Downstream.inform_level(mem, j, entries)
+        changed = Base.nary_level(mem, entries)
+        if not changed.any():
+            return False
+        Base.relink_level(mem, changed)
+        for j in range(1, level + 1):
+            changed = Upstream.relink_level(mem, j, changed)
+        return True
 
     @staticmethod
     def onepass(mem):
@@ -274,16 +334,29 @@ class Pyramid:
         return {(a, b, c) for a, b, c in core.links if Pyramid.is_candidate(a)}
 
     @staticmethod
+    def add_links(core, new):
+        """Add `new` triples to core.links, keeping the "partly dying starts
+        get no dummy" rule (Ivo, 2026-11-07) across the union: a start that
+        has a real triple afterwards loses any (start, DUMMY, DUMMY) - its
+        chain gained an exit since (e.g. through a link n-ary generation
+        added). Used wherever links are added rather than recomputed."""
+        links = core.links | new
+        exiting = {a for a, b, _c in links if b != DUMMY}
+        core.links = {t for t in links if not (t[1] == DUMMY and t[0] in exiting)}
+
+    @staticmethod
     def fold_into(core, found, entered):
         """Last step of both consume halves (Base.consume_aliases_down,
         Downstream.consume_aliases_down): add each origin's exit triples to
         core.links, or (origin, DUMMY, DUMMY) if its chain entered core but
         reached no exit."""
+        new = set()
         for origin, hits in found.items():
             if hits:
-                core.links |= hits
+                new |= hits
             elif origin in entered:
-                core.links.add((origin, DUMMY, DUMMY))
+                new.add((origin, DUMMY, DUMMY))
+        Pyramid.add_links(core, new)
 
 
 class Base:
@@ -479,10 +552,11 @@ class Base:
         return found
 
     @staticmethod
-    def update_links(tile):
-        """Recompute a base tile's .links (the up step at base level; the
-        CoreItem-children half is Upstream.update_links) - "we need only one
-        item to force another item."
+    def compute_links(tile):
+        """A base tile's links, computed from its cells and returned (not
+        stored - update_links stores them; the CoreItem-children half is
+        Upstream.compute_links) - "we need only one item to force another
+        item."
 
         A breadth-first walk (reach) from (a) every external id with a
         direct entry edge into the tile - a chain passing through, "how far
@@ -521,7 +595,126 @@ class Base:
                 found = {(cell_id, DUMMY, DUMMY)}
             results |= found
 
-        tile.links = results
+        return results
+
+    @staticmethod
+    def update_links(tile):
+        """Set a base tile's .links to compute_links(tile)."""
+        tile.links = Base.compute_links(tile)
+
+    @staticmethod
+    def nary_level(mem, entries):
+        """The n-ary step at base level (a kernel later; option 2, see
+        Pyramid.round_trip): for every base tile, nary_links with that
+        tile's simultaneous entries. entries: laid out like mem.pyramid[0],
+        each a set of (candidate, cell) messages.
+
+        nary_links reports the CELLS whose conditions it changed - they can
+        lie in other tiles than the one whose entries produced them (an
+        alias found in tile (1,1) can collapse a condition of a cell in tile
+        (2,2)). Each changed cell marks the base tile that holds it. Keeps
+        .forces consistent (update_forces) if anything changed. Returns a
+        boolean array laid out like mem.pyramid[0] - True for every tile
+        holding a changed cell."""
+        tiles = mem.pyramid[0]
+        changed_cells = set()
+        for idx, tile in np.ndenumerate(tiles):
+            changed_cells |= set(Base.nary_links(mem, tile, entries[idx]))
+        changed = np.zeros(tiles.shape, dtype=bool)
+        size, origin = mem.tile_size, mem.origin
+        for r, c in changed_cells:
+            ci, cj = (r - origin) // size, (c - origin) // size
+            if 0 <= ci < tiles.shape[0] and 0 <= cj < tiles.shape[1]:
+                changed[ci, cj] = True
+        if changed_cells:
+            from bruteforce import update_forces   # bruteforce imports cores: import here
+            update_forces(mem.map)
+        return changed
+
+    @staticmethod
+    def nary_links(mem, tile, entries):
+        """Generate links from n-ary conditions for one base tile - first
+        version, single candidates only (2026-11-10, Ivo: "candidate (6,7)
+        forces (6,6). one level up (6,6) gets alias (6,7). This affects all
+        .conditions, including tile (2,2). in cell (8,7) a term collapses,
+        creating a link.").
+
+        `entries`: the tile's simultaneous entries, (candidate, cell)
+        messages from the round trip's descent - cell is where the
+        candidate's chain enters the tile (the cell just outside, linking
+        in) or one of the tile's own cells it passes through. The tile's
+        own free candidates count as entries (c, c) as well.
+
+        For every candidate c among them:
+        1. Aliases of c: c itself, its entry cells, and every cell of this
+           tile its chain reaches from there along single links (Base.edges)
+           - whenever c is chosen, all of them are.
+        2. Collapse: every free cell y (anywhere on the map - conditions
+           reach up to two cells, so y can lie in another tile) with a pair
+           or triple condition whose members are ALL aliases of c gets the
+           single link c -> y, unless it has it already: the condition's
+           terms collapse to c alone. Size-1 conditions are left alone -
+           they are links already, and collapsing them would only add
+           shortcuts along existing chains. The original conditions stay -
+           c forcing an alias does not rule out that alias becoming chosen
+           some other way.
+        Partial collapses (a triple to a pair, say) and compounds of
+        several candidates completing a condition together are not done yet.
+
+        Writes the new size-1 conditions into mem.map (tagged with c's
+        placement_status) and returns the set of cells it changed (empty if
+        none): every y that got a link, and c itself - c's reverse index
+        (.forces) gains y, which can be a new exit link out of c's own tile.
+        nary_level keeps .forces consistent and marks the tiles.
+        """
+        m = mem.map
+        rows, cols = m.shape
+        interior_ids, forward_edges, _exit_edges, _status_of = Base.edges(tile)
+        by_candidate = {}
+        for candidate, cell in entries:
+            by_candidate.setdefault(candidate, set()).add(cell)
+        for cid in interior_ids:
+            if Pyramid.is_candidate(cid) and m[cid].state == StateEnum.free:
+                by_candidate.setdefault(cid, set()).add(cid)
+
+        changed = set()
+        for candidate, cells in by_candidate.items():
+            aliases = {candidate}
+            frontier = set()
+            for cell in cells:
+                aliases.add(cell)
+                frontier |= {cell} if cell in interior_ids else forward_edges.get(cell, set()) & interior_ids
+            while frontier:
+                node = frontier.pop()
+                if node in aliases and node not in cells:
+                    continue
+                aliases.add(node)
+                frontier |= (forward_edges.get(node, set()) & interior_ids) - aliases
+            link = frozenset({(candidate, m[candidate].placement_status)})
+            on_board = [a for a in aliases if 0 <= a[0] < rows and 0 <= a[1] < cols]
+            r0 = max(0, min(a[0] for a in on_board) - 2)
+            r1 = min(rows, max(a[0] for a in on_board) + 3)
+            c0 = max(0, min(a[1] for a in on_board) - 2)
+            c1 = min(cols, max(a[1] for a in on_board) + 3)
+            for y in np.ndindex(r1 - r0, c1 - c0):
+                y = (y[0] + r0, y[1] + c0)
+                cell_y = m[y]
+                if y == candidate or cell_y.state != StateEnum.free or link in cell_y.forced_by:
+                    continue
+                if any(len(condition) >= 2 and all(pos in aliases for pos, _s in condition)
+                       for condition in cell_y.forced_by):
+                    cell_y.forced_by.add(link)
+                    changed |= {y, candidate}
+        return changed
+
+    @staticmethod
+    def relink_level(mem, changed):
+        """Up, at base level (option 2, see Pyramid.round_trip): for every
+        base tile marked in `changed` (laid out like mem.pyramid[0]),
+        recompute its links from its cells and ADD them to .links."""
+        for idx, tile in np.ndenumerate(mem.pyramid[0]):
+            if changed[idx]:
+                Pyramid.add_links(tile, Base.compute_links(tile))
 
     @staticmethod
     def consume_aliases_down(tile, aliases_down):
@@ -561,9 +754,31 @@ class Upstream:
 
     @staticmethod
     def update_links(core):
-        """Recompute .links of a core whose children are CoreItems (the
-        base-level half is Base.update_links): the children's .links,
-        joined by compose_up (one child's id_out is the next child's id_in).
+        """Set .links of a core whose children are CoreItems to
+        compute_links(core)."""
+        core.links = Upstream.compute_links(core)
+
+    @staticmethod
+    def relink_level(mem, level, changed_below):
+        """Up, one level (option 2, see Pyramid.round_trip): every CoreItem
+        of mem.pyramid[level] with a child marked in `changed_below` (laid
+        out like mem.pyramid[level-1]) recomputes its links from its
+        children and ADDS them to .links. Returns the marks for this level,
+        for the next one up."""
+        parents = mem.pyramid[level]
+        changed = np.zeros(parents.shape, dtype=bool)
+        for (pi, pj), core in np.ndenumerate(parents):
+            if changed_below[3 * pi:3 * pi + 3, 3 * pj:3 * pj + 3].any():
+                Pyramid.add_links(core, Upstream.compute_links(core))
+                changed[pi, pj] = True
+        return changed
+
+    @staticmethod
+    def compute_links(core):
+        """The links of a core whose children are CoreItems, computed and
+        returned (not stored - update_links stores them; the base-level half
+        is Base.compute_links): the children's .links, joined by compose_up
+        (one child's id_out is the next child's id_in).
 
         Start points (Ivo, 2026-11-07): every child id_in outside this realm
         (a chain entering from outside), plus every child id_in that is a
@@ -578,7 +793,7 @@ class Upstream:
             child_links |= child.links
         origins = {a for a, _b, _c in child_links
                    if not Pyramid.in_realm(a, core.realm) or Pyramid.is_candidate(a)}
-        core.links = Upstream.compose_up(child_links, Pyramid.child_exits(core), origins)
+        return Upstream.compose_up(child_links, Pyramid.child_exits(core), origins)
 
     @staticmethod
     def compose_up(child_links, exits, origins):
@@ -732,21 +947,41 @@ class Downstream:
         DeviceMemory.inbox as each child's `inherited` one level further
         down.
         """
-        aliases_down = np.empty(core.elements.shape, dtype=object)
+        aliases_down = Downstream.inform(core, inherited)
+        consume = Base.consume_aliases_down if level == 1 else Downstream.consume_aliases_down
         for idx in np.ndindex(core.elements.shape):
-            aliases_down[idx] = set()
-        graph = Downstream._graph(core)
+            consume(core.elements[idx], aliases_down[idx])
+        return aliases_down
 
+    @staticmethod
+    def inform(core, inherited=frozenset()):
+        """The message half of update_aliases_down, without the consume
+        step: returns the local inbox array (shape of core.elements, one set
+        per child) of (candidate, cell) messages - from the children's own
+        candidates and from `inherited` (push_down). Reads only; changes
+        nothing. Used directly by the read-only descent of
+        Pyramid.round_trip (inform_level)."""
+        aliases_down = Pyramid.empty_inbox(core.elements.shape)
+        graph = Downstream._graph(core)
         _owners, edges, _exits = graph
         origins = {a for a in edges if a != DUMMY and Pyramid.is_candidate(a)}
         for origin in origins:
             Downstream._walk(core, graph, origin, origin, Pyramid.owning_child(core, origin), aliases_down)
         Downstream.push_down(core, inherited, aliases_down, graph)
-
-        consume = Base.consume_aliases_down if level == 1 else Downstream.consume_aliases_down
-        for idx in np.ndindex(core.elements.shape):
-            consume(core.elements[idx], aliases_down[idx])
         return aliases_down
+
+    @staticmethod
+    def inform_level(mem, level, inbox):
+        """Down one level, read-only (option 2, see Pyramid.round_trip):
+        inform for every CoreItem of mem.pyramid[level] with its own inbox
+        (`inbox`, laid out like mem.pyramid[level]). Returns the children's
+        inboxes, laid out like mem.pyramid[level-1] (parent (pi, pj) has
+        children (3*pi + i, 3*pj + j)). Writes nothing to mem."""
+        child_inbox = Pyramid.empty_inbox(mem.pyramid[level - 1].shape)
+        for (pi, pj), core in np.ndenumerate(mem.pyramid[level]):
+            for (i, j), messages in np.ndenumerate(Downstream.inform(core, inbox[pi, pj])):
+                child_inbox[3 * pi + i, 3 * pj + j] = messages
+        return child_inbox
 
     @staticmethod
     def push_down(core, inherited, aliases_down, graph=None):
