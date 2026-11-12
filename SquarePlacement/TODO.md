@@ -544,8 +544,49 @@ add shortcuts). Returns the changed cells - y AND c (c's .forces gains y, a
 possible new exit of c's tile) - so `nary_level` marks every affected tile,
 also in other tiles than the one whose entries produced the link. Adding
 links keeps the dummy rule across unions (`Pyramid.add_links` drops
-(x, DUMMY, DUMMY) once x has a real triple). Not yet: partial collapses
-(triple -> pair) and compounds of several candidates. Frozen area: the new
+(x, DUMMY, DUMMY) once x has a real triple). **Partial collapses added
+2026-11-12** (Ivo: "partial collapses should be present in .condition
+data"): a pair/triple with two or more aliases of c, but not all, adds the
+reduced condition {c} + the non-alias members (one alias only would just
+rename a member - left out); originals stay. Frozen area: 26 reduced pairs,
+e.g. {(6,7), (9,5)} on (8,5). Swept maps (seeds 0/1/2): links 55/22/202,
+reduced pairs 50/48/384 - seed 2's links jump from 32 because reduced pairs
+collapse fully in later round trips once more cells became aliases. Not
+yet: compounds of several candidates.
+
+**Already blocked corners in `Base.init_map` (2026-11-12, Ivo: "we still
+need to repeat to convergence. there must be a seat at (9,5)"):** the
+vacuum conditions assume no corner is blocked, and `compute_conditions`
+only reduces by the members' own states - so a corner blocked without a
+chosen cell behind it (the frozen area's border, set blocked directly)
+still demanded a blocker, and (9,5) had no single link. New step 1a,
+`Base.blocked_corner_conditions(m, x)`: per 2x2 block of x, a blocker only
+for the corners still open (vacuum rules otherwise). (9,5) now gets single
+links from (8,3), (8,5), (8,7); with the round trips repeated to
+convergence, (6,7) forces (8,7), (9,5), (9,7) - the old pipeline's
+(8,7).forces1. On the swept maps nothing changes (every blocked cell there
+comes from a chosen one; the init_map equivalence test still holds).
+
+**Contradictory candidates suspended (2026-11-12, Ivo: "If a cell A forces
+two cells that block each other, deprive A of its candidate status. This is
+a harmless postponement. Once one of the blocked cells is chosen, A becomes
+eligible again.")** - `Base.suspend_contradictory(mem)`, run by `onepass`
+right after `init_map`: a free cell A of a placement tile whose single-link
+chain (map-wide, A included) contains two diagonal neighbours goes into
+`mem.suspended` (mirrored to `cores.SUSPENDED`); `Pyramid.is_candidate` is
+False for it this pass (no chain starts, no start point at any level, not
+used by n-ary). `Pyramid.in_placement_tile` is the layout alone -
+`.placement_status` and the same-tile pruning keep using it. Not sticky:
+init_map clears it, the check reruns from `.state` every pass. Swept maps:
+seed 0 (3,5), seed 1 (5,3), seed 2 (16,15) and (16,17); n-ary links
+55/22/202 -> 34/18/5. Seed 2: choosing (15,17) lifts (16,17)'s suspension
+(test_nary_isolation.py). Limitation: checked once per pass, before n-ary -
+a candidate made contradictory only by n-ary links is not caught yet.
+Same day, "do it": a suspended cell is also no external entry point in
+`Base.compute_links` - it leaves no trace in the pass (seed 2: the triples
+starting at (16,17) in tiles (4,6) and (5,6) are gone). Cuts no
+non-contradictory chain: a chain through a suspended cell contains its
+conflicting pair, so its start is suspended too. Frozen area: the new
 link (6,7) -> (8,7) appears (test_nary_isolation.py). Swept maps: 55 / 22 /
 32 new links for seeds 0 / 1 / 2; seed 0's are dominated by (3,5), the known
 self-blocking candidate - its chain forces cells it would block itself, so

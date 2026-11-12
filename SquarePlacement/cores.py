@@ -23,6 +23,7 @@ become kernel calls ... each step uses only data from one level"):
   calls later), plus the per-item functions the steps apply (a kernel's
   per-item work):
     Base.init_map(mem)            .map (.state)   -> .map (conditions)
+    Base.suspend_contradictory(mem) .map          -> .suspended
     Base.build_level0(mem)        .map            -> .pyramid[0]
     Upstream.build_level(mem, k)  .pyramid[k-1]   -> .pyramid[k]
     Downstream.down_level(mem, k) .pyramid[k], .inbox[k]
@@ -39,6 +40,7 @@ functions are called by main etc. until map_after is done"):
 
     mem = DeviceMemory(map_with_only_state, tile_size, origin)   # CPU
     Base.init_map(mem)             # .state -> .forced_by, .forces, .placement_status
+    Base.suspend_contradictory(mem)  # .map -> .suspended (candidates set aside for this pass)
     Base.build_level0(mem)         # .map -> .pyramid[0]
     Upstream.build_level(mem, k)   # .pyramid[k-1] -> .pyramid[k], k = 1, 2, ... to the top
     Downstream.down_level(mem, k)  # k = top .. 1; k == 1 writes .map_after
@@ -108,6 +110,13 @@ PLACEMENT_TILES = frozenset()
 PLACEMENT_TILE_SIZE = 3
 PLACEMENT_ORIGIN = 0
 
+# Candidates suspended for the current pass (2026-11-12) - cells of a
+# placement tile that Pyramid.is_candidate must not count as candidates,
+# because their own chain forces two cells that block each other (see
+# Base.suspend_contradictory). Mirrors DeviceMemory.suspended for the pass, so
+# is_candidate needs no DeviceMemory argument (like the layout above).
+SUSPENDED = frozenset()
+
 
 class CoreItem:
     """elements: object array (base-level SquareItem or CoreItem, never
@@ -141,6 +150,8 @@ class DeviceMemory:
       by Downstream.down_level(mem, k+1), read by down_level(mem, k). Was
       a local variable carried between levels before 2026-11-08; between
       two separate steps it has to live here.
+    .suspended: the candidates suspended for this pass (2026-11-12) - see
+      Base.suspend_contradictory; empty until that step runs.
     .map_after: the base level after the down pass - the same array as
       .pyramid[0], its CoreItems' .links holding the up-pass triples plus
       everything the down pass added (None until Downstream reaches level
@@ -153,6 +164,7 @@ class DeviceMemory:
         self.pyramid = []
         self.inbox = []
         self.map_after = None
+        self.suspended = set()
 
 
 class Pyramid:
@@ -249,6 +261,7 @@ class Pyramid:
         (upward/downward alone skip init_map - for a map whose conditions
         are already in place, e.g. hand-built in a test.)"""
         Base.init_map(mem)
+        Base.suspend_contradictory(mem)
         Pyramid.upward(mem)
         return Pyramid.downward(mem)
 
@@ -293,11 +306,29 @@ class Pyramid:
         .placement_status, available to code that only has an id (e.g. a
         parent looking at a child triple's id_in) - .state is not
         consulted, same as mark_placement_cores.
+
+        A candidate suspended for the current pass (2026-11-12, see
+        Base.suspend_contradictory) is not a candidate.
         """
+        return Pyramid.in_placement_tile(id_) and id_ not in SUSPENDED
+
+    @staticmethod
+    def in_placement_tile(id_):
+        """True if id_ lies in a placement tile (the global layout only) -
+        is_candidate without the suspension of Base.suspend_contradictory.
+        This is what .placement_status and the same-tile pruning use: one
+        chosen cell per placement tile is a fixed, structural fact."""
         row, col = id_
         ci = (row - PLACEMENT_ORIGIN) // PLACEMENT_TILE_SIZE
         cj = (col - PLACEMENT_ORIGIN) // PLACEMENT_TILE_SIZE
         return (ci, cj) in PLACEMENT_TILES
+
+    @staticmethod
+    def set_suspended(ids):
+        """Set the candidates suspended for the current pass (see SUSPENDED,
+        Base.suspend_contradictory)."""
+        global SUSPENDED
+        SUSPENDED = frozenset(ids)
 
     @staticmethod
     def owning_child(core, id_):
@@ -384,6 +415,13 @@ class Base:
         1. Vacuum conditions from the board's geometry alone
            (conditions.initial_map): every triple whose three placements lie
            on the board, members tagged with their placement_status.
+        1a. Already blocked corners (2026-11-12, Ivo: "there must be a seat
+           at (9,5)"): the vacuum assumes no corner is blocked yet, and
+           step 3 only reduces by the members' own states - a corner that is
+           blocked without any chosen cell behind it (the frozen area's
+           border, set blocked directly) would still demand a blocker. So
+           every free cell also gets blocked_corner_conditions: per 2x2
+           block, a blocker only for the corners still open.
         2. .placement_status from the layout (is_candidate: every cell of a
            placement tile is a candidate, every other cell unknown), and
            the condition tags refreshed to match (bruteforce.retag_forced_by)
@@ -408,16 +446,120 @@ class Base:
         from map_of_squares import PlacementStatus
 
         m = mem.map
+        mem.suspended = set()
+        Pyramid.set_suspended(())
         vacuum = initial_map(m.shape)
         for idx in np.ndindex(m.shape):
             cell = m[idx]
             cell.forced_by = vacuum[idx].forced_by
             cell.forces = vacuum[idx].forces
-            cell.placement_status = (PlacementStatus.candidate if Pyramid.is_candidate(idx)
+            cell.placement_status = (PlacementStatus.candidate if Pyramid.in_placement_tile(idx)
                                      else PlacementStatus.unknown)
+        for idx in np.ndindex(m.shape):
+            if m[idx].state == StateEnum.free:
+                m[idx].forced_by |= {frozenset((pos, PlacementStatus.unknown) for pos in blockers)
+                                     for blockers in Base.blocked_corner_conditions(m, idx)}
         retag_forced_by(m)
         compute_conditions(m)
         prune_same_core_candidates(m, mem.tile_size, mem.origin)
+
+    @staticmethod
+    def blocked_corner_conditions(m, x):
+        """The conditions of cell x that take the corners already blocked in
+        m into account (2026-11-12; see init_map, step 1a): for each of the
+        four 2x2 blocks around x - x and its three other corners - x is a
+        seat once all three are blocked. A corner already blocked needs
+        nothing; each corner still open needs one chosen diagonal neighbour
+        of its own. Blockers follow the vacuum's rules
+        (conditions.vacuum_condition_offsets): never x, a corner of this
+        block, or a diagonal neighbour of x (that would block x itself);
+        never two blockers diagonal to each other; only free, on-board
+        cells. A block with a corner off the board, or a chosen corner, is
+        skipped (it can never become a seat that way).
+
+        Returns a set of frozensets of blocker ids (plain ids, untagged) -
+        a single blocker where two corners are already blocked, e.g.
+        {(8,7)} for (9,5) in the frozen area, whose lower corners are the
+        blocked border. A block with all three corners already blocked
+        would make x a seat right now: there is no blocker to name, so it
+        yields nothing here (the CPU places seats)."""
+        from itertools import combinations, product
+        rows, cols = m.shape
+        diagonals = ((-1, -1), (-1, 1), (1, -1), (1, 1))
+        out = set()
+        for dr, dc in diagonals:
+            corners = [(x[0] + dr, x[1]), (x[0], x[1] + dc), (x[0] + dr, x[1] + dc)]
+            if any(not (0 <= r < rows and 0 <= c < cols) for r, c in corners):
+                continue
+            if any(m[k].state == StateEnum.chosen for k in corners):
+                continue
+            open_corners = [k for k in corners if m[k].state != StateEnum.blocked]
+            if not open_corners:
+                continue
+            forbidden = set(corners) | {x} | {(x[0] + a, x[1] + b) for a, b in diagonals}
+            per_corner = [[(k[0] + a, k[1] + b) for a, b in diagonals
+                           if (k[0] + a, k[1] + b) not in forbidden
+                           and 0 <= k[0] + a < rows and 0 <= k[1] + b < cols
+                           and m[k[0] + a, k[1] + b].state == StateEnum.free]
+                          for k in open_corners]
+            for blockers in product(*per_corner):
+                if any(abs(p[0] - q[0]) == 1 and abs(p[1] - q[1]) == 1
+                       for p, q in combinations(blockers, 2)):
+                    continue
+                out.add(frozenset(blockers))
+        return out
+
+    @staticmethod
+    def suspend_contradictory(mem):
+        """The Base suspension step (a kernel later; 2026-11-12, Ivo: "If a
+        cell A forces two cells that block each other, deprive A of its
+        candidate status. This is a harmless postponement. Once one of the
+        blocked cells is chosen, A becomes eligible again."): reads mem.map
+        (after init_map), writes mem.suspended.
+
+        For every free cell A of a placement tile: its chain - every cell A
+        forces through single links (size-1 conditions), map-wide. If two
+        cells of A's chain plus A itself are diagonal neighbours - they block
+        each other, so A can never validly be chosen - A is suspended: for
+        the rest of this pass it is no candidate (Pyramid.is_candidate), so
+        it starts no chain, is no start point at any level, and the n-ary
+        step does not use it. Known cases: (3,5) on the swept map with seed
+        0 (its chain reaches its own diagonal neighbours (2,4), (2,6)), and
+        (16,17) / (16,15) with seed 2 (forced seats diagonal to each other).
+
+        Not sticky: init_map clears it, and this step derives it again from
+        the current state on every pass - once one of the conflicting cells
+        is chosen, the contradiction is gone and A is a candidate again.
+        Checked once per pass, before the n-ary step: a candidate that only
+        becomes contradictory through links the n-ary step adds is not
+        caught yet.
+
+        Returns the suspended set.
+        """
+        m = mem.map
+        forcers = {}
+        for idx in np.ndindex(m.shape):
+            for condition in m[idx].forced_by:
+                if len(condition) == 1:
+                    (a, _s), = condition
+                    forcers.setdefault(a, set()).add(idx)
+        suspended = set()
+        for a in np.ndindex(m.shape):
+            if m[a].state != StateEnum.free or not Pyramid.in_placement_tile(a):
+                continue
+            chain, frontier = {a}, [a]
+            while frontier:
+                x = frontier.pop()
+                for y in forcers.get(x, ()):
+                    if y not in chain:
+                        chain.add(y)
+                        frontier.append(y)
+            if any((x[0] + dr, x[1] + dc) in chain
+                   for x in chain for dr, dc in ((1, -1), (1, 1))):
+                suspended.add(a)
+        mem.suspended = suspended
+        Pyramid.set_suspended(suspended)
+        return suspended
 
     @staticmethod
     def build_level0(mem):
@@ -570,6 +712,13 @@ class Base:
         reached cell. A candidate whose own cell links straight out gives
         (candidate, candidate, exit).
 
+        A cell suspended for this pass (Base.suspend_contradictory) is no
+        start at all, not even as an external id linking in (2026-11-12, Ivo:
+        "do it" - a suspended cell leaves no trace in the pass). That cuts
+        no chain that is not contradictory anyway: a chain that runs through
+        a suspended cell contains that cell's own conflicting pair, so its
+        start is suspended too.
+
         Ins that die (2026-11-07): a start whose chain forces at least one
         cell inside the tile but reaches no exit gets (start, DUMMY, DUMMY).
         A candidate that links to nothing gets nothing (nothing dies there),
@@ -581,7 +730,8 @@ class Base:
 
         results = set()
 
-        external_ins = {fid for fid in forward_edges if fid not in interior_ids}
+        external_ins = {fid for fid in forward_edges
+                        if fid not in interior_ids and fid not in SUSPENDED}
         for id_in in external_ins:
             found = Base.reach(id_in, forward_edges[id_in], interior_ids, forward_edges, exit_edges)
             # an external in always forces a cell inside (that is what makes
@@ -649,22 +799,31 @@ class Base:
         1. Aliases of c: c itself, its entry cells, and every cell of this
            tile its chain reaches from there along single links (Base.edges)
            - whenever c is chosen, all of them are.
-        2. Collapse: every free cell y (anywhere on the map - conditions
-           reach up to two cells, so y can lie in another tile) with a pair
-           or triple condition whose members are ALL aliases of c gets the
-           single link c -> y, unless it has it already: the condition's
-           terms collapse to c alone. Size-1 conditions are left alone -
-           they are links already, and collapsing them would only add
-           shortcuts along existing chains. The original conditions stay -
-           c forcing an alias does not rule out that alias becoming chosen
-           some other way.
-        Partial collapses (a triple to a pair, say) and compounds of
-        several candidates completing a condition together are not done yet.
+        2. Collapse, for every free cell y (anywhere on the map - conditions
+           reach up to two cells, so y can lie in another tile) and each of
+           its pair or triple conditions, all aliases of c merge into c:
+           - ALL members aliases: the condition collapses to c alone - y
+             gets the single link c -> y;
+           - two or more members aliases, but not all (2026-11-12, Ivo:
+             "partial collapses should be present in .condition data"): y
+             gets the reduced condition {c} + the non-alias members - a
+             triple with two aliases becomes a pair with c;
+           - exactly one member an alias: replacing it by c would not reduce
+             the condition, only rename a member - left out.
+           Size-1 conditions are left alone - they are links already, and
+           collapsing them would only add shortcuts along existing chains.
+           The original conditions stay - c forcing an alias does not rule
+           out that alias becoming chosen some other way.
+        Compounds of several candidates completing a condition together are
+        not done yet.
 
-        Writes the new size-1 conditions into mem.map (tagged with c's
-        placement_status) and returns the set of cells it changed (empty if
-        none): every y that got a link, and c itself - c's reverse index
-        (.forces) gains y, which can be a new exit link out of c's own tile.
+        Writes the new conditions into mem.map (c tagged with its
+        placement_status, the other members keep their tags) and returns the
+        set of cells it changed (empty if none): every y that got a new
+        condition, and c itself when y got a link - c's reverse index
+        (.forces) gains y, which can be a new exit link out of c's own tile
+        (a reduced pair or triple never is: only size-1 conditions make
+        links).
         nary_level keeps .forces consistent and marks the tiles.
         """
         m = mem.map
@@ -696,15 +855,29 @@ class Base:
             r1 = min(rows, max(a[0] for a in on_board) + 3)
             c0 = max(0, min(a[1] for a in on_board) - 2)
             c1 = min(cols, max(a[1] for a in on_board) + 3)
+            c_member = (candidate, m[candidate].placement_status)
             for y in np.ndindex(r1 - r0, c1 - c0):
                 y = (y[0] + r0, y[1] + c0)
                 cell_y = m[y]
                 if y == candidate or cell_y.state != StateEnum.free or link in cell_y.forced_by:
                     continue
-                if any(len(condition) >= 2 and all(pos in aliases for pos, _s in condition)
-                       for condition in cell_y.forced_by):
-                    cell_y.forced_by.add(link)
-                    changed |= {y, candidate}
+                added = set()
+                for condition in cell_y.forced_by:
+                    if len(condition) < 2:
+                        continue
+                    others = frozenset(mem_ for mem_ in condition if mem_[0] not in aliases)
+                    n_alias = len(condition) - len(others)
+                    if n_alias == len(condition):
+                        added = {link}          # full collapse: a link, nothing else needed
+                        break
+                    if n_alias >= 2:            # partial collapse: fewer terms
+                        added.add(others | {c_member})
+                added -= cell_y.forced_by
+                if added:
+                    cell_y.forced_by |= added
+                    changed.add(y)
+                    if link in added:
+                        changed.add(candidate)
         return changed
 
     @staticmethod

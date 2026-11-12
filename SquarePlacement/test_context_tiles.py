@@ -678,6 +678,7 @@ def test_onepass_from_state_only_matches_preprocessed_map():
     n, M = 7, 3
     m, N = build_swept_map(n, M)
     ref = DeviceMemory(m, M)
+    Base.suspend_contradictory(ref)     # onepass's step after init_map (2026-11-12)
     Pyramid.upward(ref)
     Pyramid.downward(ref)
 
