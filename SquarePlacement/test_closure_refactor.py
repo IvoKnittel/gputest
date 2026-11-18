@@ -25,7 +25,11 @@ def test_window_radius_must_be_3_not_2():
     unrelated P=(6, 3) structure test_5x5_is_a_strict_subset_on_seat_from_
     two_alert_blocked's fixture also contains.
 
-    Just three real blocked cells: (6, 2) and (7, 2) give P=(7, 3) its own
+    Three real blocked cells, each blocked by a chosen cell (2026-11-14, Ivo:
+    no blocked cell without a chosen one behind it): (5, 1) blocks (4, 2)
+    and (6, 2), (8, 1) blocks (7, 2) - plus (4, 0), (6, 0), (7, 0), (9, 0),
+    (9, 2) on the far side, which change none of the results below.
+    (6, 2) and (7, 2) give P=(7, 3) its own
     alert_blocked promise (W and NW ring-adjacent, both blocked, so N=(6, 3)
     is the free third corner - the "B" this test's P forces); (4, 2) is the
     pre-existing real block the new seat find_secondary_links discovers at
@@ -43,10 +47,10 @@ def test_window_radius_must_be_3_not_2():
     now that a function which genuinely keeps the smaller window exists.
     """
     def build_minimal_board():
-        m = build_map_of_squares(10, 8)
-        for pos in [(6, 2), (7, 2), (4, 2)]:
-            m[pos].state = StateEnum.blocked
-        return m
+        grid = np.zeros((10, 8), dtype=int)
+        for pos in [(5, 1), (8, 1)]:        # block (4, 2), (6, 2) and (7, 2)
+            grid[pos] = 1
+        return map_of_squares_from_array(grid)
 
     m_fixed = build_minimal_board()
     find_alerts_set_links(m_fixed)
@@ -60,9 +64,9 @@ def test_window_radius_must_be_3_not_2():
     assert m_5x5[6, 4].forces1 == {(6, 3)}, \
         "find_secondary_links5x5 was expected to miss (4, 3) - it didn't, so this repro no longer isolates the gap"
 
-    # No cell starts out chosen in this minimal fixture (only the three real
-    # blocks) - blocked/alert/link colouring is the whole story here, so
-    # there's nothing for a red frame to mark.
+    # Only the two chosen cells that make the blocks - blocked/alert/link
+    # colouring is the whole story here, so there's nothing for a red frame
+    # to mark.
     colormap = np.zeros((*m_fixed.shape, 3))
     display_closure_step(m_fixed, title="find_secondary_links (radius=3): final map",
                           show_links=True, colormap=colormap)

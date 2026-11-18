@@ -76,6 +76,30 @@ def build_margin_free_map(n):
     return map_of_squares_from_array(grid)
 
 
+def build_zipper_margin_map(n, phase=0):
+    """(n+4) x (n+4) map with a "soft" or "zipper" margin (2026-11-15, Ivo:
+    "A margin as a solid wall of chosen cells has an annoying property: Just
+    a few more placements can 'freeze' large areas ... In the line defining
+    the margin, leave out every second placement"): of the outermost ring,
+    only every second cell is chosen - the cells (i, j) with i + j even, so
+    no two of them are diagonal neighbours, corners included, and no
+    corner-adjacent skip is needed (compare build_margin_free_map). Their
+    diagonal blocking blocks every second cell of the ring just inside (the
+    zipper); the other cells of both rings stay free, and so does the n x n
+    core at (2, 2) .. (n+1, n+1).
+
+    phase=1: the other half of the ring, i + j odd - the corners stay free,
+    and so do the ring-1 corners next to the core's corners (quarter-cells:
+    1x1 of their square inside the actual map)."""
+    size = n + 4
+    grid = np.zeros((size, size), dtype=int)
+    for i in range(size):
+        for j in range(size):
+            if (i in (0, size - 1) or j in (0, size - 1)) and (i + j) % 2 == phase:
+                grid[i, j] = 1
+    return map_of_squares_from_array(grid)
+
+
 # The four diagonal offsets a chosen item blocks (see closure.place_square).
 DIAGONAL_OFFSETS = ((-1, -1), (-1, 1), (1, -1), (1, 1))
 

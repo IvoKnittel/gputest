@@ -12,13 +12,13 @@ import numpy as np
 
 from conditions import initial_map, forced_by_on_realm
 from closure import place_square
-from bruteforce import (compute_conditions, retag_forced_by, prune_same_core_candidates,
+from bruteforce import (compute_conditions, retag_forced_by,
                          unblock_path, collapse_synced_ids)
 from cores import CoreItem, DeviceMemory, Pyramid, Base, Upstream, Downstream, DUMMY
 from map_of_squares import StateEnum, PlacementStatus, SquareItem
 
 
-def build_framed_map(n, M):
+def build_framed_map(n, M, zipper=False):
     """An n x n grid of M x M cores, with a chosen frame forming the
     outermost ring of the WHOLE board (row/col 0 and row/col N-1) - N = M*n
     exactly, no margin or frame-only cells beyond the core grid at all; the
@@ -59,6 +59,10 @@ def build_framed_map(n, M):
         [(0, c) for c in range(N)] + [(N - 1, c) for c in range(N)]
         + [(r, 0) for r in range(N)] + [(r, N - 1) for r in range(N)]
     ))
+    if zipper:
+        # soft ("zipper") margin (2026-11-15, Ivo): only every second frame
+        # cell - those with r + c even, no two diagonal - is chosen
+        frame_positions = [(r, c) for r, c in frame_positions if (r + c) % 2 == 0]
     skipped = []
     for pos in frame_positions:
         if m[pos].state == StateEnum.free:
@@ -456,7 +460,7 @@ def test_no_blocked_members_survive_compute_conditions_6x6():
     assert _blocked_member_violations(m, N) == []
 
 
-def build_swept_map(n, M, s=0, seed=0):
+def build_swept_map(n, M, s=0, seed=0, zipper=False):
     """The scenario used throughout this file's own CoreItem.forced_by/
     .placement_reach/.links exploration (2026-10-23..25): the framed map,
     placement cores marked and tagged, then placed via the original 5-phase
@@ -465,17 +469,22 @@ def build_swept_map(n, M, s=0, seed=0):
     j=4J+shift), compute_conditions run after every phase (so .forced_by
     actually reduces triple->pair->single as cells get chosen - a real bug
     in this file's own early verification scripts was forgetting this step
-    and getting all-zero results everywhere), then
-    prune_same_core_candidates once at the end.
+    and getting all-zero results everywhere). No same-tile pruning
+    (bruteforce.prune_same_core_candidates) since 2026-11-13 - Ivo: one cell
+    per placement tile is the placement DECISION; seats it fills may share
+    the tile, so such conditions can hold.
 
     Consolidates what was, before this function existed, retyped by hand in
     essentially every ad hoc verification script across several turns of
     this session - see squareplacement_superlattice_refactor memory note,
     2026-10-25 entries, for the exploratory history this formalizes.
 
+    zipper: the frame as a soft ("zipper") margin - every second frame cell
+    chosen (build_framed_map), 2026-11-15.
+
     Returns (m, N).
     """
-    m, N, _, _ = build_framed_map(n, M)
+    m, N, _, _ = build_framed_map(n, M, zipper=zipper)
     mark_placement_cores(m, n, M, s=s)
     retag_forced_by(m)
     rng = random.Random(seed)
@@ -502,7 +511,6 @@ def build_swept_map(n, M, s=0, seed=0):
             if free_cells:
                 place_square(m, rng.choice(free_cells))
         compute_conditions(m)
-    prune_same_core_candidates(m, M, s=s)
     return m, N
 
 
@@ -617,16 +625,21 @@ def test_hierarchy_composition_matches_monolithic_computation():
     assert composed_vs_monolithic(base[0:7, 0:7], ((0, N), (0, N)))
 
 
-def test_build_upstream_every_level_matches_direct_computation():
+def test_build_upstream_every_level_matches_direct_computation(monkeypatch):
     """Upstream.build on the 5-phase-swept 7x7-tile map: 7x7 base
     tiles, then 3x3 parents (the last row/column of groups holds only one
     tile, 7 = 3+3+1), then the 1x1 top over the whole 21x21 board. Every
     CoreItem at every level has exactly the .links a single base-level
     CoreItem computed directly over the same realm would have - the
     composition is lossless all the way up, including the smaller groups
-    at the edge."""
+    at the edge.
+
+    The n-ary step is switched off: since 2026-11-13 its collapses inform
+    only the tile holding the collapsed cell, so tiles carry facts that are
+    not in the map - this test is about the composition alone."""
     n, M = 7, 3
     m, N = build_swept_map(n, M)
+    monkeypatch.setattr(Base, "nary_links", staticmethod(lambda mem, tile, entries: set()))
     levels = Pyramid.upward(DeviceMemory(m, M))
     assert [lv.shape for lv in levels] == [(7, 7), (3, 3), (1, 1)]
     assert levels[1][2, 2].elements.shape == (1, 1)
@@ -655,7 +668,7 @@ def test_init_map_from_state_matches_cpu_preprocessing():
     derives exactly the .forced_by, .forces and .placement_status the
     CPU-side preprocessing of build_swept_map produced (initial_map,
     mark_placement_cores, retag_forced_by, compute_conditions after every
-    placement phase, prune_same_core_candidates) - on every cell. One
+    placement phase; no same-tile pruning since 2026-11-13) - on every cell. One
     reduction with the final states is enough, since states only ever go
     free -> chosen / blocked."""
     n, M = 7, 3
@@ -674,13 +687,24 @@ def test_onepass_from_state_only_matches_preprocessed_map():
     """The CPU main end to end (Pyramid.onepass, 2026-11-08): a map with only
     .state set goes into DeviceMemory, Base.init_map derives the conditions,
     then the up and down passes run. Its .map_after has, tile by tile,
-    exactly the .links of the same passes run on the CPU-preprocessed map."""
+    exactly the .links of the same passes run on the CPU-preprocessed map.
+    onepass is analysis only (2026-11-16): no .state changes."""
     n, M = 7, 3
-    m, N = build_swept_map(n, M)
-    ref = DeviceMemory(m, M)
-    Base.suspend_contradictory(ref)     # onepass's step after init_map (2026-11-12)
-    Pyramid.upward(ref)
-    Pyramid.downward(ref)
+    late = {}
+    while True:
+        # onepass reruns the pass with the candidates the n-ary facts show
+        # contradictory suspended (2026-11-13); the n-ary step writes into
+        # the map, so every run starts from a freshly built one
+        m, N = build_swept_map(n, M)
+        ref = DeviceMemory(m, M)
+        Base.suspend_contradictory(ref, late)     # onepass's step after init_map (2026-11-12)
+        Pyramid.upward(ref)
+        Pyramid.downward(ref)
+        new = Base.contradictory_after_nary(ref)
+        if not new:
+            break
+        late.update(new)
+    assert set(late) == {(4, 15), (4, 17), (5, 5)}
 
     mem = DeviceMemory(_state_only_copy(m), M)
     after = Pyramid.onepass(mem)
@@ -688,6 +712,38 @@ def test_onepass_from_state_only_matches_preprocessed_map():
     assert [lv.shape for lv in mem.pyramid] == [lv.shape for lv in ref.pyramid]
     for idx in np.ndindex(after.shape):
         assert after[idx].links == ref.map_after[idx].links, idx
+        assert mem.map[idx].state == m[idx].state, idx
+    assert set(mem.refuted) == mem.suspended == ref.suspended
+
+
+def test_analyse_and_unblock_reaches_a_stable_state():
+    """The CPU cycle without decisions (Pyramid.analyse_and_unblock,
+    2026-11-16): pass, unblocking step (block the refuted candidates, fill
+    the seats that makes), pass ... until a pass refutes nothing. Seed 2
+    with its open seats filled (seed 0's cannot all be filled), the
+    build_swept_map layout: one round blocks (16,15) and (16,17) - they force
+    seats that block each other (2026-11-12) - and fills four seats. One more
+    pass on the final state, step by step, refutes nothing and gives the
+    same .links."""
+    from test_nary_superlattice import completable_swept_map   # it imports this module
+    n, M = 7, 3
+    m, _filled = completable_swept_map(n, M, 2)
+    mem = DeviceMemory(_state_only_copy(m), M)
+    assert Pyramid.analyse_and_unblock(mem) == 1
+    (before, refuted, seats), = mem.unblock_rounds
+    assert sorted(refuted) == [(16, 15), (16, 17)]
+    assert seats == [(17, 14), (17, 16), (18, 12), (18, 16)]
+    for c in refuted:
+        assert m[c].state == StateEnum.free and mem.map[c].state == StateEnum.blocked
+
+    ref = DeviceMemory(_state_only_copy(mem.map), M)
+    Base.init_map(ref)
+    assert Base.suspend_contradictory(ref) == set()
+    Pyramid.upward(ref)
+    Pyramid.downward(ref)
+    assert Base.contradictory_after_nary(ref) == {} and ref.nary_contradictory == {}
+    for idx in np.ndindex(mem.map_after.shape):
+        assert mem.map_after[idx].links == ref.map_after[idx].links, idx
 
 
 def test_nary_conditions_cannot_resolve_in_a_single_placement_round():

@@ -1,0 +1,288 @@
+This is pdfTeX, Version 3.141592653-2.6-1.40.25 (MiKTeX 24.1) (preloaded format=pdflatex.fmt)
+ restricted \write18 enabled.
+entering extended mode
+(foundation.tex
+LaTeX2e <2023-11-01> patch level 1
+L3 programming layer <2024-01-04>
+(C:\Users\IvoKn\AppData\Local\Programs\MiKTeX\tex/latex/base\article.cls
+Document Class: article 2023/05/17 v1.4n Standard LaTeX document class
+(C:\Users\IvoKn\AppData\Local\Programs\MiKTeX\tex/latex/base\size10.clo))
+(C:\Users\IvoKn\AppData\Local\Programs\MiKTeX\tex/latex/base\fontenc.sty)
+(C:\Users\IvoKn\AppData\Local\Programs\MiKTeX\tex/latex/base\inputenc.sty)
+(C:\Users\IvoKn\AppData\Local\Programs\MiKTeX\tex/latex/lm\lmodern.sty)
+(C:\Users\IvoKn\AppData\Local\Programs\MiKTeX\tex/latex/geometry\geometry.sty
+(C:\Users\IvoKn\AppData\Local\Programs\MiKTeX\tex/latex/graphics\keyval.sty)
+(C:\Users\IvoKn\AppData\Local\Programs\MiKTeX\tex/generic/iftex\ifvtex.sty
+(C:\Users\IvoKn\AppData\Local\Programs\MiKTeX\tex/generic/iftex\iftex.sty))
+(C:\Users\IvoKn\AppData\Local\Programs\MiKTeX\tex/latex/geometry\geometry.cfg))
+(C:\Users\IvoKn\AppData\Local\Programs\MiKTeX\tex/latex/amsmath\amsmath.sty
+For additional information on amsmath, use the `?' option.
+(C:\Users\IvoKn\AppData\Local\Programs\MiKTeX\tex/latex/amsmath\amstext.sty
+(C:\Users\IvoKn\AppData\Local\Programs\MiKTeX\tex/latex/amsmath\amsgen.sty))
+(C:\Users\IvoKn\AppData\Local\Programs\MiKTeX\tex/latex/amsmath\amsbsy.sty)
+(C:\Users\IvoKn\AppData\Local\Programs\MiKTeX\tex/latex/amsmath\amsopn.sty))
+(C:\Users\IvoKn\AppData\Local\Programs\MiKTeX\tex/latex/amsfonts\amssymb.sty
+(C:\Users\IvoKn\AppData\Local\Programs\MiKTeX\tex/latex/amsfonts\amsfonts.sty))
+ (C:\Users\IvoKn\AppData\Local\Programs\MiKTeX\tex/latex/xcolor\xcolor.sty
+(C:\Users\IvoKn\AppData\Local\Programs\MiKTeX\tex/latex/graphics-cfg\color.cfg)
+
+(C:\Users\IvoKn\AppData\Local\Programs\MiKTeX\tex/latex/graphics-def\pdftex.def
+)
+(C:\Users\IvoKn\AppData\Local\Programs\MiKTeX\tex/latex/graphics\mathcolor.ltx)
+)
+(C:\Users\IvoKn\AppData\Local\Programs\MiKTeX\tex/latex/pgf/frontendlayer\tikz.
+sty
+(C:\Users\IvoKn\AppData\Local\Programs\MiKTeX\tex/latex/pgf/basiclayer\pgf.sty
+(C:\Users\IvoKn\AppData\Local\Programs\MiKTeX\tex/latex/pgf/utilities\pgfrcs.st
+y
+(C:\Users\IvoKn\AppData\Local\Programs\MiKTeX\tex/generic/pgf/utilities\pgfutil
+-common.tex)
+(C:\Users\IvoKn\AppData\Local\Programs\MiKTeX\tex/generic/pgf/utilities\pgfutil
+-latex.def)
+(C:\Users\IvoKn\AppData\Local\Programs\MiKTeX\tex/generic/pgf/utilities\pgfrcs.
+code.tex
+(C:\Users\IvoKn\AppData\Local\Programs\MiKTeX\tex/generic/pgf\pgf.revision.tex)
+))
+(C:\Users\IvoKn\AppData\Local\Programs\MiKTeX\tex/latex/pgf/basiclayer\pgfcore.
+sty
+(C:\Users\IvoKn\AppData\Local\Programs\MiKTeX\tex/latex/graphics\graphicx.sty
+(C:\Users\IvoKn\AppData\Local\Programs\MiKTeX\tex/latex/graphics\graphics.sty
+(C:\Users\IvoKn\AppData\Local\Programs\MiKTeX\tex/latex/graphics\trig.sty)
+(C:\Users\IvoKn\AppData\Local\Programs\MiKTeX\tex/latex/graphics-cfg\graphics.c
+fg)))
+(C:\Users\IvoKn\AppData\Local\Programs\MiKTeX\tex/latex/pgf/systemlayer\pgfsys.
+sty
+(C:\Users\IvoKn\AppData\Local\Programs\MiKTeX\tex/generic/pgf/systemlayer\pgfsy
+s.code.tex
+(C:\Users\IvoKn\AppData\Local\Programs\MiKTeX\tex/generic/pgf/utilities\pgfkeys
+.code.tex
+(C:\Users\IvoKn\AppData\Local\Programs\MiKTeX\tex/generic/pgf/utilities\pgfkeys
+libraryfiltered.code.tex))
+(C:\Users\IvoKn\AppData\Local\Programs\MiKTeX\tex/generic/pgf/systemlayer\pgf.c
+fg)
+(C:\Users\IvoKn\AppData\Local\Programs\MiKTeX\tex/generic/pgf/systemlayer\pgfsy
+s-pdftex.def
+(C:\Users\IvoKn\AppData\Local\Programs\MiKTeX\tex/generic/pgf/systemlayer\pgfsy
+s-common-pdf.def)))
+(C:\Users\IvoKn\AppData\Local\Programs\MiKTeX\tex/generic/pgf/systemlayer\pgfsy
+ssoftpath.code.tex)
+(C:\Users\IvoKn\AppData\Local\Programs\MiKTeX\tex/generic/pgf/systemlayer\pgfsy
+sprotocol.code.tex))
+(C:\Users\IvoKn\AppData\Local\Programs\MiKTeX\tex/generic/pgf/basiclayer\pgfcor
+e.code.tex
+(C:\Users\IvoKn\AppData\Local\Programs\MiKTeX\tex/generic/pgf/math\pgfmath.code
+.tex
+(C:\Users\IvoKn\AppData\Local\Programs\MiKTeX\tex/generic/pgf/math\pgfmathutil.
+code.tex)
+(C:\Users\IvoKn\AppData\Local\Programs\MiKTeX\tex/generic/pgf/math\pgfmathparse
+r.code.tex)
+(C:\Users\IvoKn\AppData\Local\Programs\MiKTeX\tex/generic/pgf/math\pgfmathfunct
+ions.code.tex)
+(C:\Users\IvoKn\AppData\Local\Programs\MiKTeX\tex/generic/pgf/math\pgfmathfunct
+ions.basic.code.tex)
+(C:\Users\IvoKn\AppData\Local\Programs\MiKTeX\tex/generic/pgf/math\pgfmathfunct
+ions.trigonometric.code.tex)
+(C:\Users\IvoKn\AppData\Local\Programs\MiKTeX\tex/generic/pgf/math\pgfmathfunct
+ions.random.code.tex)
+(C:\Users\IvoKn\AppData\Local\Programs\MiKTeX\tex/generic/pgf/math\pgfmathfunct
+ions.comparison.code.tex)
+(C:\Users\IvoKn\AppData\Local\Programs\MiKTeX\tex/generic/pgf/math\pgfmathfunct
+ions.base.code.tex)
+(C:\Users\IvoKn\AppData\Local\Programs\MiKTeX\tex/generic/pgf/math\pgfmathfunct
+ions.round.code.tex)
+(C:\Users\IvoKn\AppData\Local\Programs\MiKTeX\tex/generic/pgf/math\pgfmathfunct
+ions.misc.code.tex)
+(C:\Users\IvoKn\AppData\Local\Programs\MiKTeX\tex/generic/pgf/math\pgfmathfunct
+ions.integerarithmetics.code.tex)
+(C:\Users\IvoKn\AppData\Local\Programs\MiKTeX\tex/generic/pgf/math\pgfmathcalc.
+code.tex)
+(C:\Users\IvoKn\AppData\Local\Programs\MiKTeX\tex/generic/pgf/math\pgfmathfloat
+.code.tex))
+(C:\Users\IvoKn\AppData\Local\Programs\MiKTeX\tex/generic/pgf/math\pgfint.code.
+tex)
+(C:\Users\IvoKn\AppData\Local\Programs\MiKTeX\tex/generic/pgf/basiclayer\pgfcor
+epoints.code.tex)
+(C:\Users\IvoKn\AppData\Local\Programs\MiKTeX\tex/generic/pgf/basiclayer\pgfcor
+epathconstruct.code.tex)
+(C:\Users\IvoKn\AppData\Local\Programs\MiKTeX\tex/generic/pgf/basiclayer\pgfcor
+epathusage.code.tex)
+(C:\Users\IvoKn\AppData\Local\Programs\MiKTeX\tex/generic/pgf/basiclayer\pgfcor
+escopes.code.tex)
+(C:\Users\IvoKn\AppData\Local\Programs\MiKTeX\tex/generic/pgf/basiclayer\pgfcor
+egraphicstate.code.tex)
+(C:\Users\IvoKn\AppData\Local\Programs\MiKTeX\tex/generic/pgf/basiclayer\pgfcor
+etransformations.code.tex)
+(C:\Users\IvoKn\AppData\Local\Programs\MiKTeX\tex/generic/pgf/basiclayer\pgfcor
+equick.code.tex)
+(C:\Users\IvoKn\AppData\Local\Programs\MiKTeX\tex/generic/pgf/basiclayer\pgfcor
+eobjects.code.tex)
+(C:\Users\IvoKn\AppData\Local\Programs\MiKTeX\tex/generic/pgf/basiclayer\pgfcor
+epathprocessing.code.tex)
+(C:\Users\IvoKn\AppData\Local\Programs\MiKTeX\tex/generic/pgf/basiclayer\pgfcor
+earrows.code.tex)
+(C:\Users\IvoKn\AppData\Local\Programs\MiKTeX\tex/generic/pgf/basiclayer\pgfcor
+eshade.code.tex)
+(C:\Users\IvoKn\AppData\Local\Programs\MiKTeX\tex/generic/pgf/basiclayer\pgfcor
+eimage.code.tex)
+(C:\Users\IvoKn\AppData\Local\Programs\MiKTeX\tex/generic/pgf/basiclayer\pgfcor
+eexternal.code.tex)
+(C:\Users\IvoKn\AppData\Local\Programs\MiKTeX\tex/generic/pgf/basiclayer\pgfcor
+elayers.code.tex)
+(C:\Users\IvoKn\AppData\Local\Programs\MiKTeX\tex/generic/pgf/basiclayer\pgfcor
+etransparency.code.tex)
+(C:\Users\IvoKn\AppData\Local\Programs\MiKTeX\tex/generic/pgf/basiclayer\pgfcor
+epatterns.code.tex)
+(C:\Users\IvoKn\AppData\Local\Programs\MiKTeX\tex/generic/pgf/basiclayer\pgfcor
+erdf.code.tex)))
+(C:\Users\IvoKn\AppData\Local\Programs\MiKTeX\tex/generic/pgf/modules\pgfmodule
+shapes.code.tex)
+(C:\Users\IvoKn\AppData\Local\Programs\MiKTeX\tex/generic/pgf/modules\pgfmodule
+plot.code.tex)
+(C:\Users\IvoKn\AppData\Local\Programs\MiKTeX\tex/latex/pgf/compatibility\pgfco
+mp-version-0-65.sty)
+(C:\Users\IvoKn\AppData\Local\Programs\MiKTeX\tex/latex/pgf/compatibility\pgfco
+mp-version-1-18.sty))
+(C:\Users\IvoKn\AppData\Local\Programs\MiKTeX\tex/latex/pgf/utilities\pgffor.st
+y
+(C:\Users\IvoKn\AppData\Local\Programs\MiKTeX\tex/latex/pgf/utilities\pgfkeys.s
+ty
+(C:\Users\IvoKn\AppData\Local\Programs\MiKTeX\tex/generic/pgf/utilities\pgfkeys
+.code.tex))
+(C:\Users\IvoKn\AppData\Local\Programs\MiKTeX\tex/latex/pgf/math\pgfmath.sty
+(C:\Users\IvoKn\AppData\Local\Programs\MiKTeX\tex/generic/pgf/math\pgfmath.code
+.tex))
+(C:\Users\IvoKn\AppData\Local\Programs\MiKTeX\tex/generic/pgf/utilities\pgffor.
+code.tex))
+(C:\Users\IvoKn\AppData\Local\Programs\MiKTeX\tex/generic/pgf/frontendlayer/tik
+z\tikz.code.tex
+(C:\Users\IvoKn\AppData\Local\Programs\MiKTeX\tex/generic/pgf/libraries\pgflibr
+aryplothandlers.code.tex)
+(C:\Users\IvoKn\AppData\Local\Programs\MiKTeX\tex/generic/pgf/modules\pgfmodule
+matrix.code.tex)
+(C:\Users\IvoKn\AppData\Local\Programs\MiKTeX\tex/generic/pgf/frontendlayer/tik
+z/libraries\tikzlibrarytopaths.code.tex)))
+(C:\Users\IvoKn\AppData\Local\Programs\MiKTeX\tex/generic/pgf/libraries\pgflibr
+aryarrows.meta.code.tex)
+(C:\Users\IvoKn\AppData\Local\Programs\MiKTeX\tex/generic/pgf/frontendlayer/tik
+z/libraries\tikzlibrarypatterns.code.tex
+(C:\Users\IvoKn\AppData\Local\Programs\MiKTeX\tex/generic/pgf/libraries\pgflibr
+arypatterns.code.tex))
+(C:\Users\IvoKn\AppData\Local\Programs\MiKTeX\tex/latex/float\float.sty)
+(C:\Users\IvoKn\AppData\Local\Programs\MiKTeX\tex/latex/caption\caption.sty
+(C:\Users\IvoKn\AppData\Local\Programs\MiKTeX\tex/latex/caption\caption3.sty))
+(C:\Users\IvoKn\AppData\Local\Programs\MiKTeX\tex/latex/booktabs\booktabs.sty)
+(C:\Users\IvoKn\AppData\Local\Programs\MiKTeX\tex/latex/enumitem\enumitem.sty)
+(C:\Users\IvoKn\AppData\Local\Programs\MiKTeX\tex/latex/hyperref\hyperref.sty
+(C:\Users\IvoKn\AppData\Local\Programs\MiKTeX\tex/generic/infwarerr\infwarerr.s
+ty)
+(C:\Users\IvoKn\AppData\Local\Programs\MiKTeX\tex/latex/kvsetkeys\kvsetkeys.sty
+)
+(C:\Users\IvoKn\AppData\Local\Programs\MiKTeX\tex/generic/kvdefinekeys\kvdefine
+keys.sty)
+(C:\Users\IvoKn\AppData\Local\Programs\MiKTeX\tex/generic/pdfescape\pdfescape.s
+ty
+(C:\Users\IvoKn\AppData\Local\Programs\MiKTeX\tex/generic/ltxcmds\ltxcmds.sty)
+(C:\Users\IvoKn\AppData\Local\Programs\MiKTeX\tex/generic/pdftexcmds\pdftexcmds
+.sty))
+(C:\Users\IvoKn\AppData\Local\Programs\MiKTeX\tex/latex/hycolor\hycolor.sty)
+(C:\Users\IvoKn\AppData\Local\Programs\MiKTeX\tex/latex/letltxmacro\letltxmacro
+.sty)
+(C:\Users\IvoKn\AppData\Local\Programs\MiKTeX\tex/latex/auxhook\auxhook.sty)
+(C:\Users\IvoKn\AppData\Local\Programs\MiKTeX\tex/latex/hyperref\nameref.sty
+(C:\Users\IvoKn\AppData\Local\Programs\MiKTeX\tex/latex/refcount\refcount.sty)
+(C:\Users\IvoKn\AppData\Local\Programs\MiKTeX\tex/generic/gettitlestring\gettit
+lestring.sty
+(C:\Users\IvoKn\AppData\Local\Programs\MiKTeX\tex/latex/kvoptions\kvoptions.sty
+)))
+(C:\Users\IvoKn\AppData\Local\Programs\MiKTeX\tex/latex/etoolbox\etoolbox.sty)
+(C:\Users\IvoKn\AppData\Local\Programs\MiKTeX\tex/latex/hyperref\pd1enc.def)
+(C:\Users\IvoKn\AppData\Local\Programs\MiKTeX\tex/generic/intcalc\intcalc.sty)
+(C:\Users\IvoKn\AppData\Local\Programs\MiKTeX\tex/latex/hyperref\puenc.def)
+(C:\Users\IvoKn\AppData\Local\Programs\MiKTeX\tex/latex/url\url.sty)
+(C:\Users\IvoKn\AppData\Local\Programs\MiKTeX\tex/generic/bitset\bitset.sty
+(C:\Users\IvoKn\AppData\Local\Programs\MiKTeX\tex/generic/bigintcalc\bigintcalc
+.sty))
+(C:\Users\IvoKn\AppData\Local\Programs\MiKTeX\tex/latex/base\atbegshi-ltx.sty))
+(C:\Users\IvoKn\AppData\Local\Programs\MiKTeX\tex/latex/hyperref\hpdftex.def
+(C:\Users\IvoKn\AppData\Local\Programs\MiKTeX\tex/latex/base\atveryend-ltx.sty)
+
+(C:\Users\IvoKn\AppData\Local\Programs\MiKTeX\tex/latex/rerunfilecheck\rerunfil
+echeck.sty
+(C:\Users\IvoKn\AppData\Local\Programs\MiKTeX\tex/generic/uniquecounter\uniquec
+ounter.sty)))
+(C:\Users\IvoKn\AppData\Local\Programs\MiKTeX\tex/latex/lm\t1lmr.fd)
+(C:\Users\IvoKn\AppData\Local\Programs\MiKTeX\tex/latex/l3backend\l3backend-pdf
+tex.def) (foundation.aux)
+*geometry* driver: auto-detecting
+*geometry* detected driver: pdftex
+
+(C:\Users\IvoKn\AppData\Local\Programs\MiKTeX\tex/context/base/mkii\supp-pdf.mk
+ii
+[Loading MPS to PDF converter (version 2006.09.02).]
+)
+(C:\Users\IvoKn\AppData\Local\Programs\MiKTeX\tex/latex/epstopdf-pkg\epstopdf-b
+ase.sty
+(C:\Users\IvoKn\AppData\Local\Programs\MiKTeX\tex/latex/00miktex\epstopdf-sys.c
+fg)) (foundation.out) (foundation.out)
+(C:\Users\IvoKn\AppData\Local\Programs\MiKTeX\tex/latex/lm\t1lmss.fd)
+(C:\Users\IvoKn\AppData\Local\Programs\MiKTeX\tex/latex/lm\ot1lmr.fd)
+(C:\Users\IvoKn\AppData\Local\Programs\MiKTeX\tex/latex/lm\omllmm.fd)
+(C:\Users\IvoKn\AppData\Local\Programs\MiKTeX\tex/latex/lm\omslmsy.fd)
+(C:\Users\IvoKn\AppData\Local\Programs\MiKTeX\tex/latex/lm\omxlmex.fd)
+(C:\Users\IvoKn\AppData\Local\Programs\MiKTeX\tex/latex/amsfonts\umsa.fd)
+(C:\Users\IvoKn\AppData\Local\Programs\MiKTeX\tex/latex/amsfonts\umsb.fd)
+(C:\Users\IvoKn\AppData\Local\Programs\MiKTeX\tex/latex/lm\t1lmtt.fd)
+Overfull \hbox (5.5531pt too wide) in paragraph at lines 54--55
+\T1/lmr/m/n/10 and \T1/lmtt/m/n/10 bruteforce.compute_conditions\T1/lmr/m/n/10 
+) by \T1/lmtt/m/n/10 docs/foundation/examples.py\T1/lmr/m/n/10 . State-ments
+[1{C:/Users/IvoKn/AppData/Local/MiKTeX/fonts/map/pdftex/pdftex.map}{C:/Users/Iv
+oKn/AppData/Local/Programs/MiKTeX/fonts/enc/dvips/lm/lm-ec.enc}{C:/Users/IvoKn/
+AppData/Local/Programs/MiKTeX/fonts/enc/dvips/lm/lm-mathit.enc}{C:/Users/IvoKn/
+AppData/Local/Programs/MiKTeX/fonts/enc/dvips/lm/lm-mathsy.enc}{C:/Users/IvoKn/
+AppData/Local/Programs/MiKTeX/fonts/enc/dvips/lm/lm-rm.enc}]
+(C:\Users\IvoKn\AppData\Local\Programs\MiKTeX\tex/latex/lm\ot1lmtt.fd) [2{C:/Us
+ers/IvoKn/AppData/Local/Programs/MiKTeX/fonts/enc/dvips/lm/lm-rmtt.enc}]
+[3] [4]
+Overfull \hbox (5.28613pt too wide) in paragraph at lines 671--672
+\T1/lmr/m/n/10 able from $\OML/lmm/m/it/10 Z$ \T1/lmr/m/n/10 over links: $[]\OT
+1/lmr/m/n/10 (\OML/lmm/m/it/10 Z\OT1/lmr/m/n/10 ) \OMS/lmsy/m/n/10 ) []\OT1/lmr
+/m/n/10 ([])$\T1/lmr/m/n/10 . Here: $\OMS/lmsy/m/n/10 f\OT1/lmr/m/n/10 (5\OML/l
+mm/m/it/10 ; \OT1/lmr/m/n/10 4)\OML/lmm/m/it/10 ; \OT1/lmr/m/n/10 (3\OML/lmm/m/
+it/10 ; \OT1/lmr/m/n/10 5)\OML/lmm/m/it/10 ; \OT1/lmr/m/n/10 (7\OML/lmm/m/it/10
+ ; \OT1/lmr/m/n/10 6)\OML/lmm/m/it/10 ; \OT1/lmr/m/n/10 (7\OML/lmm/m/it/10 ; \O
+T1/lmr/m/n/10 8)\OMS/lmsy/m/n/10 g$\T1/lmr/m/n/10 . 
+[5] [6] [7]
+Underfull \hbox (badness 2197) in paragraph at lines 1061--1061
+[]\T1/lmr/m/n/9 square placed; di-ag-o-nal neigh-
+
+Underfull \hbox (badness 3568) in paragraph at lines 1067--1067
+[]\T1/lmr/m/n/9 aliases cho-sen, their di-ag-o-nals
+[8] (foundation.aux) )
+(see the transcript file for additional information)<C:/Users/IvoKn/AppData/Loc
+al/Programs/MiKTeX/fonts/type1/public/lm/lmbx10.pfb><C:/Users/IvoKn/AppData/Loc
+al/Programs/MiKTeX/fonts/type1/public/lm/lmbx12.pfb><C:/Users/IvoKn/AppData/Loc
+al/Programs/MiKTeX/fonts/type1/public/lm/lmbx9.pfb><C:/Users/IvoKn/AppData/Loca
+l/Programs/MiKTeX/fonts/type1/public/lm/lmmi10.pfb><C:/Users/IvoKn/AppData/Loca
+l/Programs/MiKTeX/fonts/type1/public/lm/lmmi7.pfb><C:/Users/IvoKn/AppData/Local
+/Programs/MiKTeX/fonts/type1/public/lm/lmmi8.pfb><C:/Users/IvoKn/AppData/Local/
+Programs/MiKTeX/fonts/type1/public/lm/lmmi9.pfb><C:/Users/IvoKn/AppData/Local/P
+rograms/MiKTeX/fonts/type1/public/lm/lmr10.pfb><C:/Users/IvoKn/AppData/Local/Pr
+ograms/MiKTeX/fonts/type1/public/lm/lmr12.pfb><C:/Users/IvoKn/AppData/Local/Pro
+grams/MiKTeX/fonts/type1/public/lm/lmr5.pfb><C:/Users/IvoKn/AppData/Local/Progr
+ams/MiKTeX/fonts/type1/public/lm/lmr6.pfb><C:/Users/IvoKn/AppData/Local/Program
+s/MiKTeX/fonts/type1/public/lm/lmr7.pfb><C:/Users/IvoKn/AppData/Local/Programs/
+MiKTeX/fonts/type1/public/lm/lmr8.pfb><C:/Users/IvoKn/AppData/Local/Programs/Mi
+KTeX/fonts/type1/public/lm/lmr9.pfb><C:/Users/IvoKn/AppData/Local/Programs/MiKT
+eX/fonts/type1/public/lm/lmri10.pfb><C:/Users/IvoKn/AppData/Local/Programs/MiKT
+eX/fonts/type1/public/lm/lmri9.pfb><C:/Users/IvoKn/AppData/Local/Programs/MiKTe
+X/fonts/type1/public/lm/lmss17.pfb><C:/Users/IvoKn/AppData/Local/Programs/MiKTe
+X/fonts/type1/public/lm/lmss8.pfb><C:/Users/IvoKn/AppData/Local/Programs/MiKTeX
+/fonts/type1/public/lm/lmssbx10.pfb><C:/Users/IvoKn/AppData/Local/Programs/MiKT
+eX/fonts/type1/public/lm/lmsy10.pfb><C:/Users/IvoKn/AppData/Local/Programs/MiKT
+eX/fonts/type1/public/lm/lmsy8.pfb><C:/Users/IvoKn/AppData/Local/Programs/MiKTe
+X/fonts/type1/public/lm/lmsy9.pfb><C:/Users/IvoKn/AppData/Local/Programs/MiKTeX
+/fonts/type1/public/lm/lmtt10.pfb><C:/Users/IvoKn/AppData/Local/Programs/MiKTeX
+/fonts/type1/public/lm/lmtt9.pfb><C:/Users/IvoKn/AppData/Local/Programs/MiKTeX/
+fonts/type1/public/amsfonts/symbols/msam10.pfb>
+Output written on foundation.pdf (8 pages, 519667 bytes).
+Transcript written on foundation.log.

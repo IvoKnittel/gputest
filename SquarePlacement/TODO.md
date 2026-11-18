@@ -416,7 +416,8 @@ Still open:
   consume step. Test:
   `test_push_down_copies_an_outside_candidate_into_every_child_its_chain_touches`;
   picture: `downstream-z.html` (project root).
-- **Blocking - postponed ("entirely for another day", Ivo, 2026-11-07)**:
+- **Blocking - postponed ("entirely for another day", Ivo, 2026-11-07;
+  `.blocked` back 2026-11-14, see item 5)**:
   `CoreItem.dependencies`, `.blocked`, `.conflicts` and their update_*
   methods were removed for simplicity, with the 6 tests that only checked
   `update_blocked` (`bruteforce.unblock_path` itself is kept, now without a
@@ -488,6 +489,15 @@ compute_eligibility's own disaster - flattening-with-substitution across
 multiple levels). Recommend deciding up front that virtual ids do NOT
 recurse into further virtual-id creation, rather than discovering this the
 hard way.
+
+**One decision per placement tile (2026-11-13, Ivo: reading "b) is
+correct"):** "one chosen cell per placement tile" holds for the placement
+DECISION only - seats a decision fills may lie in its own tile. So a
+compound (several decisions together) never has two members from the same
+placement tile; this is where the old one-per-tile rule now lives, and it
+bounds the subsets to enumerate. A same-tile condition is satisfied only
+by one member decided and the other forced by it - the single-candidate
+alias collapse (item 5), not a compound.
 
 ## 5. N-ary link generation during the passes - option 2 (decided 2026-11-08)
 
@@ -581,7 +591,8 @@ init_map clears it, the check reruns from `.state` every pass. Swept maps:
 seed 0 (3,5), seed 1 (5,3), seed 2 (16,15) and (16,17); n-ary links
 55/22/202 -> 34/18/5. Seed 2: choosing (15,17) lifts (16,17)'s suspension
 (test_nary_isolation.py). Limitation: checked once per pass, before n-ary -
-a candidate made contradictory only by n-ary links is not caught yet.
+a candidate made contradictory only by n-ary links is not caught yet
+(resolved 2026-11-13, see "Suspension after the n-ary step" below).
 Same day, "do it": a suspended cell is also no external entry point in
 `Base.compute_links` - it leaves no trace in the pass (seed 2: the triples
 starting at (16,17) in tiles (4,6) and (5,6) are gone). Cuts no
@@ -591,6 +602,287 @@ link (6,7) -> (8,7) appears (test_nary_isolation.py). Swept maps: 55 / 22 /
 32 new links for seeds 0 / 1 / 2; seed 0's are dominated by (3,5), the known
 self-blocking candidate - its chain forces cells it would block itself, so
 its aliases collapse many conditions (blocking: "for another day").
+
+**Full collapses inform only tile T (2026-11-13)** - Ivo: "only T should get
+informed because this is the only thing we wanted to know originally -
+which candidates from other tiles can reach T and cause term collapses there
+together." Before, a full collapse wrote the single link c -> y into the
+map, so c's own tile S recorded an exit straight into T, and every
+candidate with the same aliases got the same long links. Now
+`Base.nary_links` writes NO map link: the tile T holding y gets c's chain
+from y, `Base.reach(c, {y}, ...)` within T - (c, last cell of T, exit) per
+exit link, or (c, DUMMY, DUMMY) via `Pyramid.add_links` - and y (plus what
+it forces through single links) becomes an alias of c; the collapse repeats
+until nothing new collapses. `mem.collapsed[(c, y)]` records the members
+(the display draws the fact through them, and `links_html.candidate_schema`
+takes its targets from there). Partial collapses unchanged (reduced
+conditions in `m[y].forced_by`). Checked against a simulation oracle
+(place c, fill seats to a fixed point): on the frozen area, for placement
+tiles (1,2) and (1,0) alike, every free candidate's claimed forced set
+equals the simulation's exactly, e.g. (6,7) 21 cells, (4,1) 20. Tests:
+`test_build_upstream_every_level_matches_direct_computation` now runs with
+n-ary off (it checks lossless composition; tiles now carry facts the map
+lacks); the frozen-area test looks for (6,7) -> (8,7) in `mem.collapsed`
+and tile (2,2), not in the map. New test
+`test_frozen_area_claims_match_simulation` (the oracle, every free
+candidate of placement tiles (1,2) and (1,0)).
+
+**Same-tile pruning removed (2026-11-13)** - Ivo, asked whether "one chosen
+cell per placement tile" means (a) every chosen cell or (b) only the
+placement decision: "b) is correct". On the frozen area, choosing (4,1)
+forces (4,2), (6,1), (6,2) - its own tile's cells. So a condition naming
+two candidates of one placement tile can hold (one decided, the other
+forced by it), and `Base.init_map` no longer drops such conditions
+(`bruteforce.prune_same_core_candidates` is no longer called; nor by
+test_context_tiles.build_swept_map). The n-ary alias collapse handles them.
+Swept maps, pruned -> kept: collapses 221/35/15 -> 224/37/16 (seeds 0/1/2),
+the 6 new ones all confirmed by simulation, e.g. seed 0 (4,15) -> (4,17)
+via {(4,15), (5,15)} - facts the pruning lost. Frozen area unchanged
+(oracle still exact); the pair {(6,7), (6,8)} on (8,7) now stays.
+
+**Superlattice placement tiles (2026-11-13)** - Ivo: "So far, we have used
+the supersuper lattice for placement tiles. Now create a new subfolder and
+create new htmls using the superlattice. Then we have several candidates
+placed simultaneously". test_nary_superlattice.py, pages in
+html_out/superlattice/: swept maps with tiles (1+2I, 1+2J) (9 tiles), frozen
+area with (0,0), (0,2), (2,0), (2,2). The swept maps carry open seats the
+sweep never filled (seeds 0/1/2: 4/9/6) - filled first
+(`_fill_open_seats`); seed 0 is then already uncompletable: filling them is a cascade of 18
+seats in 10 rounds, and in round 8 seats (8,13) and (11,14) block (9,12)
+and (10,13), the last free cells of the 2x2 block at (9,12). Shown in
+html_out/superlattice/swept_open_seats.html. Ivo: "the original placement
+without check is wrong. for now, just check for this and discard" -
+`completable_swept_map` returns None for such a board, and the superlattice
+pass tests skip it (seed 0: no pages).
+Conditions naming candidates of 2+ placement tiles: 34/31/7 (swept), 106
+(frozen) - the compound situations of item 4, not computed yet.
+
+**Suspension after the n-ary step (2026-11-13)** - Ivo: "suspension check
+after the n-ary step". On the superlattice, seed 0 (3,10), (3,11), (4,9),
+(4,11), (5,5), (5,10) and seed 1 (9,11) claimed - with their n-ary facts -
+two cells that block each other; choosing any of them leaves a new
+uncoverable 2x2 block (simulation). `Base.contradictory_after_nary(mem)`
+finds these after the down pass from `Base.claimed(mem, c)` (map singles +
+mem.collapsed targets, transitively); `Pyramid.onepass` then reruns the
+whole pass with them suspended from the start
+(`Base.suspend_contradictory(mem, also)`), so they leave no trace - their
+n-ary facts in other tiles go too. Repeats until nothing new; the set only
+grows. One rerun was enough on every map tried. Also catches, on the old
+supersuperlattice swept map seed 0, (4,15), (4,17), (5,5). Every remaining
+candidate on all superlattice maps now matches the simulation exactly.
+
+**`.blocked` re-introduced (2026-11-14)** - Ivo: "Its time to re-introduce
+keeping tab of blocking and self-blocking but we dont do unblocking yet. So
+each time we touch base and done everything else, fill the tile's .blocked
+list and also update the .blocked list of supertiles." `CoreItem.blocked`:
+(id1, id2) pairs, low id first, of candidates that can never both be
+chosen; (c, c) = c self-blocking. `Pyramid.update_blocked(mem)` runs when
+`round_trips` reaches its fixed point (after every up and down step):
+- `Base.update_blocked`: c1, c2 of different placement tiles block each
+  other if a cell of `Base.claimed(c1)` + c1 is a diagonal neighbour of a
+  cell of `Base.claimed(c2)` + c2; the pair goes into the tile(s) holding
+  those two cells. Self-blocking: (c, c) for every suspended c, in c's
+  tile. Same-tile pairs are skipped (one decision per tile). Full
+  recompute every call.
+- `Upstream.update_blocked`: each supertile's list is the union of its
+  children's. The old transitive rule ("id0 forces both halves of a
+  blocked pair -> id0 self-blocking", 2026-10-29) is what suspension
+  already does, so it arrives as (id0, id0).
+Checked (test_nary_superlattice.test_blocked_lists): frozen area
+superlattice 30 pairs, seeds 1/2 4/0 pairs; every listed pair is a real
+conflict when both are chosen; self-blocking = suspended; supertiles = union.
+Not listed: 6 (seed 1) / 4 (seed 2) real conflicts that only arise when
+both are chosen together - new seats neither makes alone, i.e. compounds
+(item 4). Nothing reads .blocked yet; unblocking is the next stage.
+
+**Every blocked cell comes from a chosen one (2026-11-14)** - Ivo: "the
+margin in swept_seed is created by actually chosen cells. This is the right
+way. In test [frozen] area, there are blocked cells whose origin is
+unexplained. Change this. Also for maps in all other tests." The frozen
+area (test_nary_isolation._frozen_area_map, test_sudden_appearance.
+test_frozen_area) is now built by representation.build_margin_free_map(9):
+13x13, outer ring chosen, the ring inside it blocked by those cells, the
+free 9x9 core at (2,2)..(10,10) - the same states as before, one ring
+further out. **All frozen-area cell coordinates in this file before this
+date are the old ones: add 1** ((6,7) -> (7,8), (8,7) -> (9,8), (9,5) ->
+(10,6), ...); tile origin 1 -> 2, tile indices unchanged; step pages renamed
+nary_frozen_area_steps_59.html / nary_frozen_area_p10_steps_52.html.
+Results unchanged (all assertions shifted, superlattice counts identical).
+Also: test_closure_refactor's minimal board (blocked (4,2), (6,2), (7,2) ->
+chosen (5,1), (8,1); same results) and test_simple_situations.test_rectangle
+(blocked (2,3), (3,3) -> chosen (1,4), (4,4)). No test calls
+place_blocked_squares any more.
+
+**Soft ("zipper") margin (2026-11-15)** - Ivo: "A margin as a solid wall of
+chosen cells has an annoying property: Just a few more placements can
+'freeze' large areas, that is, cells can no longer be chosen independently.
+... In the line defining the margin, leave out every second placement".
+`representation.build_zipper_margin_map(n)`: of the outer ring only the
+cells with i + j even are chosen (no two diagonal, corners included), so
+only every second cell of the ring inside is blocked; no seats to fill.
+test_nary_isolation.test_nary_isolation_on_zipper_area: the frozen-area
+scenario ((5,5), (6,5) placed) on it, placement tile (1,0) / (1,2), pages
+html_out/nary_zipper_area_p10*.html / _p12*.html. The freezing is gone:
+the most any candidate forces is 5 cells (solid wall: 20 for (5,2), 24 for
+(5,9)); many force nothing. Pass = simulation exactly. Caveat: the free
+cells of the two margin rings lie outside every tile (origin 2), so a chain
+through them could not be followed - checked, none of these candidates
+reaches them; a board where chains do would need tiles over the margin.
+
+**Zipper swept maps and superlattice versions (2026-11-15)** - Ivo: "now do
+the zipper margin version of Swept map, and the supertile-not-
+supersupertile versions of frozen area and swept maps".
+`build_framed_map(zipper=True)` / `build_swept_map(zipper=True)`: the frame
+chooses only cells with r + c even. test_zipper_maps.py, pages in
+html_out/zipper/: swept seeds 0/1/2 on the supersuperlattice and the
+superlattice, the zipper frozen area on the superlattice (map, candidates,
+and for the superlattice the entries page). Open seats the sweep leaves:
+10/5/6 (solid frame: 18/19/8); seed 0 is completable now (solid: the
+uncoverable block at (9,12)). Forcing stays small: at most 3-9 cells per
+candidate. Every candidate's claims equal the simulation on every map. The
+free frame cells lie inside the tiles here (origin 0), unlike the frozen
+area's margin. Full suite now ~4.5 min (was ~2.3).
+
+**Half-cells; tiles over the margin (2026-11-15)** - Ivo: "let's do the right
+thing and extend the lattice of tiles to contain the margin cells too.
+however keep the placement tiles at their old position. Also make only
+cells that border to the free interior cells (the actual map cells)
+eligible. Placing such a cell has an actual meaning - in the real space
+map, it has a 1x2 / 2x1 inside of the actual map. ... We now allow the
+selection of half-cells at the margin. Recompute the zipper maps and allow
+half-cells to be forced. Later a half-cell will also be allowed to be a
+candidate."
+- `DeviceMemory(clip=True)`: the tile lattice covers the whole map, origin
+  may be negative, edge tiles cut to the map (`Base.tile`/`Base.tiles`).
+  Zipper frozen area: origin -1, 5x5 base tiles; a tile (ci, cj) at origin
+  2 is (ci+1, cj+1) now, same cells.
+- `DeviceMemory(interior=((r0, r1), (c0, c1)))`: the actual map's cells.
+  `Base.eligible`: interior cells and half-cells (just outside, sharing an
+  edge with an interior cell). `Base.restrict_to_real_map` (run by
+  init_map): a cell's square covers pixels (i..i+1, j..j+1), so only blocks
+  with upper-left r0-1..r1-1 need covering; conditions of non-eligible
+  cells, conditions naming one, and conditions that make a cell a seat only
+  for blocks outside the real map are dropped. Without interior nothing
+  changes. Same day, Ivo, on a free non-eligible corner of a real block
+  (first refused with a ValueError): "I see no problem here. It becomes an
+  id_in of the margin tile and may also force an exit on the map." - so
+  the conditions now keep every cell whose square overlaps the real map
+  (`Base.covers_real_map`: interior, half-cells, and the quarter-cells
+  diagonal to the core's corners); they can be forced and force. Test:
+  test_zipper_maps.test_quarter_cells_can_be_forced - the zipper's other
+  phase (`build_zipper_margin_map(9, phase=1)`) leaves (1,1), (1,11),
+  (11,1), (11,11) free; superlattice candidates (3,3), (3,9), (9,3), (9,9)
+  each force the one next to them; pass = simulation. `Base.eligible`
+  (interior + half-cells) is kept for candidates later.
+
+**Blocking marked on the full-closed maps (2026-11-16)** - Ivo: "For now, we
+return to the full-closed margins of swept map and frozen area map. ... find
+a situation where a path from a candidate blocks the path of a candidate
+from another placement tile, and a candidate that is self-blocking. Mark
+the blocking cells and the blocked candidates in the maps." Survey (one
+pass, no compounds): swept seed 1, superlattice tiles - 4 blocking pairs,
+self-blocking (9,11), (9,15), (11,15); frozen area, tiles (1,0) + (1,2)
+together - 10 blocking pairs; no layout of the frozen area has a
+self-blocking candidate (every single tile, both superlattice phases
+checked). `mem.self_blocking` {c: (chain, blocking cell pairs)} records why
+a candidate was suspended - needed for (9,11), which is self-blocking only
+through its n-ary facts that the rerun drops (its chain then: 52 cells, 51
+pairs - a cascade). `Base.blocking_pairs`, `Base.blocking_cells(mem, c1,
+c2)`; `contradictory_after_nary` returns {c: (chain, pairs)}. Pages:
+html_out/blocking/swept_seed1.html, frozen_area.html
+(links_html.render_blocking_html); test_blocking_pages.py.
+
+**Chains stop at the first contradiction (2026-11-16)** - Ivo on (9,15):
+"(9,15) creates seats (8,15) and (7,16) that block each other. They deserve
+a circle. But all others follow from a situation that we already flagged as
+self-contradictory. The problem is we still pretend (8,15) and (7,16) to be
+both placed and work through the consequences." `Base.chain_until_contradiction`
+grows a candidate's chain layer by layer (single links; an n-ary target joins
+once all members of one of its collapsed conditions, mem.collapsed, are in
+the chain) and stops at the first layer with a blocking pair; all pairs of
+that layer are kept. Used by suspend_contradictory and
+contradictory_after_nary, so mem.self_blocking holds only first-generation
+contradictions: (9,15) 3 cells, 1 pair ((7,16),(8,15)); (11,15) the same
+pair; (9,11) 13 cells, 6 pairs (was 52 cells, 51 pairs) - derived as (9,11)
+-> (11,12) -> (9,13) -> (8,15),(9,15),(11,14),(11,15) -> contradictions
+(8 cells and 2 pairs since the n-ary step stops too, below).
+The n-ary step itself stops too (2026-11-16, Ivo: "Everything derived from
+an impossible situation is worthless and can only be trouble" - and with
+unblocking, part A up to the blocking pair stays valid while part B,
+derived from placing both, would not): `Base.nary_links` checks c's aliases
+for a blocking pair whenever they grow - first the entry aliases, then y and
+y's chain inside T layer by layer. At the first pair it records
+`mem.nary_contradictory[c] = (aliases, pairs)`, writes no triple into T for
+that collapse (it would carry the chain on), and derives nothing more for c
+in any tile. onepass adds those candidates to the rerun's suspensions.
+Seed 1: the n-ary step catches (9,11) itself, at (8,16)/(9,15); its record
+is now 8 cells, 2 pairs ((7,16),(8,15)), ((8,16),(9,15)). Final suspensions
+unchanged on swept seeds 1, 2 and the frozen area. Still open: a
+contradiction across tile boundaries (step 2 - from the children's .links
+triples in Upstream); the after-pass check stays as the safety net. Blocking
+PAIRS of two candidates are unaffected: both chains are consistent on their
+own, and the combination is not propagated (no compounds).
+**Unblocking rule implemented (2026-11-15)** - Ivo: "From the foundations
+script I conclude the unblocking rule is indeed just as legitimate as the
+seat rule. Now implement unblocking." (docs/foundation, section 9: a
+refutation stays valid in every later state, so a refuted candidate is
+blocked for good.) `Pyramid.onepass` no longer suspends: every refuted
+candidate (before the pass from single links - `suspend_contradictory`, now
+detection only -, in the n-ary step, after the pass) is blocked in mem.map
+by `Pyramid.unblock`, which records the reason in `mem.refuted` and the
+round in `mem.unblock_rounds`, then fills the seats that makes
+(`Pyramid.fill_seats`, the seat rule on the CPU, `Base.real_block`; raises
+`cores.Uncompletable` on a real block with four blocked corners), and the
+pass starts again from init_map. init_map already handles blocked cells with
+no chosen blocker (blocked_corner_conditions). Results:
+- swept seed 1, superlattice: round 1 blocks (9,15), (11,15), fills seats
+  (10,14), (10,12); round 2 blocks (9,11) - now refuted by its single links
+  ((10,13)/(11,12)), no n-ary facts needed. 5 blocking pairs on the new state
+  (new: (5,11)/(9,9)).
+- swept seed 2, superlattice: (10,11), (11,3), (16,15), (16,17), (17,11),
+  then (15,11) in a later round; 4 seats.
+- swept seed 2, supersuper layout: (16,15), (16,17); seats (17,14), (17,16),
+  (18,12), (18,16) (test_onepass_from_state_only...).
+- frozen area: nothing.
+- swept seed 0 raw: filling its open seats hits the known hole - raises
+  Uncompletable; tests use completable_swept_map.
+Oracle (test_nary_superlattice._run): each round's refutations are replayed
+on that round's state (choosing the cell leaves a hole), and every
+candidate is checked against the simulation on the final state. .blocked has
+no (c, c) entries after onepass any more. Blocking pages draw refuted
+candidates on the state of their round.
+**Clean split (2026-11-16)** - Ivo: "This is not a link, but an actual
+placement in a step that is supposed to be analysis-only (of the form "if
+candidate Z is chosen this will happen")." `Pyramid.onepass` is analysis
+only again: no .state changes; refuted candidates are suspended in the pass
+(as before 11-15) and reported in `mem.refuted`. Blocking them and filling
+the seats is the CPU's placement step, `Pyramid.unblock` (log
+`mem.unblock_rounds`); `Pyramid.analyse_and_unblock` alternates pass and
+step until a pass refutes nothing. Seed 1 superlattice: one round blocks
+(9,11), (9,15), (11,15) and fills (10,12), (10,14) (two rounds when
+unblocking ran inside the pass). Seed 2 superlattice: two rounds, (15,11)
+in the second. Tests restored to the analysis-only behaviour, plus
+test_analyse_and_unblock_reaches_a_stable_state and
+test_unblocking_step_swept_map; _run asserts the pass changes no state and
+that every reported refutation is a real hole. Write-up:
+docs/unblocking/unblocking.tex (make_unblocking_tex.py) - the rule against
+suspending and against unblocking inside the pass. Open: where unblocking
+goes in the CPU step relative to the decisions.
+- Swept zipper maps: interior 1..N-2 (the frame row is the half-cell row);
+  frozen zipper area: interior = the 9x9 core.
+- Test helpers take interior too (_simulate_forced, _fill_open_seats,
+  _holes; _run(clip, interior)).
+- In the zipper maps as they are, no candidate forces a half-cell (even with
+  every tile a placement tile). test_half_cells_can_be_forced: one more
+  placement, (8,4), on the zipper frozen area - (5,3) forces the half-cells
+  (4,1), (6,1); (7,8) forces (4,11), (6,11), (8,11), (10,11); pass =
+  simulation. (With (2,5), (5,2) would force (2,1) but is contradictory -
+  the real block at (3,1) - and is suspended after the n-ary step.)
+- Half-cells as candidates: later.
+- Found on the way, not followed up: with EVERY tile a placement tile
+  (adjacent placement tiles, not a designed layout), zipper swept seed 2,
+  the pass misses (12,18) and (14,17) for candidate (18,17) - also without
+  interior, so not from this change.
 
 **Option 2, as first proposed (2026-11-08):** for the step at
 level k (`Upstream.build_level(mem, k)` or `Downstream.down_level(mem, k)`):

@@ -1,7 +1,7 @@
 import numpy as np
 
 from map_of_squares import StateEnum
-from representation import build_map_of_squares, map_of_squares_from_array, place_blocked_squares, display_closure_step
+from representation import build_map_of_squares, build_margin_free_map, map_of_squares_from_array, display_closure_step
 from closure import do_closure
 from test_utils import default_display
 
@@ -51,22 +51,22 @@ def test_seat_from_two_alert_blocked():
 
 def test_frozen_area():
     """Same phenomenon as test_seat_from_two_alert_blocked above, from a third
-    placement instead of a second - and fixed the same way. (8, 7) has
-    forces1={(9, 5), (9, 7)} (something it would force onward) before round 3;
+    placement instead of a second - and fixed the same way. (9, 8) has
+    forces1={(10, 6), (10, 8)} (something it would force onward) before round 3;
     by the end of round 2, find_secondary_links has already linked both
-    (6, 7) and (6, 8) - the two cells round 3 is about to place - to (8, 7)
-    directly, so forced_closure(m, (6, 7)) now reaches (8, 7) too, instead of
+    (7, 8) and (7, 9) - the two cells round 3 is about to place - to (9, 8)
+    directly, so forced_closure(m, (7, 8)) now reaches (9, 8) too, instead of
     stopping short and leaving it for place_square_in_seat_closed's raw scan
     to pick up once round 3's placement happens to complete its seat.
     """
 
-    m = build_map_of_squares(11, 11)
-    size = 11
-    border = [(i, j) for i in range(size) for j in range(size)
-              if i in (0, size - 1) or j in (0, size - 1)]
-    place_blocked_squares(m, border)
-    do_closure(m, (4, 4), "round 1: (4,4) placed", display=default_display())
-    do_closure(m, (5, 4), "round 2: (5,4) placed", display=default_display(show_all=True))
-    assert m[8,7].forced_by1 == {(6, 7), (6, 8)}
-    do_closure(m, (6, 7), "round 3: (6,7) placed", display=default_display(show_all=True))
-    assert m[8,7].state == StateEnum.chosen
+    # the border ring is blocked by an outer ring of chosen cells
+    # (build_margin_free_map), not set blocked directly (2026-11-14, Ivo:
+    # "blocked cells whose origin is unexplained") - one ring further out,
+    # so every coordinate is the old one + 1
+    m = build_margin_free_map(9)
+    do_closure(m, (5, 5), "round 1: (5,5) placed", display=default_display())
+    do_closure(m, (6, 5), "round 2: (6,5) placed", display=default_display(show_all=True))
+    assert m[9,8].forced_by1 == {(7, 8), (7, 9)}
+    do_closure(m, (7, 8), "round 3: (7,8) placed", display=default_display(show_all=True))
+    assert m[9,8].state == StateEnum.chosen

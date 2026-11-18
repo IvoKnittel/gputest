@@ -3,7 +3,7 @@
 import numpy as np
 
 from map_of_squares import InvalidTilingError, StateEnum
-from representation import build_map_of_squares, display_closure_step, place_blocked_squares, real_space_map
+from representation import build_map_of_squares, display_closure_step, real_space_map
 from closure import do_closure, place_square, get_seat_positions, place_square_in_seat_closed, clear_all_but_state
 from test_utils import default_display
 
